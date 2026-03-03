@@ -22,10 +22,33 @@ function validateApiKey(apiKey: string, record: any): boolean {
   return bcrypt.compareSync(apiKey, record.key_hash);
 }
 
+// Resolve API key from header or query param, respecting user's query param setting
+function resolveApiKey(req: Request): string | null {
+  const headerKey = req.headers['x-api-key'] as string;
+  if (headerKey) return headerKey;
+
+  const queryKey = req.query.apiKey as string;
+  if (!queryKey) return null;
+
+  // Check if the user who owns this key allows query param auth
+  const keyId = queryKey.substring(0, 36);
+  const user = db.prepare(`
+    SELECT u.allow_query_param_auth
+    FROM api_keys ak
+    JOIN users u ON ak.user_id = u.id
+    WHERE ak.id = ?
+  `).get(keyId) as any;
+
+  if (user && user.allow_query_param_auth === 0) {
+    return null; // User has disabled query param auth
+  }
+
+  return queryKey;
+}
+
 // Middleware to check if user is authenticated via session OR API key
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-  // Check for API key in header first, then query param
-  const apiKey = (req.headers['x-api-key'] as string) || (req.query.apiKey as string);
+  const apiKey = resolveApiKey(req);
 
   if (apiKey) {
     // Validate API key - extract key ID from format: {uuid}-{randomstring}
@@ -72,7 +95,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
 
 // Optional auth - sets user if authenticated but doesn't require it
 export const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
-  const apiKey = (req.headers['x-api-key'] as string) || (req.query.apiKey as string);
+  const apiKey = resolveApiKey(req);
 
   if (apiKey) {
     const keyId = apiKey.substring(0, 36);

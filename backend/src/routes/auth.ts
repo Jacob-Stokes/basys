@@ -222,4 +222,59 @@ router.delete('/api-keys/:id', requireAuth, (req, res) => {
   }
 });
 
+// Get user settings
+router.get('/settings', requireAuth, (req, res) => {
+  try {
+    const user = db.prepare(`
+      SELECT allow_query_param_auth
+      FROM users
+      WHERE id = ?
+    `).get(req.user!.id) as any;
+
+    res.json({
+      success: true,
+      data: {
+        allow_query_param_auth: user?.allow_query_param_auth !== 0
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update user settings
+router.put('/settings', requireAuth, (req, res) => {
+  try {
+    const { allow_query_param_auth } = req.body;
+
+    if (typeof allow_query_param_auth === 'boolean') {
+      db.prepare(`
+        UPDATE users SET allow_query_param_auth = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(allow_query_param_auth ? 1 : 0, req.user!.id);
+    }
+
+    const user = db.prepare(`
+      SELECT allow_query_param_auth
+      FROM users
+      WHERE id = ?
+    `).get(req.user!.id) as any;
+
+    res.json({
+      success: true,
+      data: {
+        allow_query_param_auth: user?.allow_query_param_auth !== 0
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;

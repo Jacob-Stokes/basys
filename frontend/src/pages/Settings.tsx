@@ -28,6 +28,7 @@ export default function Settings() {
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyExpireDays, setNewKeyExpireDays] = useState('365');
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [allowQueryParamAuth, setAllowQueryParamAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<'keys' | 'docs' | 'guestbook' | 'display' | 'data'>('keys');
   const [goalSummaries, setGoalSummaries] = useState<GoalSummary[]>([]);
   const [goalsLoading, setGoalsLoading] = useState(false);
@@ -61,6 +62,7 @@ export default function Settings() {
 
   useEffect(() => {
     loadKeys();
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -85,6 +87,41 @@ export default function Settings() {
       setError((err as Error).message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSettings = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/settings`, {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAllowQueryParamAuth(data.data.allow_query_param_auth);
+      }
+    } catch (err) {
+      // silently fail — default stays true
+    }
+  };
+
+  const toggleQueryParamAuth = async () => {
+    const newValue = !allowQueryParamAuth;
+    setAllowQueryParamAuth(newValue);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ allow_query_param_auth: newValue }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAllowQueryParamAuth(data.data.allow_query_param_auth);
+      } else {
+        setAllowQueryParamAuth(!newValue); // revert on failure
+      }
+    } catch {
+      setAllowQueryParamAuth(!newValue); // revert on failure
     }
   };
 
@@ -402,6 +439,24 @@ export default function Settings() {
                   ))}
                 </div>
               )}
+            </div>
+
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold mb-3">Security</h3>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allowQueryParamAuth}
+                  onChange={toggleQueryParamAuth}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <span className="font-medium text-gray-900">Allow API key in URL</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    When enabled, API keys can be passed as <code className="bg-gray-100 px-1 rounded">?apiKey=</code> query parameters. This is needed for shareable agent landing page links. Disable if you only use header-based auth (MCP, curl).
+                  </p>
+                </div>
+              </label>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">

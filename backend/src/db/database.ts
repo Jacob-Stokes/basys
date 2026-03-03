@@ -144,6 +144,17 @@ export function initDatabase() {
     console.log('Migration check:', err);
   }
 
+  // Migration: Add allow_query_param_auth to users table
+  try {
+    const userCols = db.prepare("PRAGMA table_info(users)").all() as any[];
+    if (!userCols.some((col: any) => col.name === 'allow_query_param_auth')) {
+      db.exec(`ALTER TABLE users ADD COLUMN allow_query_param_auth INTEGER DEFAULT 1`);
+      console.log('Added allow_query_param_auth column to users table');
+    }
+  } catch (err) {
+    console.log('Migration check (allow_query_param_auth):', err);
+  }
+
   console.log('Database initialized at:', DB_PATH);
 }
 
