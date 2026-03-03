@@ -20,6 +20,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [creatingAgentKey, setCreatingAgentKey] = useState(false);
   const [agentKeyNotice, setAgentKeyNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [allowQueryParamAuth, setAllowQueryParamAuth] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -76,8 +77,15 @@ export default function Home() {
     }
   };
 
-  const handleOpenAgentDialog = () => {
+  const handleOpenAgentDialog = async () => {
     setShowAgentDialog(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/settings`, { credentials: 'include' });
+      const data = await response.json();
+      if (data.success) {
+        setAllowQueryParamAuth(data.data.allow_query_param_auth);
+      }
+    } catch {}
   };
 
   const getAgentLandingUrl = (format?: 'json') => {
@@ -326,30 +334,40 @@ export default function Home() {
                           {copied ? '✓ Copied!' : 'Copy'}
                         </button>
                       </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={getAgentLandingUrl('json')}
-                          readOnly
-                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
-                        />
-                        <button
-                          onClick={() => {
-                            const url = getAgentLandingUrl('json');
-                            navigator.clipboard.writeText(url);
-                          }}
-                          className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors whitespace-nowrap"
-                        >
-                          Copy JSON URL
-                        </button>
-                      </div>
+                      {allowQueryParamAuth && (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={getAgentLandingUrl('json')}
+                            readOnly
+                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
+                          />
+                          <button
+                            onClick={() => {
+                              const url = getAgentLandingUrl('json');
+                              navigator.clipboard.writeText(url);
+                            }}
+                            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors whitespace-nowrap"
+                          >
+                            Copy JSON URL
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Share the UI link with browser-based agents. The JSON link returns raw API data directly — works with CLI agents, MCP, curl, etc.
-                    </p>
-                    <p className="text-xs text-amber-600 mt-1">
-                      ⚠️ These URLs contain your API key. Only share them with trusted agents — anyone with the link can read and modify your goals.
-                    </p>
+                    {allowQueryParamAuth ? (
+                      <>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Share the UI link with browser-based agents. The JSON link returns raw API data directly — works with CLI agents, MCP, curl, etc.
+                        </p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          ⚠️ These URLs contain your API key. Only share them with trusted agents — anyone with the link can read and modify your goals.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-500 mt-2">
+                        JSON URL sharing is disabled. Enable "Allow API key in URL" in <Link to="/settings" className="text-blue-600 underline" onClick={() => setShowAgentDialog(false)}>Settings</Link> to generate a shareable JSON link.
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex gap-3 pt-4">
