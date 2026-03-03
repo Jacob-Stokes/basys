@@ -1,6 +1,9 @@
 <div align="center">
   <img src="frontend/public/logo.svg" alt="xharada logo" width="120" height="120">
   <h1>xharada</h1>
+  <p>
+    <a href="https://github.com/Jacob-Stokes/xharada-mcp">🤖 MCP Server →</a>
+  </p>
 </div>
 
 A personal goal tracking application based on the Harada Method - a Japanese goal-setting framework using nested 64-square grids. Built for AI agent integration and continuous improvement tracking.
@@ -163,7 +166,7 @@ npm run dev  # Runs on port 3000
 
 ### MCP Server
 
-For Claude Desktop integration, see the separate [xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp) repository. It provides an MCP server that allows Claude Desktop and other MCP clients to call Harada endpoints directly, wrapping goal/sub-goal/action creation, activity logging, and guestbook operations into MCP tools.
+For Claude Desktop integration, see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)** — a companion MCP server that allows Claude Desktop and other MCP clients to interact with xharada directly. It wraps all Harada endpoints into 12 MCP tools covering goal/sub-goal/action management, activity logging, guestbook operations, and resource deletion.
 
 ## Database
 
@@ -313,6 +316,13 @@ Instead of checkboxes and "done" states, the system focuses on logging what you 
 - Passwords hashed with bcrypt
 - Session secrets configurable via `SESSION_SECRET` environment variable
 - All routes protected with authentication middleware
+
+## Related Repositories
+
+| Repo | Description |
+|------|-------------|
+| [xharada](https://github.com/Jacob-Stokes/xharada) | This repo — the main web app (backend + frontend) |
+| [xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp) | MCP server for Claude Desktop and MCP-compatible AI agents |
 
 ## License
 
