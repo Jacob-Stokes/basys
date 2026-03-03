@@ -319,6 +319,9 @@
     "revokeApiKeyTitle": "Revoke API Key",
     "revokeApiKeyMessage": "Delete API key \"{{name}}\"? This cannot be undone.",
 
+    "guestbookPerPage": "Guestbook Entries Per Page",
+    "guestbookPerPageDesc": "Number of AI agent guestbook entries shown per page.",
+
     "language": "Language",
     "languageDesc": "Choose your preferred display language."
   },
@@ -344,6 +347,7 @@
     "noComments": "No AI agent comments yet",
     "noCommentsDesc": "AI agents can leave comments about your progress, insights, or encouragement",
     "loadingGuestbook": "Loading guestbook...",
+    "showingRange": "Showing {{start}}\u2013{{end}} of {{total}} entries",
     "apiHint": "AI agents can post comments via the API using POST /api/guestbook",
     "general": "General",
     "goal": "Goal",

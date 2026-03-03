@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API_URL } from '../api/client';
 import ReactMarkdown from 'react-markdown';
+import { useDisplaySettings } from '../context/DisplaySettingsContext';
 
 interface GuestbookEntry {
   id: string;
@@ -24,6 +25,8 @@ export default function Guestbook({ targetType, targetId, preloadedEntries, read
   const [entries, setEntries] = useState<GuestbookEntry[]>(preloadedEntries || []);
   const [loading, setLoading] = useState(!preloadedEntries);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const { settings: displaySettings } = useDisplaySettings();
 
   useEffect(() => {
     if (!preloadedEntries) {
@@ -57,6 +60,14 @@ export default function Guestbook({ targetType, targetId, preloadedEntries, read
       setLoading(false);
     }
   };
+
+  const perPage = displaySettings.guestbookPerPage;
+  const totalPages = Math.max(1, Math.ceil(entries.length / perPage));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedEntries = useMemo(
+    () => entries.slice((safePage - 1) * perPage, safePage * perPage),
+    [entries, safePage, perPage]
+  );
 
   const getTargetIcon = (type: string) => {
     switch (type) {
@@ -118,36 +129,78 @@ export default function Guestbook({ targetType, targetId, preloadedEntries, read
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">{getTargetIcon(entry.target_type)}</span>
-                  <div>
-                    <div className="font-semibold text-gray-900">{entry.agent_name}</div>
-                    <div className="text-xs text-gray-500">
-                      {getTargetLabel(entry.target_type)}
-                      {entry.target_id && (
-                        <span className="ml-1">&middot; {t('guestbook.idPrefix')}{entry.target_id.substring(0, 8)}...</span>
-                      )}
+        <>
+          <div className="space-y-3">
+            {paginatedEntries.map((entry) => (
+              <div
+                key={entry.id}
+                className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{getTargetIcon(entry.target_type)}</span>
+                    <div>
+                      <div className="font-semibold text-gray-900">{entry.agent_name}</div>
+                      <div className="text-xs text-gray-500">
+                        {getTargetLabel(entry.target_type)}
+                        {entry.target_id && (
+                          <span className="ml-1">&middot; {t('guestbook.idPrefix')}{entry.target_id.substring(0, 8)}...</span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  <div className="text-xs text-gray-400">
+                    {new Date(entry.created_at).toLocaleDateString()}
+                  </div>
                 </div>
-                <div className="text-xs text-gray-400">
-                  {new Date(entry.created_at).toLocaleDateString()}
+
+                <div className="prose prose-sm max-w-none text-gray-700">
+                  <ReactMarkdown>{entry.comment}</ReactMarkdown>
                 </div>
               </div>
+            ))}
+          </div>
 
-              <div className="prose prose-sm max-w-none text-gray-700">
-                <ReactMarkdown>{entry.comment}</ReactMarkdown>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <p className="text-sm text-gray-500">
+                {t('guestbook.showingRange', {
+                  start: (safePage - 1) * perPage + 1,
+                  end: Math.min(safePage * perPage, entries.length),
+                  total: entries.length,
+                })}
+              </p>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {t('home.prev')}
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1 text-sm border rounded ${
+                      page === safePage ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage === totalPages}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {t('home.next')}
+                </button>
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {!readOnly && (

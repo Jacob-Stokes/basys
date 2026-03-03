@@ -810,6 +810,29 @@ curl -X POST "$API_URL/api/guestbook" \\
               </div>
             </section>
 
+            {/* Guestbook Per Page */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">{t('settings.guestbookPerPage')}</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                {t('settings.guestbookPerPageDesc')}
+              </p>
+              <div className="flex items-center gap-3">
+                {[3, 5, 10, 25].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => updateDisplaySettings({ guestbookPerPage: n })}
+                    className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                      displaySettings.guestbookPerPage === n
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-blue-300'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </section>
+
             {/* Language */}
             <section>
               <h3 className="text-lg font-semibold mb-2">{t('settings.language')}</h3>
@@ -820,6 +843,7 @@ curl -X POST "$API_URL/api/guestbook" \\
                 {[
                   { code: 'en-US', label: 'English (US)' },
                   { code: 'en-GB', label: 'English (UK)' },
+                  { code: 'ja', label: '日本語' },
                 ].map((lang) => (
                   <button
                     key={lang.code}

@@ -64,4 +64,32 @@ describe('i18n Configuration', () => {
       expect(enUS).toHaveProperty(ns);
     }
   });
+
+  it('switches to Japanese and loads translations', async () => {
+    await i18n.changeLanguage('ja');
+    expect(i18n.language).toBe('ja');
+
+    expect(i18n.t('common.loading')).toBe('読み込み中...');
+    expect(i18n.t('login.signIn')).toBe('サインイン');
+    expect(i18n.t('home.yourGoals')).toBe('あなたの目標');
+    expect(i18n.t('settings.title')).toBe('設定');
+  });
+
+  it('supports interpolation in Japanese', async () => {
+    await i18n.changeLanguage('ja');
+    expect(i18n.t('goalGrid.addSubGoal', { position: 3 })).toBe('サブ目標3を追加');
+    expect(i18n.t('goalGrid.activityHistory', { count: 7 })).toBe('活動履歴（7件）');
+    expect(i18n.t('settings.exportedGoals', { count: 5 })).toBe('5件の目標をエクスポートしました。');
+  });
+
+  it('Japanese has all expected top-level namespaces', () => {
+    const ja = i18n.getResourceBundle('ja', 'translation');
+    const expectedNamespaces = [
+      'common', 'app', 'login', 'home', 'goalGrid', 'agents',
+      'sharedGoal', 'settings', 'share', 'guestbook', 'fullGrid', 'palette',
+    ];
+    for (const ns of expectedNamespaces) {
+      expect(ja).toHaveProperty(ns);
+    }
+  });
 });

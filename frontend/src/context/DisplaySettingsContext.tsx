@@ -14,6 +14,7 @@ export interface DisplaySettings {
   centerLayout: CenterLayout;
   centerBackdrop: CenterBackdrop;
   goalsPerPage: number;
+  guestbookPerPage: number;
   language: string;
 }
 
@@ -47,6 +48,7 @@ const defaultSettings: DisplaySettings = {
   centerLayout: 'single',
   centerBackdrop: 'card',
   goalsPerPage: 5,
+  guestbookPerPage: 5,
   language: 'en-US',
 };
 
