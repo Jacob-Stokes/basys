@@ -38,6 +38,35 @@ export const paletteOptions: Record<PaletteName, { label: string; colors: string
   },
 };
 
+export interface GoalTheme {
+  palette: PaletteName;
+  customSubGoalColors: Record<number, string>;
+  inheritActionColors: boolean;
+  actionShadePercent: number;
+  centerLayout: CenterLayout;
+  centerBackdrop: CenterBackdrop;
+}
+
+export function computeColorsFromTheme(theme: GoalTheme): Record<number, string> {
+  const palette = paletteOptions[theme.palette]?.colors || paletteOptions.classic.colors;
+  const mapping: Record<number, string> = {};
+  for (let i = 1; i <= 8; i += 1) {
+    mapping[i] = theme.customSubGoalColors[i] || palette[i - 1] || palette[0];
+  }
+  return mapping;
+}
+
+export function extractThemeFromSettings(settings: DisplaySettings): GoalTheme {
+  return {
+    palette: settings.palette,
+    customSubGoalColors: settings.customSubGoalColors,
+    inheritActionColors: settings.inheritActionColors,
+    actionShadePercent: settings.actionShadePercent,
+    centerLayout: settings.centerLayout,
+    centerBackdrop: settings.centerBackdrop,
+  };
+}
+
 const STORAGE_KEY = 'haradaDisplaySettings';
 
 const defaultSettings: DisplaySettings = {

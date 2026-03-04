@@ -98,6 +98,7 @@
     "rectangle": "長方形",
     "shareGoal": "目標を共有",
     "printGrid": "グリッドを印刷",
+    "printGoal": "ゴールを印刷",
     "clickYellowCells": "黄色いセルをクリックしてサブ目標を追加。「9x9グリッド全体」ビューでサブ目標にネストされたすべてのアクションを確認できます。",
     "allActions": "全アクション",
     "backToGrid": "\u2191 グリッドに戻る",
@@ -155,9 +156,16 @@
     "addSubGoalGrid": "サブ目標{{position}}を追加",
     "markComplete": "完了",
     "archive": "アーカイブ",
+    "unarchive": "アーカイブ解除",
     "reactivate": "再開",
     "status_completed": "この目標は完了しています",
-    "status_archived": "この目標はアーカイブされています"
+    "status_archived": "アーカイブ済み",
+    "goalTheme": "目標テーマ",
+    "goalThemeDesc": "この目標の色とレイアウトをカスタマイズ",
+    "usingCustomTheme": "この目標にカスタムテーマを使用中。",
+    "usingGlobalDefaults": "グローバルデフォルトテーマを使用中。変更するとこの目標にカスタムテーマが保存されます。",
+    "saveTheme": "テーマを保存",
+    "resetToDefaults": "デフォルトに戻す"
   },
 
   "agents": {

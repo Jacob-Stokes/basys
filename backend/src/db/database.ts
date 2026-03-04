@@ -198,6 +198,17 @@ export function initDatabase() {
     console.log('Migration check (is_admin):', err);
   }
 
+  // Migration: Add theme_json to primary_goals
+  try {
+    const goalCols = db.prepare("PRAGMA table_info(primary_goals)").all() as any[];
+    if (!goalCols.some((col: any) => col.name === 'theme_json')) {
+      db.exec(`ALTER TABLE primary_goals ADD COLUMN theme_json TEXT DEFAULT NULL`);
+      console.log('Added theme_json column to primary_goals');
+    }
+  } catch (err) {
+    console.log('Migration check (theme_json):', err);
+  }
+
   // Migration: Seed default agent etiquette for existing users
   try {
     const users = db.prepare('SELECT id FROM users').all() as any[];
@@ -230,6 +241,7 @@ export interface PrimaryGoal {
   description: string | null;
   target_date: string | null;
   status: 'active' | 'completed' | 'archived';
+  theme_json: string | null;
   created_at: string;
   updated_at: string;
 }

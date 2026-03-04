@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
@@ -6,6 +6,8 @@ import FullGridView from '../components/FullGridView';
 import Guestbook from '../components/Guestbook';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { GoalTheme, computeColorsFromTheme } from '../context/DisplaySettingsContext';
+import { lightenColor, getReadableTextColor } from '../utils/color';
 
 interface ActivityLog {
   id: string;
@@ -39,6 +41,7 @@ interface Goal {
   title: string;
   description: string | null;
   status: string;
+  theme_json?: string | null;
   subGoals: SubGoal[];
 }
 
@@ -73,6 +76,26 @@ export default function SharedGoalView() {
   const [viewMode, setViewMode] = useState<'compact' | 'full'>('full');
   const [gridAspect, setGridAspect] = useState<'square' | 'rectangle'>('square');
   const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
+
+  const parsedTheme: GoalTheme | null = useMemo(() => {
+    if (goal?.theme_json) {
+      try { return JSON.parse(goal.theme_json) as GoalTheme; } catch { return null; }
+    }
+    return null;
+  }, [goal?.theme_json]);
+
+  const themeColors = useMemo(
+    () => parsedTheme ? computeColorsFromTheme(parsedTheme) : DEFAULT_COLORS,
+    [parsedTheme]
+  );
+
+  const themeActionSettings = useMemo(() => ({
+    inherit: parsedTheme?.inheritActionColors ?? true,
+    shadePercent: parsedTheme?.actionShadePercent ?? 85,
+  }), [parsedTheme]);
+
+  const themeCenterLayout = parsedTheme?.centerLayout ?? 'single';
+  const themeCenterBackdrop = parsedTheme?.centerBackdrop ?? 'page';
 
   useEffect(() => {
     if (token) loadSharedGoal();
@@ -196,10 +219,10 @@ export default function SharedGoalView() {
               onAddSubGoal={() => {}}
               onAddAction={() => {}}
               gridAspect={gridAspect}
-              subGoalColors={DEFAULT_COLORS}
-              actionColorSettings={{ inherit: true, shadePercent: 85 }}
-              centerLayout="single"
-              centerBackdrop="page"
+              subGoalColors={themeColors}
+              actionColorSettings={themeActionSettings}
+              centerLayout={themeCenterLayout}
+              centerBackdrop={themeCenterBackdrop}
               readOnly
             />
 
@@ -236,18 +259,23 @@ export default function SharedGoalView() {
                   );
                 }
 
+                const baseColor = themeColors[pos] || '#22c55e';
+                const cardBg = lightenColor(baseColor, 70);
+                const textColor = getReadableTextColor(cardBg);
+
                 return (
                   <div
                     key={subGoal.id}
-                    className="bg-green-100 p-6 rounded-lg min-h-[120px] border border-green-300"
+                    className="p-6 rounded-lg min-h-[120px] border"
+                    style={{ backgroundColor: cardBg, borderColor: baseColor }}
                   >
-                    <h3 className="font-semibold text-green-800 mb-2">{subGoal.title}</h3>
+                    <h3 className="font-semibold mb-2" style={{ color: textColor }}>{subGoal.title}</h3>
                     <div className="space-y-1">
                       {subGoal.actions.map((action) => (
                         <div
                           key={action.id}
                           onClick={() => setSelectedAction(action)}
-                          className="text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 rounded px-2 py-1 cursor-pointer hover:bg-green-50 transition-colors"
+                          className="text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 rounded px-2 py-1 cursor-pointer hover:opacity-80 transition-colors"
                         >
                           {action.title}
                         </div>

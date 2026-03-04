@@ -143,8 +143,8 @@ router.post('/import', (req: Request, res: Response) => {
     };
 
     const insertGoalStmt = db.prepare(`
-      INSERT INTO primary_goals (id, user_id, title, description, target_date, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO primary_goals (id, user_id, title, description, target_date, status, theme_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertSubGoalStmt = db.prepare(`
@@ -182,6 +182,7 @@ router.post('/import', (req: Request, res: Response) => {
           goal.description || null,
           goal.target_date || null,
           goal.status || 'active',
+          goal.theme_json || null,
           createdAt,
           updatedAt
         );
@@ -363,7 +364,7 @@ router.get('/:goalId/tree', (req: Request, res: Response) => {
 // Create primary goal
 router.post('/', (req: Request, res: Response) => {
   try {
-    const { title, description, target_date } = req.body;
+    const { title, description, target_date, theme_json } = req.body;
     const userId = req.user?.id;
 
     if (!title) {
@@ -374,11 +375,11 @@ router.post('/', (req: Request, res: Response) => {
     const now = new Date().toISOString();
 
     const stmt = db.prepare(`
-      INSERT INTO primary_goals (id, user_id, title, description, target_date, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO primary_goals (id, user_id, title, description, target_date, theme_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    stmt.run(id, userId, title, description || null, target_date || null, now, now);
+    stmt.run(id, userId, title, description || null, target_date || null, theme_json || null, now, now);
 
     const goal = db.prepare('SELECT * FROM primary_goals WHERE id = ?').get(id);
 
@@ -404,15 +405,16 @@ router.put('/:goalId', (req: Request, res: Response) => {
     const description = req.body.description ?? existing.description;
     const target_date = req.body.target_date ?? existing.target_date;
     const status = req.body.status ?? existing.status;
+    const theme_json = req.body.theme_json !== undefined ? req.body.theme_json : (existing as any).theme_json;
     const now = new Date().toISOString();
 
     const stmt = db.prepare(`
       UPDATE primary_goals
-      SET title = ?, description = ?, target_date = ?, status = ?, updated_at = ?
+      SET title = ?, description = ?, target_date = ?, status = ?, theme_json = ?, updated_at = ?
       WHERE id = ?
     `);
 
-    stmt.run(title, description, target_date, status, now, goalId);
+    stmt.run(title, description, target_date, status, theme_json, now, goalId);
 
     const updatedGoal = db.prepare('SELECT * FROM primary_goals WHERE id = ?').get(goalId);
 

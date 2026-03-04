@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
@@ -8,7 +8,7 @@ import remarkGfm from 'remark-gfm';
 import Guestbook from '../components/Guestbook';
 import ShareGoalModal from '../components/ShareGoalModal';
 import ConfirmModal from '../components/ConfirmModal';
-import { useDisplaySettings } from '../context/DisplaySettingsContext';
+import { useDisplaySettings, GoalTheme, computeColorsFromTheme, extractThemeFromSettings, paletteOptions, PaletteName } from '../context/DisplaySettingsContext';
 import { getReadableTextColor, lightenColor } from '../utils/color';
 
 interface ActivityLog {
@@ -46,6 +46,7 @@ interface Goal {
   title: string;
   description: string | null;
   status: string;
+  theme_json?: string | null;
   subGoals: SubGoal[];
 }
 
@@ -66,8 +67,11 @@ export default function GoalGrid() {
   const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [actionLogs, setActionLogs] = useState<ActivityLog[]>([]);
-  const { settings: displaySettings, computedColors } = useDisplaySettings();
+  const { settings: displaySettings } = useDisplaySettings();
   const [viewMode, setViewMode] = useState<'compact' | 'full'>(displaySettings.defaultView);
+  const [showThemeModal, setShowThemeModal] = useState(false);
+  const [themeEdit, setThemeEdit] = useState<GoalTheme | null>(null);
+  const [showGoalMenu, setShowGoalMenu] = useState(false);
   const [gridAspect, setGridAspect] = useState<'square' | 'rectangle'>('square');
   const [selectedSubGoal, setSelectedSubGoal] = useState<SubGoal | null>(null);
   const [showSubGoalModal, setShowSubGoalModal] = useState(false);
@@ -93,6 +97,24 @@ export default function GoalGrid() {
     metric_unit: '',
     mood: ''
   });
+
+  // Per-goal theme resolution
+  const goalTheme: GoalTheme | null = useMemo(() => {
+    if (goal?.theme_json) {
+      try { return JSON.parse(goal.theme_json) as GoalTheme; } catch { return null; }
+    }
+    return null;
+  }, [goal?.theme_json]);
+
+  const effectiveTheme: GoalTheme = useMemo(
+    () => goalTheme ?? extractThemeFromSettings(displaySettings),
+    [goalTheme, displaySettings]
+  );
+
+  const effectiveColors = useMemo(
+    () => computeColorsFromTheme(effectiveTheme),
+    [effectiveTheme]
+  );
 
   const buildSubGoalPayload = (
     subGoal: SubGoal,
@@ -426,7 +448,7 @@ export default function GoalGrid() {
     }
 
     const actionsWithActivity = subGoal.actions.length;
-    const baseColor = computedColors[position] || '#22c55e';
+    const baseColor = effectiveColors[position] || '#22c55e';
     const cardBackground = lightenColor(baseColor, 70);
     const textColor = getReadableTextColor(cardBackground);
 
@@ -485,24 +507,24 @@ export default function GoalGrid() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-8">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 pt-4 pb-8">
       {/* Header - always constrained */}
       <div className="container mx-auto px-4 md:px-6 max-w-6xl mb-6">
+        <div className="flex items-center gap-3 text-sm mb-2">
+          <Link to="/" className="text-blue-600 hover:underline inline-flex items-center gap-1">
+            {t('goalGrid.backToGoals')}
+          </Link>
+          <span className="text-gray-400 dark:text-gray-500">•</span>
+          <Link
+            to="/settings"
+            state={{ from: location.pathname }}
+            className="text-blue-600 hover:underline inline-flex items-center gap-1"
+          >
+            {t('goalGrid.settingsIcon')}
+          </Link>
+        </div>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="flex-1">
-            <div className="flex items-center gap-3 text-sm">
-              <Link to="/" className="text-blue-600 hover:underline inline-flex items-center gap-1">
-                {t('goalGrid.backToGoals')}
-              </Link>
-              <span className="text-gray-400 dark:text-gray-500">•</span>
-              <Link
-                to="/settings"
-                state={{ from: location.pathname }}
-                className="text-blue-600 hover:underline inline-flex items-center gap-1"
-              >
-                {t('goalGrid.settingsIcon')}
-              </Link>
-            </div>
             <h1
               className="text-3xl font-bold text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600"
               onContextMenu={(e) => {
@@ -514,26 +536,12 @@ export default function GoalGrid() {
               {goal.title}
             </h1>
             {goal.description && <p className="text-gray-600 dark:text-gray-400 mt-1">{goal.description}</p>}
-            {/* Status controls */}
-            <div className="flex items-center gap-2 mt-2">
-              {goal.status === 'active' ? (
-                <>
-                  <button onClick={async () => { await api.updateGoal(goal.id, { status: 'completed' }); loadGoal(); }}
-                    className="px-3 py-1 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600">{t('goalGrid.markComplete')}</button>
-                  <button onClick={async () => { await api.updateGoal(goal.id, { status: 'archived' }); loadGoal(); }}
-                    className="px-3 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600">{t('goalGrid.archive')}</button>
-                </>
-              ) : (
-                <>
-                  <span className="text-sm text-gray-500 dark:text-gray-400 italic">{t(`goalGrid.status_${goal.status}`)}</span>
-                  <button onClick={async () => { await api.updateGoal(goal.id, { status: 'active' }); loadGoal(); }}
-                    className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600">{t('goalGrid.reactivate')}</button>
-                </>
-              )}
-            </div>
+            {goal.status === 'archived' && (
+              <span className="inline-block mt-2 px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">{t('goalGrid.status_archived')}</span>
+            )}
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             {/* View Mode Toggle */}
             <div className="flex flex-wrap gap-2 bg-white dark:bg-gray-800 rounded-lg shadow p-1">
               <button
@@ -584,20 +592,58 @@ export default function GoalGrid() {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => setShowShareModal(true)}
-              className="print-hidden px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors bg-white dark:bg-gray-800 shadow"
-            >
-              {t('goalGrid.shareGoal')}
-            </button>
-            <button
-              type="button"
-              onClick={handlePrintGrid}
-              className="print-hidden px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors bg-white dark:bg-gray-800 shadow"
-            >
-              {t('goalGrid.printGrid')}
-            </button>
+            <div className="print-hidden relative">
+              <button
+                type="button"
+                onClick={() => setShowGoalMenu(prev => !prev)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors bg-white dark:bg-gray-800 shadow"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              {showGoalMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowGoalMenu(false)} />
+                  <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 py-1">
+                    <button
+                      onClick={() => { setShowGoalMenu(false); setThemeEdit(effectiveTheme); setShowThemeModal(true); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      {t('goalGrid.goalTheme')}
+                    </button>
+                    <button
+                      onClick={() => { setShowGoalMenu(false); setShowShareModal(true); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      {t('goalGrid.shareGoal')}
+                    </button>
+                    <button
+                      onClick={() => { setShowGoalMenu(false); handlePrintGrid(); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      {t('goalGrid.printGoal')}
+                    </button>
+                    <hr className="my-1 border-gray-200 dark:border-gray-700" />
+                    {goal.status === 'archived' ? (
+                      <button
+                        onClick={async () => { setShowGoalMenu(false); await api.updateGoal(goal.id, { status: 'active' }); loadGoal(); }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        {t('goalGrid.unarchive')}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={async () => { setShowGoalMenu(false); await api.updateGoal(goal.id, { status: 'archived' }); loadGoal(); }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        {t('goalGrid.archive')}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -625,13 +671,13 @@ export default function GoalGrid() {
                 onUpdateAction={handleUpdateAction}
                 gridAspect={gridAspect}
                 onCenterClick={handleOpenDescriptionModal}
-                subGoalColors={computedColors}
+                subGoalColors={effectiveColors}
                 actionColorSettings={{
-                  inherit: displaySettings.inheritActionColors,
-                  shadePercent: displaySettings.actionShadePercent,
+                  inherit: effectiveTheme.inheritActionColors,
+                  shadePercent: effectiveTheme.actionShadePercent,
                 }}
-                centerLayout={displaySettings.centerLayout}
-                centerBackdrop={displaySettings.centerBackdrop}
+                centerLayout={effectiveTheme.centerLayout}
+                centerBackdrop={effectiveTheme.centerBackdrop}
                 onSubGoalDragStart={handleSubGoalDragStart}
                 onSubGoalDrop={handleSubGoalDrop}
                 onSubGoalDragEnd={handleSubGoalDragEnd}
@@ -735,13 +781,13 @@ export default function GoalGrid() {
                 onUpdateAction={handleUpdateAction}
                 gridAspect={gridAspect}
                 onCenterClick={handleOpenDescriptionModal}
-                subGoalColors={computedColors}
+                subGoalColors={effectiveColors}
                 actionColorSettings={{
-                  inherit: displaySettings.inheritActionColors,
-                  shadePercent: displaySettings.actionShadePercent,
+                  inherit: effectiveTheme.inheritActionColors,
+                  shadePercent: effectiveTheme.actionShadePercent,
                 }}
-                centerLayout={displaySettings.centerLayout}
-                centerBackdrop={displaySettings.centerBackdrop}
+                centerLayout={effectiveTheme.centerLayout}
+                centerBackdrop={effectiveTheme.centerBackdrop}
               />
             </div>
 
@@ -1169,6 +1215,176 @@ export default function GoalGrid() {
           goalTitle={goal.title}
           onClose={() => setShowShareModal(false)}
         />
+      )}
+
+      {/* Theme Editor Modal */}
+      {showThemeModal && themeEdit && goal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold dark:text-gray-100">{t('goalGrid.goalTheme')}</h2>
+              <button onClick={() => setShowThemeModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl">&times;</button>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              {goalTheme ? t('goalGrid.usingCustomTheme') : t('goalGrid.usingGlobalDefaults')}
+            </p>
+
+            {/* Palette Picker */}
+            <h3 className="text-sm font-semibold dark:text-gray-200 mb-2">{t('settings.colorPalette')}</h3>
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              {(Object.keys(paletteOptions) as PaletteName[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setThemeEdit({ ...themeEdit, palette: key })}
+                  className={`p-3 rounded-lg border-2 transition-colors ${
+                    themeEdit.palette === key
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                  }`}
+                >
+                  <div className="flex gap-1 mb-1">
+                    {paletteOptions[key].colors.map((c, i) => (
+                      <div key={i} className="w-5 h-5 rounded" style={{ backgroundColor: c }} />
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-600 dark:text-gray-400">{paletteOptions[key].label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Sub-Goal Colors */}
+            <h3 className="text-sm font-semibold dark:text-gray-200 mb-2">{t('settings.customSubGoalColors')}</h3>
+            <div className="grid grid-cols-4 gap-3 mb-6">
+              {Array.from({ length: 8 }, (_, i) => i + 1).map((pos) => {
+                const previewColors = computeColorsFromTheme(themeEdit);
+                return (
+                  <div key={pos} className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={previewColors[pos]}
+                      onChange={(e) => setThemeEdit({
+                        ...themeEdit,
+                        customSubGoalColors: { ...themeEdit.customSubGoalColors, [pos]: e.target.value },
+                      })}
+                      className="w-8 h-8 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
+                    />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{pos}</span>
+                    {themeEdit.customSubGoalColors[pos] && (
+                      <button
+                        onClick={() => {
+                          const next = { ...themeEdit.customSubGoalColors };
+                          delete next[pos];
+                          setThemeEdit({ ...themeEdit, customSubGoalColors: next });
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        {t('settings.clear')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Action Tile Styling */}
+            <h3 className="text-sm font-semibold dark:text-gray-200 mb-2">{t('settings.actionTileStyling')}</h3>
+            <div className="mb-6 space-y-3">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={themeEdit.inheritActionColors}
+                  onChange={(e) => setThemeEdit({ ...themeEdit, inheritActionColors: e.target.checked })}
+                  className="rounded"
+                />
+                <span className="text-sm dark:text-gray-300">{t('settings.inheritActionColors')}</span>
+              </label>
+              {themeEdit.inheritActionColors && (
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">{t('settings.actionLightness')}</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={themeEdit.actionShadePercent}
+                    onChange={(e) => setThemeEdit({ ...themeEdit, actionShadePercent: Number(e.target.value) })}
+                    className="w-full"
+                  />
+                  <span className="text-xs text-gray-400">{themeEdit.actionShadePercent}%</span>
+                </div>
+              )}
+            </div>
+
+            {/* Center Layout */}
+            <h3 className="text-sm font-semibold dark:text-gray-200 mb-2">{t('settings.centerLayout')}</h3>
+            <div className="flex gap-3 mb-6">
+              <button
+                onClick={() => setThemeEdit({ ...themeEdit, centerLayout: 'single' })}
+                className={`px-4 py-2 rounded text-sm ${themeEdit.centerLayout === 'single' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}
+              >
+                {t('settings.singleFocusBlock')}
+              </button>
+              <button
+                onClick={() => setThemeEdit({ ...themeEdit, centerLayout: 'radial' })}
+                className={`px-4 py-2 rounded text-sm ${themeEdit.centerLayout === 'radial' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}
+              >
+                {t('settings.directionalBridges')}
+              </button>
+            </div>
+
+            {/* Center Backdrop */}
+            <h3 className="text-sm font-semibold dark:text-gray-200 mb-2">{t('settings.centerBackground')}</h3>
+            <div className="flex gap-3 mb-6">
+              <button
+                onClick={() => setThemeEdit({ ...themeEdit, centerBackdrop: 'card' })}
+                className={`px-4 py-2 rounded text-sm ${themeEdit.centerBackdrop === 'card' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}
+              >
+                {t('settings.matchCard')}
+              </button>
+              <button
+                onClick={() => setThemeEdit({ ...themeEdit, centerBackdrop: 'page' })}
+                className={`px-4 py-2 rounded text-sm ${themeEdit.centerBackdrop === 'page' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}
+              >
+                {t('settings.matchPage')}
+              </button>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
+              <button
+                onClick={async () => {
+                  try {
+                    await api.updateGoal(goal.id, { theme_json: JSON.stringify(themeEdit) });
+                    setShowThemeModal(false);
+                    loadGoal();
+                  } catch (err) { setError((err as Error).message); }
+                }}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                {t('goalGrid.saveTheme')}
+              </button>
+              {goalTheme && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.updateGoal(goal.id, { theme_json: null });
+                      setShowThemeModal(false);
+                      loadGoal();
+                    } catch (err) { setError((err as Error).message); }
+                  }}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  {t('goalGrid.resetToDefaults')}
+                </button>
+              )}
+              <button
+                onClick={() => setShowThemeModal(false)}
+                className="px-4 py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -98,6 +98,7 @@
     "rectangle": "Rectangle",
     "shareGoal": "Share Goal",
     "printGrid": "Print Grid",
+    "printGoal": "Print Goal",
     "clickYellowCells": "Click on yellow cells to add sub-goals. Use \"Full 9x9 Grid\" view to see all actions nested in sub-goals.",
     "allActions": "All Actions",
     "backToGrid": "\u2191 Back to grid",
@@ -155,9 +156,16 @@
     "addSubGoalGrid": "Add Sub-Goal {{position}}",
     "markComplete": "Complete",
     "archive": "Archive",
+    "unarchive": "Unarchive",
     "reactivate": "Reactivate",
     "status_completed": "This goal is completed",
-    "status_archived": "This goal is archived"
+    "status_archived": "Archived",
+    "goalTheme": "Goal Theme",
+    "goalThemeDesc": "Customize colors and layout for this goal",
+    "usingCustomTheme": "Using custom theme for this goal.",
+    "usingGlobalDefaults": "Using global default theme. Changes here will save a custom theme for this goal.",
+    "saveTheme": "Save Theme",
+    "resetToDefaults": "Reset to Defaults"
   },
 
   "agents": {
