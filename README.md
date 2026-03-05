@@ -31,6 +31,7 @@ The Harada Method structures goals hierarchically:
 
 ### Authentication
 - Session-based authentication for web UI
+- OAuth 2.1 with PKCE for remote MCP clients (Claude mobile/web)
 - API key authentication for AI agents and automation
 - User registration and login system
 
@@ -59,6 +60,7 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - SESSION_SECRET=change-me-to-something-secure
+      # - MCP_SERVER_URL=https://mcp.example.com  # Set for remote MCP endpoint
     restart: unless-stopped
 ```
 
@@ -163,6 +165,7 @@ Xharada/
 ├── backend/
 │   ├── src/
 │   │   ├── db/              # Database schema and migrations
+│   │   ├── mcp/             # Remote MCP endpoint (OAuth + tools)
 │   │   ├── routes/          # API endpoints
 │   │   ├── middleware/      # Auth middleware
 │   │   └── index.ts         # Express server
@@ -197,7 +200,15 @@ npm run dev  # Runs on port 3000
 
 ### MCP Server
 
-For Claude Desktop integration, see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)** — a companion MCP server that allows Claude Desktop and other MCP clients to interact with Xharada directly. It wraps all Harada endpoints into 12 MCP tools covering goal/sub-goal/action management, activity logging, guestbook operations, and resource deletion.
+Xharada has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication. This is the recommended way to connect AI agents — it works with Claude mobile, Claude web, and any MCP-compatible client. To use it:
+
+1. Deploy Xharada with `MCP_SERVER_URL` set to your public URL (e.g. `https://mcp.example.com`)
+2. Add it as a custom integration in your MCP client, pointing to `https://mcp.example.com/mcp`
+3. Authenticate with your Xharada username and password via the OAuth flow
+
+The built-in endpoint provides 12 MCP tools with direct database access and multi-user support via OAuth tokens.
+
+For a **standalone stdio MCP server** (e.g. local Claude Desktop via API key auth), see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)**.
 
 ## Database
 
@@ -352,8 +363,8 @@ Instead of checkboxes and "done" states, the system focuses on logging what you 
 
 | Repo | Description |
 |------|-------------|
-| [xharada](https://github.com/Jacob-Stokes/xharada) | This repo — the main web app (backend + frontend) |
-| [xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp) | MCP server for Claude Desktop and MCP-compatible AI agents |
+| [xharada](https://github.com/Jacob-Stokes/xharada) | This repo — the main web app (backend + frontend + built-in remote MCP) |
+| [xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp) | Standalone stdio MCP server for local Claude Desktop integration |
 
 ## License
 
