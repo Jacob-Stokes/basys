@@ -1,53 +1,27 @@
 <div align="center">
   <img src="frontend/public/logo.svg" alt="Xharada logo" width="120" height="120">
   <h1>Xharada</h1>
-  <p>
-    <a href="https://github.com/Jacob-Stokes/xharada-mcp">🤖 MCP Server →</a>
-  </p>
 </div>
 
-A personal goal tracking application based on the Harada Method - a Japanese goal-setting framework using nested 64-square grids. Built for AI agent integration and continuous improvement tracking.
+A personal goal tracking app based on the **Harada Method** — a Japanese goal-setting framework that structures ambitions into nested 64-square grids. Built for AI agent integration.
 
-## What is the Harada Method?
+## Philosophy
 
-The Harada Method structures goals hierarchically:
-- 1 Primary Goal → 8 Sub-Goals → 8 Actions each = 64 total actions
-- Emphasizes activity logging over completion checkboxes
-- Tracks continuous improvement through consistent logging
+Progress is tracked through **continuous activity logging**, not completion checkboxes.
+
+The Harada Method structures goals as: **1 Primary Goal → 8 Sub-Goals → 8 Actions each = 64 total actions**. Instead of marking things "done", you log what you did and when you did it. Frequency and consistency are what matter. AI agents can then provide coaching based on activity patterns rather than binary completion.
 
 ## Features
 
-### Core Functionality
-- Visual grid views: 3x3 compact view and 9x9 full Harada grid
-- Activity logging: Track progress through continuous logging rather than binary completion
-- Markdown support for goal descriptions
-- Configurable grid aspect ratios (square and rectangle modes)
-
-### AI Agent Integration
-- Flexible API: `/api/user/summary` endpoint with 4 detail levels (minimal, standard, detailed, full)
-- Guestbook system: AI agents can leave comments at any level (user/goal/subgoal/action)
-- API key authentication for automated agent access
-- Activity metrics tracking: log counts and recency, not "completion" status
-
-### Authentication
-- Session-based authentication for web UI
-- OAuth 2.1 with PKCE for remote MCP clients (Claude mobile/web)
-- API key authentication for AI agents and automation
-- User registration and login system
+- **Visual grids**: 3x3 compact view and 9x9 full Harada grid with configurable aspect ratios
+- **Activity logging**: Continuous logging with metrics, mood tracking, and media attachments
+- **AI agent integration**: Built-in MCP endpoint, REST API, and guestbook system for AI coaching
+- **Multi-user**: OAuth 2.1 authentication with per-user data isolation
 
 ## Quick Start
 
-### Prerequisites
-- Docker and Docker Compose
-- Node.js 20+ (for local development)
-
-### Running with Docker (from GHCR)
-
-Create a `docker-compose.yml`:
-
 ```yaml
-version: '3.8'
-
+# docker-compose.yml
 services:
   xharada:
     image: ghcr.io/jacob-stokes/xharada:latest
@@ -56,320 +30,45 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - DATABASE_URL=file:/app/data/harada.db
-      - NODE_ENV=production
-      - PORT=3001
       - SESSION_SECRET=change-me-to-something-secure
-      # - MCP_SERVER_URL=https://mcp.example.com  # Set for remote MCP endpoint
+      # - MCP_SERVER_URL=https://mcp.example.com  # For remote MCP
     restart: unless-stopped
 ```
 
-Then run:
-
 ```bash
 docker-compose up -d
 ```
 
-### Running from Source
+Visit http://localhost:3001, register an account, and create your first goal.
 
-```bash
-git clone https://github.com/Jacob-Stokes/xharada.git
-cd xharada
-docker-compose up -d
-```
+## MCP Server
 
-Common commands:
+Xharada has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication — the recommended way to connect AI agents. Works with Claude mobile, Claude web, and any MCP-compatible client.
 
-```bash
-# View logs
-docker-compose logs -f
+1. Deploy with `MCP_SERVER_URL` set to your public URL
+2. Add as a custom integration in your MCP client, pointing to `https://your-domain.com/mcp`
+3. Authenticate with your Xharada username and password
 
-# Stop
-docker-compose down
-```
+The endpoint provides 12 tools covering goal/sub-goal/action management, activity logging, guestbook operations, and bulk import.
 
-Access:
-- **App**: http://localhost:3001
-- **Health Check**: http://localhost:3001/health
-
-### First Time Setup
-
-1. Visit http://localhost:3000
-2. Register an account
-3. Create your first goal
-4. Generate an API key in Settings for AI agents
-
-## API Overview
-
-### Authentication
-
-Web UI uses session cookies (automatic after login).
-
-AI agents use API keys in the request header:
-```bash
-curl -H "x-api-key: YOUR-KEY-HERE" http://localhost:3001/api/user/summary
-```
-
-### Summary Endpoint
-
-`GET /api/user/summary`
-
-Query Parameters:
-- `level`: `minimal` | `standard` | `detailed` | `full` (default: `standard`)
-- `include_logs`: `true` | `false` (include actual log entries, only with `level=full`)
-- `include_guestbook`: `true` | `false` (include AI agent comments)
-
-Examples:
-
-Quick overview:
-```bash
-GET /api/user/summary?level=minimal
-```
-
-Daily check-in (default):
-```bash
-GET /api/user/summary
-```
-
-Full context for AI coaching:
-```bash
-GET /api/user/summary?level=full&include_logs=true&include_guestbook=true
-```
-
-### Guestbook API
-
-AI agents can leave comments:
-
-```bash
-POST /api/guestbook
-{
-  "agent_name": "Coach AI",
-  "comment": "Great progress this week!",
-  "target_type": "user",  # or "goal", "subgoal", "action"
-  "target_id": "optional-uuid"
-}
-```
+For a standalone stdio MCP server (local Claude Desktop via API key), see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)**.
 
 ## Tech Stack
 
-- Backend: Node.js 20 + TypeScript + Express + SQLite (better-sqlite3)
-- Frontend: React + TypeScript + Vite + Tailwind CSS
-- Database: SQLite (file-based, no setup required)
-- Container: Docker + Docker Compose
-- Authentication: express-session + bcrypt
+Node.js + TypeScript + Express + SQLite | React + Vite + Tailwind CSS | Docker
 
-## Project Structure
+## Development
 
-```
-Xharada/
-├── backend/
-│   ├── src/
-│   │   ├── db/              # Database schema and migrations
-│   │   ├── mcp/             # Remote MCP endpoint (OAuth + tools)
-│   │   ├── routes/          # API endpoints
-│   │   ├── middleware/      # Auth middleware
-│   │   └── index.ts         # Express server
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── pages/           # React pages
-│   │   ├── components/      # Reusable components
-│   │   └── api/             # API client
-│   └── package.json
-├── data/                    # SQLite database (gitignored)
-├── Dockerfile               # Multi-stage build (frontend + backend)
-├── docker-compose.yml
-└── README.md
-```
-
-## Local Development
-
-### Backend
 ```bash
-cd backend
-npm install
-npm run dev  # Runs on port 3001
+# Backend
+cd backend && npm install && npm run dev  # port 3001
+
+# Frontend
+cd frontend && npm install && npm run dev  # port 3000
 ```
 
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev  # Runs on port 3000
-```
-
-### MCP Server
-
-Xharada has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication. This is the recommended way to connect AI agents — it works with Claude mobile, Claude web, and any MCP-compatible client. To use it:
-
-1. Deploy Xharada with `MCP_SERVER_URL` set to your public URL (e.g. `https://mcp.example.com`)
-2. Add it as a custom integration in your MCP client, pointing to `https://mcp.example.com/mcp`
-3. Authenticate with your Xharada username and password via the OAuth flow
-
-The built-in endpoint provides 12 MCP tools with direct database access and multi-user support via OAuth tokens.
-
-For a **standalone stdio MCP server** (e.g. local Claude Desktop via API key auth), see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)**.
-
-## Database
-
-SQLite database stored at `./data/harada.db` (automatically created, not in git).
-
-### Entity Relationship Diagram
-
-```mermaid
-erDiagram
-    users ||--o{ api_keys : "has many"
-    users ||--o{ primary_goals : "has many"
-    users ||--o{ guestbook : "receives"
-
-    primary_goals ||--o{ sub_goals : "contains 8"
-    sub_goals ||--o{ action_items : "contains 8"
-    action_items ||--o{ activity_logs : "has many"
-
-    users {
-        TEXT id PK
-        TEXT username UK
-        TEXT password_hash
-        TEXT email
-        TEXT created_at
-        TEXT updated_at
-    }
-
-    api_keys {
-        TEXT id PK
-        TEXT user_id FK
-        TEXT key_hash
-        TEXT name
-        TEXT last_used_at
-        TEXT created_at
-        TEXT expires_at
-    }
-
-    primary_goals {
-        TEXT id PK
-        TEXT user_id FK
-        TEXT title
-        TEXT description
-        TEXT target_date
-        TEXT status "active|completed|archived"
-        TEXT created_at
-        TEXT updated_at
-    }
-
-    sub_goals {
-        TEXT id PK
-        TEXT primary_goal_id FK
-        INTEGER position "1-8, UNIQUE per goal"
-        TEXT title
-        TEXT description
-        TEXT created_at
-        TEXT updated_at
-    }
-
-    action_items {
-        TEXT id PK
-        TEXT sub_goal_id FK
-        INTEGER position "1-8, UNIQUE per sub-goal"
-        TEXT title
-        TEXT description
-        INTEGER completed "0|1"
-        TEXT completed_at
-        TEXT due_date
-        TEXT created_at
-        TEXT updated_at
-    }
-
-    activity_logs {
-        TEXT id PK
-        TEXT action_item_id FK
-        TEXT log_type "note|progress|completion|media|link"
-        TEXT content
-        TEXT log_date
-        INTEGER duration_minutes
-        REAL metric_value
-        TEXT metric_unit
-        TEXT media_url
-        TEXT media_type "image|video|document|audio"
-        TEXT external_link
-        TEXT mood "motivated|challenged|accomplished|frustrated|neutral"
-        TEXT tags
-        TEXT created_at
-        TEXT updated_at
-    }
-
-    guestbook {
-        TEXT id PK
-        TEXT user_id FK
-        TEXT agent_name
-        TEXT comment
-        TEXT target_type "user|goal|subgoal|action"
-        TEXT target_id
-        TEXT created_at
-    }
-```
-
-### Schema Overview
-- users: User accounts with authentication
-- api_keys: API keys for AI agents (hashed, with configurable expiration)
-- primary_goals: Top-level goals (1 per Harada grid)
-- sub_goals: 8 sub-goals per primary goal (positions 1-8)
-- action_items: 8 actions per sub-goal (64 total per goal, positions 1-8)
-- activity_logs: Activity tracking logs with metrics, media, and mood
-- guestbook: AI agent comments and feedback at any level
-
-### Key Relationships
-- 1:8:64 Harada Structure: 1 goal → 8 sub-goals → 8 actions each = 64 actions
-- Cascade Deletes: Deleting a goal removes all sub-goals, actions, and logs
-- Position Constraints: Sub-goals and actions use UNIQUE(parent_id, position) to enforce grid structure
-- Flexible Guestbook: Comments can target user, goal, sub-goal, or action level
-
-## AI Agent Integration Examples
-
-### Daily Check-in Agent
-```bash
-# Get summary and identify neglected areas
-SUMMARY=$(curl -H "x-api-key: $API_KEY" \
-  "http://localhost:3001/api/user/summary?level=standard")
-
-# Leave encouraging comment
-curl -X POST -H "x-api-key: $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"agent_name":"Daily Coach","comment":"Keep going!","target_type":"user"}' \
-  http://localhost:3001/api/guestbook
-```
-
-### Progress Analyzer
-```bash
-# Get full detail with logs
-curl -H "x-api-key: $API_KEY" \
-  "http://localhost:3001/api/user/summary?level=full&include_logs=true"
-```
-
-## Philosophy
-
-This app follows the Harada Method's core principle: progress is tracked through continuous activity logging, not completion status.
-
-Instead of checkboxes and "done" states, the system focuses on logging what you did and when you did it. Frequency and consistency are what matter. AI agents can then provide insights based on activity patterns rather than binary completion.
-
-## Security Notes
-
-- Database stored locally (not exposed to external network)
-- API keys hashed with bcrypt
-- Passwords hashed with bcrypt
-- Session secrets configurable via `SESSION_SECRET` environment variable
-- All routes protected with authentication middleware
-
-## Related Repositories
-
-| Repo | Description |
-|------|-------------|
-| [xharada](https://github.com/Jacob-Stokes/xharada) | This repo — the main web app (backend + frontend + built-in remote MCP) |
-| [xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp) | Standalone stdio MCP server for local Claude Desktop integration |
+See the [wiki](https://github.com/Jacob-Stokes/xharada/wiki) for API documentation, database schema, and architecture details.
 
 ## License
 
-MIT
-
-## Credits
-
-Based on the Harada Method, a goal-setting framework developed by Takashi Harada.
+MIT — Based on the Harada Method by Takashi Harada.
