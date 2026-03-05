@@ -144,6 +144,55 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_date ON activity_logs(log_date);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(log_type);
 CREATE INDEX IF NOT EXISTS idx_guestbook_user ON guestbook(user_id);
 CREATE INDEX IF NOT EXISTS idx_guestbook_target ON guestbook(target_type, target_id);
+
+-- OAuth tables for remote MCP endpoint
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  client_id TEXT PRIMARY KEY,
+  client_secret TEXT,
+  client_secret_expires_at INTEGER DEFAULT 0,
+  redirect_uris TEXT NOT NULL,
+  client_name TEXT,
+  client_uri TEXT,
+  grant_types TEXT,
+  response_types TEXT,
+  token_endpoint_auth_method TEXT DEFAULT 'client_secret_post',
+  scope TEXT,
+  client_id_issued_at INTEGER,
+  client_metadata TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS oauth_auth_codes (
+  code TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  code_challenge_method TEXT DEFAULT 'S256',
+  scopes TEXT,
+  resource TEXT,
+  expires_at INTEGER NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  token TEXT PRIMARY KEY,
+  token_type TEXT NOT NULL CHECK(token_type IN ('access', 'refresh')),
+  client_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  scopes TEXT,
+  resource TEXT,
+  expires_at INTEGER NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_expires ON oauth_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_oauth_auth_codes_expires ON oauth_auth_codes(expires_at);
 `;
 
 // Initialize schema

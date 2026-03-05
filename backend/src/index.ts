@@ -15,6 +15,7 @@ import agentsRouter from './routes/agents';
 import { shareManagementRouter, sharePublicRouter } from './routes/share';
 import etiquetteRouter from './routes/etiquette';
 import adminRouter from './routes/admin';
+import { setupMcpRoutes } from './mcp/server';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,6 +28,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // Session middleware
 if (!process.env.SESSION_SECRET) {
@@ -138,6 +140,9 @@ app.use('/api/share', requireAuth, shareManagementRouter);
 app.use('/api/shared', sharePublicRouter);
 app.use('/api/etiquette', requireAuth, etiquetteRouter);
 app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
+
+// Remote MCP endpoint with OAuth (must be before static files/SPA fallback)
+setupMcpRoutes(app);
 
 // Serve frontend static files in production (single-container mode)
 const publicDir = path.join(__dirname, '..', 'public');
