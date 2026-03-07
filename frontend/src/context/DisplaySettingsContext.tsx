@@ -4,9 +4,24 @@ export type ViewMode = 'compact' | 'full';
 export type CenterLayout = 'single' | 'radial';
 export type CenterBackdrop = 'page' | 'card';
 export type PaletteName = 'classic' | 'rainbow' | 'pastel' | 'mono';
+export type AppThemeName = 'default' | 'academia';
+
+export const appThemeOptions: Record<AppThemeName, { label: string; description: string; defaultPalette: PaletteName }> = {
+  default: {
+    label: 'Default',
+    description: 'Clean sans-serif, neutral grays',
+    defaultPalette: 'classic',
+  },
+  academia: {
+    label: 'Academia',
+    description: 'Tufte-inspired — serif fonts, warm ivory background',
+    defaultPalette: 'mono',
+  },
+};
 
 export interface DisplaySettings {
   defaultView: ViewMode;
+  appTheme: AppThemeName;
   palette: PaletteName;
   customSubGoalColors: Record<number, string>;
   inheritActionColors: boolean;
@@ -71,6 +86,7 @@ const STORAGE_KEY = 'haradaDisplaySettings';
 
 const defaultSettings: DisplaySettings = {
   defaultView: 'compact',
+  appTheme: 'default',
   palette: 'classic',
   customSubGoalColors: {},
   inheritActionColors: true,
@@ -121,8 +137,30 @@ export function DisplaySettingsProvider({ children }: { children: React.ReactNod
     }
   }, [settings.darkMode]);
 
+  // Apply app theme CSS class to <html>
+  useEffect(() => {
+    // Remove all theme classes
+    Object.keys(appThemeOptions).forEach((theme) => {
+      if (theme !== 'default') {
+        document.documentElement.classList.remove(theme);
+      }
+    });
+    // Add current theme class
+    if (settings.appTheme !== 'default') {
+      document.documentElement.classList.add(settings.appTheme);
+    }
+  }, [settings.appTheme]);
+
   const updateSettings = (changes: Partial<DisplaySettings>) => {
-    setSettings((prev) => ({ ...prev, ...changes }));
+    setSettings((prev) => {
+      const next = { ...prev, ...changes };
+      // When switching app theme, also switch to that theme's default palette
+      if (changes.appTheme && changes.appTheme !== prev.appTheme && !changes.palette) {
+        next.palette = appThemeOptions[changes.appTheme].defaultPalette;
+        next.customSubGoalColors = {};
+      }
+      return next;
+    });
   };
 
   const setSubGoalColor = (position: number, color: string | null) => {

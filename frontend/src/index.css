@@ -20,6 +20,32 @@ code {
     monospace;
 }
 
+/* Academia theme — Tufte-inspired */
+.academia body,
+.academia #root {
+  font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+}
+
+.academia code {
+  font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+}
+
+/* Override Tailwind background grays with warm Tufte tones */
+.academia .bg-gray-100 { background-color: #fffff8 !important; }
+.academia .bg-gray-50 { background-color: #fffff8 !important; }
+.academia .bg-white { background-color: #fffff8 !important; }
+.academia .bg-gray-200 { background-color: #f0f0e8 !important; }
+.academia .border-gray-200 { border-color: #d4d4c8 !important; }
+.academia .border-gray-300 { border-color: #c8c8bc !important; }
+
+/* Academia dark mode */
+.academia.dark .bg-gray-900 { background-color: #1a1a18 !important; }
+.academia.dark .bg-gray-800 { background-color: #222220 !important; }
+.academia.dark .bg-white { background-color: #222220 !important; }
+.academia.dark .bg-gray-700 { background-color: #2a2a28 !important; }
+.academia.dark .border-gray-700 { border-color: #3a3a38 !important; }
+.academia.dark .border-gray-600 { border-color: #4a4a48 !important; }
+
 @page {
   margin: 0.5in;
 }

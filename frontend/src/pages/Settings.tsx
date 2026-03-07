@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import ConfirmModal from '../components/ConfirmModal';
 import { API_URL, api } from '../api/client';
-import { useDisplaySettings, paletteOptions, PaletteName } from '../context/DisplaySettingsContext';
+import { useDisplaySettings, paletteOptions, PaletteName, appThemeOptions, AppThemeName } from '../context/DisplaySettingsContext';
 import { lightenColor } from '../utils/color';
 
 interface ApiKey {
@@ -1076,6 +1076,33 @@ curl -X POST "$API_URL/api/guestbook" \\
                     {lang.label}
                   </button>
                 ))}
+              </div>
+            </section>
+
+            {/* App Theme */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">App Theme</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                Controls the overall look and feel — fonts, backgrounds, and default grid colors.
+              </p>
+              <div className="grid md:grid-cols-2 gap-4">
+                {Object.entries(appThemeOptions).map(([name, option]) => {
+                  const themeName = name as AppThemeName;
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => updateDisplaySettings({ appTheme: themeName })}
+                      className={`border rounded-lg p-4 text-left transition-colors ${
+                        displaySettings.appTheme === themeName
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-blue-200'
+                      }`}
+                    >
+                      <div className="font-semibold mb-1">{option.label}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">{option.description}</div>
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
