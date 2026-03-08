@@ -38,6 +38,52 @@ code {
 .academia .border-gray-200 { border-color: #d4d4c8 !important; }
 .academia .border-gray-300 { border-color: #c8c8bc !important; }
 
+/* Academia accent colors — warm maroon primary, muted olive secondary */
+
+/* Primary accent: blue → maroon/burgundy */
+.academia .bg-blue-600 { background-color: #7c3238 !important; }
+.academia .bg-blue-700 { background-color: #66282d !important; }
+.academia .bg-blue-500 { background-color: #8f3a41 !important; }
+.academia .bg-blue-50 { background-color: #faf5f5 !important; }
+.academia .bg-blue-100 { background-color: #f0e6e7 !important; }
+.academia .text-blue-600 { color: #7c3238 !important; }
+.academia .text-blue-700 { color: #66282d !important; }
+.academia .text-blue-800 { color: #561f24 !important; }
+.academia .text-blue-500 { color: #8f3a41 !important; }
+.academia .text-blue-400 { color: #a6575d !important; }
+.academia .border-blue-200 { border-color: #d4b0b3 !important; }
+.academia .border-blue-500 { border-color: #8f3a41 !important; }
+.academia .border-blue-600 { border-color: #7c3238 !important; }
+.academia .ring-blue-500 { --tw-ring-color: #8f3a41 !important; }
+.academia .focus\:ring-blue-500:focus { --tw-ring-color: #8f3a41 !important; }
+.academia .hover\:bg-blue-700:hover { background-color: #66282d !important; }
+.academia .hover\:bg-blue-600:hover { background-color: #7c3238 !important; }
+.academia .hover\:text-blue-800:hover { color: #561f24 !important; }
+.academia .hover\:text-blue-900:hover { color: #4a181c !important; }
+
+/* Secondary accent: green → muted olive */
+.academia .bg-green-600 { background-color: #5c6b3c !important; }
+.academia .bg-green-700 { background-color: #4d5a30 !important; }
+.academia .bg-green-500 { background-color: #6b7c48 !important; }
+.academia .bg-green-100 { background-color: #f0f2ea !important; }
+.academia .bg-green-50 { background-color: #f7f8f4 !important; }
+.academia .text-green-600 { color: #5c6b3c !important; }
+.academia .text-green-700 { color: #4d5a30 !important; }
+.academia .text-green-400 { color: #8a9968 !important; }
+.academia .text-green-300 { color: #a3b082 !important; }
+.academia .border-green-200 { border-color: #c8d1b4 !important; }
+.academia .border-green-300 { border-color: #b5c09e !important; }
+.academia .hover\:bg-green-700:hover { background-color: #4d5a30 !important; }
+.academia .hover\:bg-green-600:hover { background-color: #5c6b3c !important; }
+
+/* Red/destructive — soften to warm brick */
+.academia .bg-red-600 { background-color: #9e4a4a !important; }
+.academia .bg-red-500 { background-color: #a85454 !important; }
+.academia .text-red-600 { color: #9e4a4a !important; }
+.academia .text-red-500 { color: #a85454 !important; }
+.academia .text-red-700 { color: #8a3c3c !important; }
+.academia .hover\:bg-red-700:hover { background-color: #8a3c3c !important; }
+
 /* Academia dark mode */
 .academia.dark .bg-gray-900 { background-color: #1a1a18 !important; }
 .academia.dark .bg-gray-800 { background-color: #222220 !important; }
@@ -45,6 +91,19 @@ code {
 .academia.dark .bg-gray-700 { background-color: #2a2a28 !important; }
 .academia.dark .border-gray-700 { border-color: #3a3a38 !important; }
 .academia.dark .border-gray-600 { border-color: #4a4a48 !important; }
+
+/* Academia dark mode accents */
+.academia.dark .bg-blue-600 { background-color: #8f4a50 !important; }
+.academia.dark .bg-blue-700 { background-color: #7c3e44 !important; }
+.academia.dark .text-blue-600 { color: #c08488 !important; }
+.academia.dark .text-blue-400 { color: #c99a9e !important; }
+.academia.dark .bg-green-600 { background-color: #6b7c48 !important; }
+.academia.dark .bg-green-700 { background-color: #5c6b3c !important; }
+.academia.dark .text-green-400 { color: #a3b082 !important; }
+.academia.dark .text-green-300 { color: #b5c09e !important; }
+.academia.dark .bg-green-900\/30 { background-color: rgba(92, 107, 60, 0.3) !important; }
+.academia.dark .text-green-400 { color: #a3b082 !important; }
+.academia.dark .bg-red-600 { background-color: #a85454 !important; }
 
 @page {
   margin: 0.5in;
