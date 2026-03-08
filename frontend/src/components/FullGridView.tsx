@@ -132,7 +132,7 @@ export default function FullGridView({
               );
             })}
             <div
-              className={`col-start-2 row-start-2 flex items-center justify-center text-center font-bold text-sm sm:text-lg px-2 rounded-md bg-blue-600 text-white transition-colors ${readOnly ? '' : 'cursor-pointer hover:bg-blue-700'}`}
+              className={`col-start-2 row-start-2 flex items-center justify-center text-center font-bold ${gridAspect === 'rectangle' ? 'text-base sm:text-xl' : 'text-sm sm:text-lg'} px-2 rounded-md bg-blue-600 text-white transition-colors ${readOnly ? '' : 'cursor-pointer hover:bg-blue-700'}`}
               onClick={readOnly ? undefined : onCenterClick}
               title={readOnly ? undefined : t('fullGrid.clickToEditDescription')}
             >
@@ -151,7 +151,7 @@ export default function FullGridView({
       >
         <div
           onClick={readOnly ? undefined : onCenterClick}
-          className={`w-full h-full bg-blue-600 text-white flex items-center justify-center font-bold text-base sm:text-lg transition-colors text-center px-4 rounded-md ${readOnly ? '' : 'cursor-pointer hover:bg-blue-700'}`}
+          className={`w-full h-full bg-blue-600 text-white flex items-center justify-center font-bold ${gridAspect === 'rectangle' ? 'text-lg sm:text-2xl' : 'text-base sm:text-lg'} transition-colors text-center px-4 rounded-md ${readOnly ? '' : 'cursor-pointer hover:bg-blue-700'}`}
           title={readOnly ? undefined : t('fullGrid.clickToEditDescription')}
         >
           {goalTitle}
@@ -244,7 +244,7 @@ export default function FullGridView({
           }}
           title={readOnly ? subGoal.title : t('fullGrid.clickToViewActions')}
         >
-          <div className="font-semibold text-xs text-center break-words">{subGoal.title}</div>
+          <div className={`font-semibold ${gridAspect === 'rectangle' ? 'text-sm' : 'text-xs'} text-center break-words`}>{subGoal.title}</div>
         </div>
       );
     }
@@ -367,7 +367,7 @@ export default function FullGridView({
                 }
               : undefined
           )}
-          className={`border rounded p-1 text-xs h-full flex items-center justify-center ${readOnly ? '' : 'cursor-pointer hover:opacity-90'}`}
+          className={`border rounded p-1 ${gridAspect === 'rectangle' ? 'text-sm' : 'text-xs'} h-full flex items-center justify-center ${readOnly ? '' : 'cursor-pointer hover:opacity-90'}`}
           style={{
             backgroundColor: actionBg,
             borderColor: actionColorSettings.inherit ? parentColor : '#d1d5db',
@@ -375,7 +375,7 @@ export default function FullGridView({
           }}
           title={readOnly ? action.title : action.title + t('fullGrid.rightClickToEdit')}
         >
-          <div className="text-center break-words">{action.title}</div>
+          <div className={`text-center break-words ${gridAspect === 'rectangle' ? 'text-sm' : ''}`}>{action.title}</div>
         </div>
       );
     }

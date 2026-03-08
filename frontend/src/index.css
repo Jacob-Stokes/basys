@@ -25,18 +25,51 @@ code {
 .academia #root {
   font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
 }
+.academia body {
+  background-color: #faf9f5;
+}
 
 .academia code {
   font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 }
 
 /* Override Tailwind background grays with warm Tufte tones */
-.academia .bg-gray-100 { background-color: #fffff8 !important; }
-.academia .bg-gray-50 { background-color: #fffff8 !important; }
-.academia .bg-white { background-color: #fffff8 !important; }
+.academia .bg-gray-100 { background-color: #faf9f5 !important; }
+.academia .bg-gray-50 { background-color: #faf9f5 !important; }
+.academia .bg-white { background-color: #faf9f5 !important; }
 .academia .bg-gray-200 { background-color: #f0f0e8 !important; }
 .academia .border-gray-200 { border-color: #d4d4c8 !important; }
 .academia .border-gray-300 { border-color: #c8c8bc !important; }
+
+/* Flat design — remove all shadows, use subtle borders instead */
+.academia .shadow,
+.academia .shadow-sm,
+.academia .shadow-md,
+.academia .shadow-lg,
+.academia .shadow-xl {
+  box-shadow: none !important;
+}
+.academia .hover\:shadow-md:hover {
+  box-shadow: none !important;
+}
+/* Section cards: remove box border, single bottom rule between sections */
+.academia .shadow-md {
+  border: none !important;
+  border-bottom: 1px solid #d4d4c8 !important;
+  border-radius: 0 !important;
+  margin-bottom: 0 !important;
+  padding-bottom: 1.5rem !important;
+}
+/* Modal/overlay cards keep a full border */
+.academia .shadow-lg,
+.academia .shadow-xl {
+  border: 1px solid #d4d4c8;
+}
+/* Horizontal rules between sections */
+.academia hr,
+.academia .divide-y > * + * {
+  border-color: #d4d4c8 !important;
+}
 
 /* Academia accent colors — warm maroon primary, muted olive secondary */
 
@@ -85,6 +118,7 @@ code {
 .academia .hover\:bg-red-700:hover { background-color: #8a3c3c !important; }
 
 /* Academia dark mode */
+.academia.dark body { background-color: #1a1a18; }
 .academia.dark .bg-gray-900 { background-color: #1a1a18 !important; }
 .academia.dark .bg-gray-800 { background-color: #222220 !important; }
 .academia.dark .bg-white { background-color: #222220 !important; }

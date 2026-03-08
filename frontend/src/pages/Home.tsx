@@ -29,7 +29,7 @@ export default function Home() {
   const [allowQueryParamAuth, setAllowQueryParamAuth] = useState(true);
   const [confirmDeleteGoalId, setConfirmDeleteGoalId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'archived' | 'all'>('active');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'archived' | 'all' | 'guestbook'>('active');
   const [openMenuGoalId, setOpenMenuGoalId] = useState<string | null>(null);
   const { settings: displaySettings } = useDisplaySettings();
   const navigate = useNavigate();
@@ -234,7 +234,7 @@ export default function Home() {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-semibold dark:text-gray-100">{t('home.yourGoals')}</h2>
-            <div className="flex gap-1">
+            <div className="flex gap-1 items-center">
               {(['active', 'completed', 'archived', 'all'] as const).map((filter) => (
                 <button
                   key={filter}
@@ -246,10 +246,21 @@ export default function Home() {
                   {t(`home.filter_${filter}`)}
                 </button>
               ))}
+              <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+              <button
+                onClick={() => { setStatusFilter('guestbook'); setCurrentPage(1); }}
+                className={`px-3 py-1 text-sm rounded ${
+                  statusFilter === 'guestbook' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {t('home.filter_guestbook')}
+              </button>
             </div>
           </div>
 
-          {loading ? (
+          {statusFilter === 'guestbook' ? (
+            <Guestbook targetType="user" />
+          ) : loading ? (
             <p className="text-gray-500 dark:text-gray-400">{t('home.loadingGoals')}</p>
           ) : filteredGoals.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">{t('home.noGoals')}</p>
@@ -399,11 +410,6 @@ export default function Home() {
               )}
             </>
           )}
-        </div>
-
-        {/* Guestbook */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mt-8">
-          <Guestbook targetType="user" />
         </div>
       </div>
 

@@ -82,7 +82,8 @@
     "filter_active": "Active",
     "filter_completed": "Completed",
     "filter_archived": "Archived",
-    "filter_all": "All"
+    "filter_all": "All",
+    "filter_guestbook": "Guestbook"
   },
 
   "goalGrid": {

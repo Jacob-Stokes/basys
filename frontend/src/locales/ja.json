@@ -82,7 +82,8 @@
     "filter_active": "アクティブ",
     "filter_completed": "完了",
     "filter_archived": "アーカイブ",
-    "filter_all": "すべて"
+    "filter_all": "すべて",
+    "filter_guestbook": "ゲストブック"
   },
 
   "goalGrid": {
