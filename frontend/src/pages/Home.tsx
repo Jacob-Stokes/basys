@@ -32,6 +32,7 @@ export default function Home() {
   const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'archived' | 'all' | 'guestbook'>('active');
   const [openMenuGoalId, setOpenMenuGoalId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const { settings: displaySettings } = useDisplaySettings();
   const navigate = useNavigate();
   const location = useLocation();
@@ -281,7 +282,8 @@ export default function Home() {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-semibold dark:text-gray-100">{t('home.yourGoals')}</h2>
-            <div className="flex gap-1 items-center">
+            {/* Desktop filter tabs */}
+            <div className="hidden sm:flex gap-1 items-center">
               {(['active', 'completed', 'archived', 'all'] as const).map((filter) => (
                 <button
                   key={filter}
@@ -302,6 +304,44 @@ export default function Home() {
               >
                 {t('home.filter_guestbook')}
               </button>
+            </div>
+
+            {/* Mobile filter dropdown */}
+            <div className="relative sm:hidden">
+              <button
+                onClick={() => setFilterMenuOpen(!filterMenuOpen)}
+                className="flex items-center gap-1 px-3 py-1 text-sm rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+              >
+                {statusFilter === 'guestbook' ? t('home.filter_guestbook') : t(`home.filter_${statusFilter}`)}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {filterMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setFilterMenuOpen(false)} />
+                  <div className="absolute right-0 mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]">
+                    {(['active', 'completed', 'archived', 'all'] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => { setStatusFilter(filter); setCurrentPage(1); setFilterMenuOpen(false); }}
+                        className={`block w-full text-left px-4 py-2 text-sm ${
+                          statusFilter === filter ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {t(`home.filter_${filter}`)}
+                      </button>
+                    ))}
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                    <button
+                      onClick={() => { setStatusFilter('guestbook'); setCurrentPage(1); setFilterMenuOpen(false); }}
+                      className={`block w-full text-left px-4 py-2 text-sm ${
+                        statusFilter === 'guestbook' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {t('home.filter_guestbook')}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
