@@ -359,7 +359,7 @@ export default function Home() {
                     key={goal.id}
                     className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
                   >
-                    <div className="flex justify-between items-start">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                       <div className="flex-1 min-w-0">
                         <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{goal.title}</h3>
                         {goal.description && (
