@@ -1,6 +1,6 @@
 <div align="left">
   <img src="frontend/public/logo.svg?v=2" alt="Xharada logo" width="120" height="120">
-  <h1>Xharada</h1>
+  <h1>Xharada <sub>原田メソッド</sub></h1>
 </div>
 
 A **single source of truth** for your life goals — structured for both humans and AI agents.
