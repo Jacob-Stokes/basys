@@ -1126,6 +1126,23 @@ curl -X POST "$API_URL/api/guestbook" \\
               </label>
             </section>
 
+            {/* Header Branding */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">{t('settings.headerBranding')}</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.headerBrandingDesc')}</p>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={displaySettings.showHeaderBranding}
+                  onChange={(e) => updateDisplaySettings({ showHeaderBranding: e.target.checked })}
+                  className="w-5 h-5 rounded"
+                />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {t('settings.showHeaderBranding')}
+                </span>
+              </label>
+            </section>
+
             {/* Palette */}
             <section>
               <div className="flex items-center justify-between mb-3">

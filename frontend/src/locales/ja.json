@@ -354,6 +354,9 @@
     "darkMode": "ダークモード",
     "darkModeDesc": "ライトテーマとダークテーマを切り替えます。",
     "enableDarkMode": "ダークモードを有効にする",
+    "headerBranding": "ヘッダーブランディング",
+    "headerBrandingDesc": "ロゴの横にXharadaのタイトルとサブタイトルを表示または非表示にします。",
+    "showHeaderBranding": "タイトルとサブタイトルを表示",
 
     "saveCustomPalette": "カスタムパレットとして保存",
     "saveCustomPaletteDesc": "現在の8色（カスタムオーバーライドを含む）を再利用可能なパレットとして保存します。",

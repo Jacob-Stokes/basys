@@ -23,7 +23,7 @@ code {
 /* Academia theme — Tufte-inspired */
 .academia body,
 .academia #root {
-  font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 .academia body {
   background-color: #faf9f5;
@@ -52,12 +52,16 @@ code {
 .academia .hover\:shadow-md:hover {
   box-shadow: none !important;
 }
-/* Section cards: remove box border, single bottom rule between sections */
+/* Section cards: remove box border, strip horizontal padding so content
+   aligns with the header. Line breaks (border-bottom) span full width. */
 .academia .shadow-md {
   border: none !important;
   border-bottom: 1px solid #d4d4c8 !important;
   border-radius: 0 !important;
   margin-bottom: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 1.5rem !important;
   padding-bottom: 1.5rem !important;
 }
 /* Modal/overlay cards keep a full border */

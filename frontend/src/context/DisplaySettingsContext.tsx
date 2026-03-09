@@ -63,6 +63,7 @@ export interface DisplaySettings {
   guestbookPerPage: number;
   language: string;
   darkMode: boolean;
+  showHeaderBranding: boolean;
 }
 
 export interface GoalTheme {
@@ -122,6 +123,7 @@ const defaultSettings: DisplaySettings = {
   guestbookPerPage: 5,
   language: 'en-US',
   darkMode: false,
+  showHeaderBranding: false,
 };
 
 interface DisplaySettingsContextValue {

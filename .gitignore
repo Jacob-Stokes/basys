@@ -27,3 +27,6 @@ Thumbs.db
 *.swo
 .claude/
 template/
+
+# Personal learning notes
+LEARNING.md

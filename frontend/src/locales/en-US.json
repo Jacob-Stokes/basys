@@ -354,6 +354,9 @@
     "darkMode": "Dark Mode",
     "darkModeDesc": "Switch between light and dark themes.",
     "enableDarkMode": "Enable dark mode",
+    "headerBranding": "Header Branding",
+    "headerBrandingDesc": "Show or hide the Xharada title and subtitle next to the logo.",
+    "showHeaderBranding": "Show title and subtitle",
 
     "saveCustomPalette": "Save as Custom Palette",
     "saveCustomPaletteDesc": "Saves the current 8 colours (including any custom overrides) as a reusable palette.",
