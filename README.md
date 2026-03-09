@@ -3,18 +3,20 @@
   <h1>Xharada</h1>
 </div>
 
-One place for all your goals. Built around the **Harada Method** (原田メソッド) — a Japanese goal-setting framework where 1 primary goal breaks down into 8 sub-goals, each with 8 actions, giving you 64 concrete things to work on.
+A **single source of truth** for your life goals — structured for both humans and AI agents.
 
-## Why
+## Philosophy
 
-Most goal trackers treat goals as a flat list of checkboxes. Xharada gives them structure. The grid makes it obvious where you're putting effort and where you're neglecting things. AI agents can plug in via MCP or REST API to read your goals, log progress, and nudge you.
+Your goals, sub-goals, and actions should live in one place that any AI agent can read, write to, and reason about. Xharada is that place. It uses the **Harada Method** — a Japanese framework that structures goals as **1 Primary Goal → 8 Sub-Goals → 8 Actions each = 64 total actions** — and exposes everything through an MCP endpoint and REST API.
 
-## What you get
+Progress is tracked through continuous activity logging rather than completion checkboxes. Frequency and consistency matter more than "done" states. AI agents can provide coaching, track patterns, and leave feedback at any level of the goal hierarchy.
 
-- **Harada grids** — 3x3 compact and 9x9 full views
-- **Activity logging** — track what you actually did, not just whether you "finished"
-- **MCP endpoint** — any AI agent can read/write your goals out of the box
-- **Multi-user** — OAuth 2.1 auth, each user gets their own data
+## Features
+
+- **Visual grids**: 3x3 compact view and 9x9 full Harada grid with configurable aspect ratios
+- **Activity logging**: Continuous logging with metrics, mood tracking, and media attachments
+- **AI agent integration**: Built-in MCP endpoint, REST API, and guestbook system for AI coaching
+- **Multi-user**: OAuth 2.1 authentication with per-user data isolation
 
 ## Quick Start
 
@@ -29,6 +31,7 @@ services:
       - ./data:/app/data
     environment:
       - SESSION_SECRET=change-me-to-something-secure
+      # - MCP_SERVER_URL=https://mcp.example.com  # For remote MCP
     restart: unless-stopped
 ```
 
@@ -36,30 +39,35 @@ services:
 docker-compose up -d
 ```
 
-Go to http://localhost:3001, make an account, create a goal.
+Visit http://localhost:3001, register an account, and create your first goal.
 
-## Connecting AI agents
+## MCP Server
 
-Xharada has a built-in remote MCP endpoint at `/mcp` with OAuth 2.1. Works with Claude mobile/web and any MCP client.
+Xharada has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication — the recommended way to connect AI agents. Works with Claude mobile, Claude web, and any MCP-compatible client.
 
 1. Deploy with `MCP_SERVER_URL` set to your public URL
-2. Point your MCP client at `https://your-domain.com/mcp`
-3. Log in with your Xharada credentials
+2. Add as a custom integration in your MCP client, pointing to `https://your-domain.com/mcp`
+3. Authenticate with your Xharada username and password
 
-There's also a standalone stdio MCP server for local use: **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)**.
+The endpoint provides 12 tools covering goal/sub-goal/action management, activity logging, guestbook operations, and bulk import.
 
-## Tech
+For a standalone stdio MCP server (local Claude Desktop via API key), see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)**.
 
-Node.js · TypeScript · Express · SQLite · React · Vite · Tailwind · Docker
+## Tech Stack
 
-## Dev setup
+Node.js + TypeScript + Express + SQLite | React + Vite + Tailwind CSS | Docker
+
+## Development
 
 ```bash
-cd backend && npm install && npm run dev   # port 3001
+# Backend
+cd backend && npm install && npm run dev  # port 3001
+
+# Frontend
 cd frontend && npm install && npm run dev  # port 3000
 ```
 
-API docs and architecture details in the [wiki](https://github.com/Jacob-Stokes/xharada/wiki).
+See the [wiki](https://github.com/Jacob-Stokes/xharada/wiki) for API documentation, database schema, and architecture details.
 
 ## License
 
