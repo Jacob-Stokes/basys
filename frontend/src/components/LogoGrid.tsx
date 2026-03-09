@@ -95,7 +95,7 @@ export default function LogoGrid({ theme = 'default', size = 64, className }: Lo
   }, [animating]);
 
   useEffect(() => {
-    const interval = setInterval(startRotation, 5000);
+    const interval = setInterval(startRotation, 2000);
     return () => clearInterval(interval);
   }, [startRotation]);
 
