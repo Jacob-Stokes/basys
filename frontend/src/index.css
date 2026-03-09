@@ -122,7 +122,9 @@ code {
 .academia .hover\:bg-red-700:hover { background-color: #8a3c3c !important; }
 
 /* Academia dark mode */
-.academia.dark body { background-color: #1a1a18; }
+.academia.dark body {
+  background-color: #1a1a18;
+}
 .academia.dark .bg-gray-900 { background-color: #1a1a18 !important; }
 .academia.dark .bg-gray-800 { background-color: #222220 !important; }
 .academia.dark .bg-white { background-color: #222220 !important; }

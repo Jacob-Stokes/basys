@@ -647,6 +647,10 @@ export default function Home() {
           onCancel={() => setConfirmDeleteGoalId(null)}
         />
       )}
+
+      <footer className="mt-12 pb-6 text-center">
+        <p className="text-xs text-gray-400 dark:text-gray-600 tracking-wider">原田メソッド · Harada Method</p>
+      </footer>
     </div>
   );
 }
