@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 export type ViewMode = 'compact' | 'full';
 export type CenterLayout = 'single' | 'radial';
 export type CenterBackdrop = 'page' | 'card';
-export type AppThemeName = 'default' | 'academia';
+export type AppThemeName = 'default' | 'academia' | 'custom-theme';
 
 export interface PaletteDefinition {
   label: string;
@@ -21,6 +21,11 @@ export const appThemeOptions: Record<AppThemeName, { label: string; description:
     label: 'Academia',
     description: 'Tufte-inspired — serif fonts, warm ivory background',
     defaultPalette: 'mono',
+  },
+  'custom-theme': {
+    label: 'Custom CSS',
+    description: 'Write your own CSS — full control over colors, fonts, and layout',
+    defaultPalette: 'classic',
   },
 };
 
@@ -64,6 +69,7 @@ export interface DisplaySettings {
   language: string;
   darkMode: boolean;
   showHeaderBranding: boolean;
+  customCSS: string;
 }
 
 export interface GoalTheme {
@@ -124,6 +130,7 @@ const defaultSettings: DisplaySettings = {
   language: 'en-US',
   darkMode: false,
   showHeaderBranding: false,
+  customCSS: '',
 };
 
 interface DisplaySettingsContextValue {
@@ -177,6 +184,22 @@ export function DisplaySettingsProvider({ children }: { children: React.ReactNod
       document.documentElement.classList.add(settings.appTheme);
     }
   }, [settings.appTheme]);
+
+  // Inject custom CSS into <head> when custom-theme is active
+  useEffect(() => {
+    const id = 'xharada-custom-theme';
+    let el = document.getElementById(id) as HTMLStyleElement | null;
+    if (settings.appTheme === 'custom-theme' && settings.customCSS) {
+      if (!el) {
+        el = document.createElement('style');
+        el.id = id;
+        document.head.appendChild(el);
+      }
+      el.textContent = settings.customCSS;
+    } else if (el) {
+      el.remove();
+    }
+  }, [settings.appTheme, settings.customCSS]);
 
   const updateSettings = (changes: Partial<DisplaySettings>) => {
     setSettings((prev) => {

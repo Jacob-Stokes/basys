@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent, ChangeEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, FormEvent, ChangeEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
@@ -83,6 +83,25 @@ export default function Settings() {
     createCustomPalette,
     deleteCustomPalette,
   } = useDisplaySettings();
+  const [customCSSLocal, setCustomCSSLocal] = useState(displaySettings.customCSS || '');
+  const customCSSTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const handleCustomCSSChange = useCallback((value: string) => {
+    setCustomCSSLocal(value);
+    clearTimeout(customCSSTimerRef.current);
+    customCSSTimerRef.current = setTimeout(() => {
+      updateDisplaySettings({ customCSS: value });
+    }, 500);
+  }, [updateDisplaySettings]);
+  const loadTemplate = useCallback(async () => {
+    try {
+      const res = await fetch('/theme-template.css');
+      const text = await res.text();
+      setCustomCSSLocal(text);
+      updateDisplaySettings({ customCSS: text });
+    } catch {
+      // template fetch failed, ignore
+    }
+  }, [updateDisplaySettings]);
   const customPaletteNameRef = useRef<HTMLInputElement>(null);
   const previewBaseColor = computedColors[1] || DEFAULT_FALLBACK_COLOR;
   const previewActionColor = lightenColor(previewBaseColor, displaySettings.actionShadePercent);
@@ -1088,7 +1107,7 @@ curl -X POST "$API_URL/api/guestbook" \\
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                 Controls the overall look and feel — fonts, backgrounds, and default grid colors.
               </p>
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid md:grid-cols-3 gap-4">
                 {Object.entries(appThemeOptions).map(([name, option]) => {
                   const themeName = name as AppThemeName;
                   return (
@@ -1107,6 +1126,39 @@ curl -X POST "$API_URL/api/guestbook" \\
                   );
                 })}
               </div>
+
+              {/* Custom CSS editor — shown when custom-theme is selected */}
+              {displaySettings.appTheme === 'custom-theme' && (
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={loadTemplate}
+                      className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      Load Template
+                    </button>
+                    <a
+                      href="/theme-template.css"
+                      download
+                      className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      Download template file
+                    </a>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Write CSS scoped under <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">.custom-theme</code>.
+                    Use the template for a list of all available selectors. Changes apply live.
+                  </p>
+                  <textarea
+                    value={customCSSLocal}
+                    onChange={(e) => handleCustomCSSChange(e.target.value)}
+                    spellCheck={false}
+                    rows={20}
+                    className="w-full font-mono text-xs border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="/* Paste or write your custom CSS here */&#10;.custom-theme .bg-blue-600 {&#10;  background-color: #7c3238 !important;&#10;}"
+                  />
+                </div>
+              )}
             </section>
 
             {/* Dark Mode */}

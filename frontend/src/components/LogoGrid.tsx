@@ -11,11 +11,17 @@ const themeColors: Record<AppThemeName, string[]> = {
     '#b5a47d', '#c2b48f', '#cabf9e',
     '#bfae8a', '#c8b898', '#d4c5a9',
   ],
+  'custom-theme': [
+    'hsl(0, 100%, 75%)', 'hsl(30, 100%, 75%)', 'hsl(60, 100%, 75%)',
+    'hsl(120, 100%, 75%)', 'hsl(180, 100%, 75%)', 'hsl(210, 100%, 75%)',
+    'hsl(240, 100%, 75%)', 'hsl(270, 100%, 75%)', 'hsl(300, 100%, 75%)',
+  ],
 };
 
 const themeStrokes: Record<AppThemeName, string> = {
   default: 'white',
   academia: '#fffff8',
+  'custom-theme': 'white',
 };
 
 const GRID_POSITIONS = [

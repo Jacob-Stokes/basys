@@ -1,0 +1,368 @@
+/*
+ * Xharada Custom Theme Template
+ * ==============================
+ * All selectors are scoped under .custom-theme (applied to <html>).
+ * Fill in properties to override the default look.
+ * Delete any sections you don't need — empty rules are fine to leave.
+ *
+ * Tip: Use !important to ensure overrides beat Tailwind utility classes.
+ */
+
+/* ========================================
+   1. TYPOGRAPHY
+   ======================================== */
+
+/* Main body font */
+.custom-theme body,
+.custom-theme #root {
+  /* font-family: ; */
+}
+
+/* Code / monospace font */
+.custom-theme code {
+  /* font-family: ; */
+}
+
+/* ========================================
+   2. PAGE BACKGROUNDS
+   ======================================== */
+
+.custom-theme .bg-white {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-gray-50 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-gray-100 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-gray-200 {
+  /* background-color:  !important; */
+}
+
+/* ========================================
+   3. TEXT COLORS — Neutral
+   ======================================== */
+
+.custom-theme .text-gray-400 {
+  /* color:  !important; */
+}
+.custom-theme .text-gray-500 {
+  /* color:  !important; */
+}
+.custom-theme .text-gray-600 {
+  /* color:  !important; */
+}
+.custom-theme .text-gray-700 {
+  /* color:  !important; */
+}
+.custom-theme .text-gray-800 {
+  /* color:  !important; */
+}
+.custom-theme .text-gray-900 {
+  /* color:  !important; */
+}
+
+/* ========================================
+   4. PRIMARY ACCENT (Blue)
+   ======================================== */
+
+/* Backgrounds */
+.custom-theme .bg-blue-50 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-blue-100 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-blue-500 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-blue-600 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-blue-700 {
+  /* background-color:  !important; */
+}
+
+/* Text */
+.custom-theme .text-blue-400 {
+  /* color:  !important; */
+}
+.custom-theme .text-blue-500 {
+  /* color:  !important; */
+}
+.custom-theme .text-blue-600 {
+  /* color:  !important; */
+}
+.custom-theme .text-blue-700 {
+  /* color:  !important; */
+}
+.custom-theme .text-blue-800 {
+  /* color:  !important; */
+}
+
+/* Borders & rings */
+.custom-theme .border-blue-200 {
+  /* border-color:  !important; */
+}
+.custom-theme .border-blue-500 {
+  /* border-color:  !important; */
+}
+.custom-theme .border-blue-600 {
+  /* border-color:  !important; */
+}
+.custom-theme .ring-blue-500 {
+  /* --tw-ring-color:  !important; */
+}
+.custom-theme .focus\:ring-blue-500:focus {
+  /* --tw-ring-color:  !important; */
+}
+
+/* Hover states */
+.custom-theme .hover\:bg-blue-600:hover {
+  /* background-color:  !important; */
+}
+.custom-theme .hover\:bg-blue-700:hover {
+  /* background-color:  !important; */
+}
+.custom-theme .hover\:text-blue-800:hover {
+  /* color:  !important; */
+}
+.custom-theme .hover\:text-blue-900:hover {
+  /* color:  !important; */
+}
+
+/* ========================================
+   5. SUCCESS (Green)
+   ======================================== */
+
+.custom-theme .bg-green-50 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-green-100 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-green-500 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-green-600 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-green-700 {
+  /* background-color:  !important; */
+}
+.custom-theme .text-green-300 {
+  /* color:  !important; */
+}
+.custom-theme .text-green-400 {
+  /* color:  !important; */
+}
+.custom-theme .text-green-600 {
+  /* color:  !important; */
+}
+.custom-theme .text-green-700 {
+  /* color:  !important; */
+}
+.custom-theme .border-green-200 {
+  /* border-color:  !important; */
+}
+.custom-theme .border-green-300 {
+  /* border-color:  !important; */
+}
+.custom-theme .hover\:bg-green-600:hover {
+  /* background-color:  !important; */
+}
+.custom-theme .hover\:bg-green-700:hover {
+  /* background-color:  !important; */
+}
+
+/* ========================================
+   6. DANGER (Red)
+   ======================================== */
+
+.custom-theme .bg-red-50 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-red-100 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-red-500 {
+  /* background-color:  !important; */
+}
+.custom-theme .bg-red-600 {
+  /* background-color:  !important; */
+}
+.custom-theme .text-red-500 {
+  /* color:  !important; */
+}
+.custom-theme .text-red-600 {
+  /* color:  !important; */
+}
+.custom-theme .text-red-700 {
+  /* color:  !important; */
+}
+.custom-theme .hover\:bg-red-700:hover {
+  /* background-color:  !important; */
+}
+
+/* ========================================
+   7. WARNING (Yellow / Amber)
+   ======================================== */
+
+.custom-theme .bg-yellow-50 {
+  /* background-color:  !important; */
+}
+.custom-theme .text-yellow-600 {
+  /* color:  !important; */
+}
+.custom-theme .text-yellow-700 {
+  /* color:  !important; */
+}
+.custom-theme .text-yellow-800 {
+  /* color:  !important; */
+}
+.custom-theme .text-amber-600 {
+  /* color:  !important; */
+}
+.custom-theme .border-yellow-200 {
+  /* border-color:  !important; */
+}
+.custom-theme .border-yellow-300 {
+  /* border-color:  !important; */
+}
+
+/* ========================================
+   8. BORDERS & DIVIDERS
+   ======================================== */
+
+.custom-theme .border-gray-200 {
+  /* border-color:  !important; */
+}
+.custom-theme .border-gray-300 {
+  /* border-color:  !important; */
+}
+.custom-theme hr,
+.custom-theme .divide-y > * + * {
+  /* border-color:  !important; */
+}
+
+/* ========================================
+   9. SHADOWS & DEPTH
+   ======================================== */
+
+.custom-theme .shadow,
+.custom-theme .shadow-sm,
+.custom-theme .shadow-md,
+.custom-theme .shadow-lg,
+.custom-theme .shadow-xl {
+  /* box-shadow:  !important; */
+}
+.custom-theme .hover\:shadow-md:hover {
+  /* box-shadow:  !important; */
+}
+
+/* ========================================
+   10. CARDS & MODALS
+   ======================================== */
+
+/* Section cards */
+.custom-theme .shadow-md {
+  /* border:  !important; */
+  /* border-radius:  !important; */
+}
+
+/* Modal/overlay cards */
+.custom-theme .shadow-lg,
+.custom-theme .shadow-xl {
+  /* border:  !important; */
+}
+
+/* ========================================
+   11. FORM INPUTS & FOCUS
+   ======================================== */
+
+/* Input fields — override border, background, text */
+/* (Inputs use border-gray-300, bg-white, focus:ring-blue-500) */
+
+/* ========================================
+   12. DARK MODE OVERRIDES
+   ======================================== */
+
+/* Page backgrounds */
+.custom-theme.dark body {
+  /* background-color:  ; */
+}
+.custom-theme.dark .bg-gray-700 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .bg-gray-800 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .bg-gray-900 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .bg-white {
+  /* background-color:  !important; */
+}
+
+/* Dark mode borders */
+.custom-theme.dark .border-gray-600 {
+  /* border-color:  !important; */
+}
+.custom-theme.dark .border-gray-700 {
+  /* border-color:  !important; */
+}
+
+/* Dark mode text */
+.custom-theme.dark .text-gray-100 {
+  /* color:  !important; */
+}
+.custom-theme.dark .text-gray-200 {
+  /* color:  !important; */
+}
+.custom-theme.dark .text-gray-300 {
+  /* color:  !important; */
+}
+.custom-theme.dark .text-gray-400 {
+  /* color:  !important; */
+}
+
+/* Dark mode accents */
+.custom-theme.dark .bg-blue-600 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .bg-blue-700 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .text-blue-400 {
+  /* color:  !important; */
+}
+.custom-theme.dark .text-blue-600 {
+  /* color:  !important; */
+}
+.custom-theme.dark .bg-green-600 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .bg-green-700 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .text-green-400 {
+  /* color:  !important; */
+}
+.custom-theme.dark .bg-red-600 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .text-red-400 {
+  /* color:  !important; */
+}
+
+/* Dark mode error/info backgrounds */
+.custom-theme.dark .bg-red-900\/30 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .bg-blue-900\/30 {
+  /* background-color:  !important; */
+}
+.custom-theme.dark .bg-green-900\/30 {
+  /* background-color:  !important; */
+}
