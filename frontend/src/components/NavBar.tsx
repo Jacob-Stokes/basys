@@ -64,6 +64,9 @@ export default function NavBar() {
           <Link to="/tasks" className={linkClass('/tasks')}>
             Todo
           </Link>
+          <Link to="/phonebook" className={linkClass('/phonebook')}>
+            Phonebook
+          </Link>
           <Link to="/settings" className={linkClass('/settings')}>
             {t('home.settings')}
           </Link>
@@ -131,6 +134,13 @@ export default function NavBar() {
                   className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
                 >
                   Todo
+                </Link>
+                <Link
+                  to="/phonebook"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                >
+                  Phonebook
                 </Link>
                 <Link
                   to="/settings"
