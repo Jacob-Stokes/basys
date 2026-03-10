@@ -246,7 +246,7 @@ function QuickAddBar({ value, onChange, onSubmit, placeholder, inputRef }: {
   const preview = parsed ? formatParsedPreview(parsed) : [];
 
   return (
-    <div className="px-3 py-3">
+    <div className="px-3 pt-2 pb-4">
       {showHint && <SyntaxHintModal onClose={() => setShowHint(false)} />}
       <form
         onSubmit={e => { e.preventDefault(); onSubmit(); }}
