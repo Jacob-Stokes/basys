@@ -16,6 +16,8 @@ import Agents from './pages/Agents';
 import SharedGoalView from './pages/SharedGoalView';
 import NavBar from './components/NavBar';
 import TimerFooter from './components/TimerFooter';
+import ChatSidebar from './components/chat/ChatSidebar';
+import { ChatSidebarProvider } from './context/ChatSidebarContext';
 import { api } from './api/client';
 
 // Protected Route Component
@@ -55,11 +57,14 @@ function ProtectedRoute({ children }: { children?: React.ReactNode }) {
 function AuthenticatedLayout() {
   return (
     <ProtectedRoute>
-      <NavBar />
-      <div className="pb-14">
-        <Outlet />
-      </div>
-      <TimerFooter />
+      <ChatSidebarProvider>
+        <NavBar />
+        <div className="pb-14">
+          <Outlet />
+        </div>
+        <TimerFooter />
+        <ChatSidebar />
+      </ChatSidebarProvider>
     </ProtectedRoute>
   );
 }

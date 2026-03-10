@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api, API_URL } from '../api/client';
 import { useDisplaySettings } from '../context/DisplaySettingsContext';
+import { useChatSidebar } from '../context/ChatSidebarContext';
 import LogoGrid from './LogoGrid';
 
 export default function NavBar() {
@@ -10,6 +11,7 @@ export default function NavBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { settings: displaySettings } = useDisplaySettings();
+  const { toggle: toggleChat, isOpen: chatOpen } = useChatSidebar();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [username, setUsername] = useState<string>('');
@@ -82,8 +84,21 @@ export default function NavBar() {
           </Link>
         </div>
 
-        {/* Right: username dropdown (desktop) */}
-        <div className="hidden sm:flex items-center relative" ref={userMenuRef}>
+        {/* Right: chat toggle + username dropdown (desktop) */}
+        <div className="hidden sm:flex items-center gap-1 relative" ref={userMenuRef}>
+          <button
+            onClick={toggleChat}
+            className={`p-1.5 rounded transition-colors ${
+              chatOpen
+                ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+            title="AI Assistant"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+            </svg>
+          </button>
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -123,8 +138,22 @@ export default function NavBar() {
           )}
         </div>
 
-        {/* Mobile burger */}
-        <div className="relative sm:hidden">
+        {/* Mobile: chat toggle + burger */}
+        <div className="flex items-center gap-1 sm:hidden">
+          <button
+            onClick={toggleChat}
+            className={`p-2 rounded transition-colors ${
+              chatOpen
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+            title="AI Assistant"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+            </svg>
+          </button>
+          <div className="relative">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -222,6 +251,7 @@ export default function NavBar() {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
     </nav>

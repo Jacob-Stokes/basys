@@ -266,6 +266,12 @@ export const api = {
   searchSubGoals: (q: string) =>
     apiRequest<any[]>(`/api/subgoals/search?q=${encodeURIComponent(q)}`),
 
+  // Chat
+  listConversations: () => apiRequest<any[]>('/api/chat/conversations'),
+  createConversation: () => apiRequest<any>('/api/chat/conversations', { method: 'POST' }),
+  getConversation: (id: string) => apiRequest<any>(`/api/chat/conversations/${id}`),
+  deleteConversation: (id: string) => apiRequest<any>(`/api/chat/conversations/${id}`, { method: 'DELETE' }),
+
   getSharedGoal: async (token: string) => {
     const response = await fetch(`${API_URL}/api/shared/${token}/goal`);
     const parsed = await response.json();

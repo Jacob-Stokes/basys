@@ -352,6 +352,42 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_expires ON oauth_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_oauth_auth_codes_expires ON oauth_auth_codes(expires_at);
+
+-- AI Chat conversations
+CREATE TABLE IF NOT EXISTS chat_conversations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT DEFAULT 'New conversation',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_conversations_user ON chat_conversations(user_id);
+
+-- Chat messages
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id);
+
+-- Agent memory: persistent facts the AI remembers about the user
+CREATE TABLE IF NOT EXISTS chat_memory (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  category TEXT DEFAULT 'general',
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_memory_user ON chat_memory(user_id);
 `;
 
 // Initialize schema
@@ -648,5 +684,29 @@ export interface PomodoroSession {
   duration_minutes: number;
   status: 'completed' | 'cancelled' | 'in_progress';
   note: string | null;
+  created_at: string;
+}
+
+export interface ChatConversation {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+export interface ChatMemory {
+  id: string;
+  user_id: string;
+  content: string;
+  category: string;
   created_at: string;
 }

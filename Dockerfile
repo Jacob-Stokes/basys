@@ -36,6 +36,9 @@ RUN apk add --no-cache python3 make g++
 COPY backend/package*.json ./
 RUN npm install --omit=dev && apk del python3 make g++
 
+# Runtime deps for Claude Agent SDK (spawns subprocess, needs bash/git)
+RUN apk add --no-cache libgcc libstdc++ bash git
+
 # Copy compiled TypeScript output
 COPY --from=backend-builder /app/backend/dist ./dist
 
