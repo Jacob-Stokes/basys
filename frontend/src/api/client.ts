@@ -272,6 +272,22 @@ export const api = {
   getConversation: (id: string) => apiRequest<any>(`/api/chat/conversations/${id}`),
   deleteConversation: (id: string) => apiRequest<any>(`/api/chat/conversations/${id}`, { method: 'DELETE' }),
 
+  // Events
+  getEvents: (params?: { start?: string; end?: string }) => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined) query.append(k, v); });
+    }
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<any[]>(`/api/events${qs}`);
+  },
+  createEvent: (data: any) =>
+    apiRequest<any>('/api/events', { method: 'POST', body: JSON.stringify(data) }),
+  updateEvent: (id: string, data: any) =>
+    apiRequest<any>(`/api/events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteEvent: (id: string) =>
+    apiRequest<any>(`/api/events/${id}`, { method: 'DELETE' }),
+
   getSharedGoal: async (token: string) => {
     const response = await fetch(`${API_URL}/api/shared/${token}/goal`);
     const parsed = await response.json();

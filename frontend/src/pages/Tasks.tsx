@@ -32,6 +32,17 @@ interface ProjectItem {
   done_tasks: number;
 }
 
+interface EventItem {
+  id: string;
+  title: string;
+  description: string | null;
+  start_date: string;
+  end_date: string | null;
+  all_day: number;
+  color: string;
+  location: string | null;
+}
+
 interface TaskItem {
   id: string;
   title: string;
@@ -873,8 +884,9 @@ export default function Tasks() {
   const [editingLabel, setEditingLabel] = useState<LabelItem | null | 'new'>(null);
   const [filterLabel, setFilterLabel] = useState<string | null>(null);
 
-  // Calendar state
+  // Calendar + Events state
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [events, setEvents] = useState<EventItem[]>([]);
   const taskDates = useMemo(() => {
     const set = new Set<string>();
     tasks.forEach(t => {
@@ -882,6 +894,15 @@ export default function Tasks() {
     });
     return set;
   }, [tasks]);
+  const eventDateColors = useMemo(() => {
+    const map = new Map<string, string[]>();
+    events.forEach(e => {
+      const d = datePart(e.start_date);
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(e.color || '#3b82f6');
+    });
+    return map;
+  }, [events]);
 
   // ── Load data ──────────────────────────────────────────────────
 
@@ -918,9 +939,19 @@ export default function Tasks() {
     }
   };
 
+  const loadEvents = async () => {
+    try {
+      const data = await api.getEvents();
+      setEvents(data);
+    } catch (err) {
+      // events are non-critical — don't block the page
+      console.warn('Failed to load events:', err);
+    }
+  };
+
   const loadAll = async () => {
     setLoading(true);
-    await Promise.all([loadTasks(), loadProjects(), loadLabels()]);
+    await Promise.all([loadTasks(), loadProjects(), loadLabels(), loadEvents()]);
     setLoading(false);
   };
 
@@ -1412,43 +1443,117 @@ export default function Tasks() {
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 lg:sticky lg:top-8">
                 <Calendar
                   taskDates={taskDates}
+                  eventDateColors={eventDateColors}
                   selectedDate={selectedDate}
                   onDateClick={(date) => setSelectedDate(date === selectedDate ? null : date)}
                 />
 
-                {/* Selected date task summary */}
-                {selectedDate && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <h4 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
-                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                    </h4>
-                    {(() => {
-                      const dayTasks = tasks.filter(t => t.due_date && datePart(t.due_date) === selectedDate && !t.done);
-                      if (dayTasks.length === 0) {
-                        return <p className="text-xs text-gray-400 dark:text-gray-500 italic">No tasks</p>;
-                      }
-                      return (
-                        <ul className="space-y-1.5">
-                          {dayTasks.map(t => (
-                            <li
-                              key={t.id}
-                              className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 rounded px-2 py-1 -mx-2 transition-colors"
-                              onClick={() => setEditingTask(t)}
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: priorityColor(t.priority) }} />
-                              <span className="text-gray-700 dark:text-gray-300 truncate">{t.title}</span>
-                              {t.due_date && t.due_date.includes('T') && (
-                                <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 ml-auto">
-                                  {t.due_date.slice(11, 16)}
-                                </span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      );
-                    })()}
-                  </div>
-                )}
+                {/* Selected date summary: tasks + events */}
+                {selectedDate && (() => {
+                  const dayTasks = tasks.filter(t => t.due_date && datePart(t.due_date) === selectedDate && !t.done);
+                  const dayEvents = events.filter(e => datePart(e.start_date) === selectedDate);
+                  const hasContent = dayTasks.length > 0 || dayEvents.length > 0;
+                  return (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <h4 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                        {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                      </h4>
+                      {!hasContent && <p className="text-xs text-gray-400 dark:text-gray-500 italic">Nothing scheduled</p>}
+                      <ul className="space-y-1">
+                        {dayEvents.map(e => (
+                          <li key={e.id} className="flex items-center gap-2 text-sm px-2 py-1 -mx-2 rounded">
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: e.color }} />
+                            <span className="text-gray-700 dark:text-gray-300 truncate">{e.title}</span>
+                            {!e.all_day && e.start_date.includes('T') && (
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 ml-auto">
+                                {e.start_date.slice(11, 16)}
+                              </span>
+                            )}
+                            {!!e.all_day && (
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 ml-auto">all day</span>
+                            )}
+                          </li>
+                        ))}
+                        {dayTasks.map(t => (
+                          <li
+                            key={t.id}
+                            className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 rounded px-2 py-1 -mx-2 transition-colors"
+                            onClick={() => setEditingTask(t)}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: priorityColor(t.priority) }} />
+                            <span className="text-gray-700 dark:text-gray-300 truncate">{t.title}</span>
+                            {t.due_date && t.due_date.includes('T') && (
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 ml-auto">
+                                {t.due_date.slice(11, 16)}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
+
+                {/* Upcoming events list */}
+                <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <h4 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Upcoming events</h4>
+                  {(() => {
+                    const today = todayStr();
+                    const upcoming = events
+                      .filter(e => datePart(e.start_date) >= today)
+                      .sort((a, b) => a.start_date.localeCompare(b.start_date))
+                      .slice(0, 8);
+
+                    if (upcoming.length === 0) {
+                      return <p className="text-xs text-gray-400 dark:text-gray-500 italic">No upcoming events</p>;
+                    }
+
+                    // Group by date
+                    const groups: { date: string; events: EventItem[] }[] = [];
+                    for (const e of upcoming) {
+                      const d = datePart(e.start_date);
+                      const last = groups[groups.length - 1];
+                      if (last && last.date === d) last.events.push(e);
+                      else groups.push({ date: d, events: [e] });
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {groups.map(g => {
+                          const isToday = g.date === today;
+                          const dateLabel = isToday
+                            ? 'Today'
+                            : new Date(g.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                          return (
+                            <div key={g.date}>
+                              <p className={`text-[10px] font-medium uppercase tracking-wider mb-1 ${isToday ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'}`}>
+                                {dateLabel}
+                              </p>
+                              <ul className="space-y-0.5">
+                                {g.events.map(e => (
+                                  <li key={e.id} className="flex items-center gap-2 pl-1">
+                                    <span
+                                      className="w-0.5 h-4 rounded-full flex-shrink-0"
+                                      style={{ backgroundColor: e.color }}
+                                    />
+                                    <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{e.title}</span>
+                                    <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 ml-auto whitespace-nowrap">
+                                      {e.all_day
+                                        ? 'all day'
+                                        : e.start_date.includes('T')
+                                          ? e.start_date.slice(11, 16)
+                                          : ''}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
           )}

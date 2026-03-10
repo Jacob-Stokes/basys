@@ -21,6 +21,7 @@ import labelsRouter from './routes/labels';
 import pomodorosRouter from './routes/pomodoros';
 import adminRouter from './routes/admin';
 import chatRouter from './routes/chat';
+import eventsRouter from './routes/events';
 import { setupMcpRoutes } from './mcp/server';
 
 const app = express();
@@ -152,6 +153,7 @@ app.use('/api/labels', requireAuth, labelsRouter);
 app.use('/api/pomodoros', requireAuth, pomodorosRouter);
 app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
 app.use('/api/chat', requireAuth, chatRouter);
+app.use('/api/events', requireAuth, eventsRouter);
 
 // Remote MCP endpoint with OAuth (must be before static files/SPA fallback)
 setupMcpRoutes(app);

@@ -3,6 +3,8 @@ import { useState } from 'react';
 interface CalendarProps {
   /** Dates that have tasks due (YYYY-MM-DD strings) */
   taskDates?: Set<string>;
+  /** Map of date string → array of event colors for that date */
+  eventDateColors?: Map<string, string[]>;
   /** Currently selected date */
   selectedDate?: string | null;
   /** Callback when a date is clicked */
@@ -21,7 +23,7 @@ function toDateStr(y: number, m: number, d: number) {
   return `${y}-${pad(m + 1)}-${pad(d)}`;
 }
 
-export default function Calendar({ taskDates, selectedDate, onDateClick }: CalendarProps) {
+export default function Calendar({ taskDates, eventDateColors, selectedDate, onDateClick }: CalendarProps) {
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -113,6 +115,17 @@ export default function Calendar({ taskDates, selectedDate, onDateClick }: Calen
           const isToday = cell.dateStr === todayStr;
           const isSelected = cell.dateStr === selectedDate;
           const hasTask = taskDates?.has(cell.dateStr);
+          const eventColors = eventDateColors?.get(cell.dateStr);
+          const hasDots = hasTask || (eventColors && eventColors.length > 0);
+
+          // Build dot array: task dot (gray) + event dots (various colors)
+          const dots: string[] = [];
+          if (hasTask) dots.push('#6b7280'); // gray for tasks
+          if (eventColors) {
+            // Deduplicate colors and take max 3
+            const unique = [...new Set(eventColors)];
+            dots.push(...unique.slice(0, 3));
+          }
 
           return (
             <button
@@ -146,9 +159,17 @@ export default function Calendar({ taskDates, selectedDate, onDateClick }: Calen
               >
                 {cell.day}
               </span>
-              {/* Task dot indicator */}
-              {hasTask && !isSelected && (
-                <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-blue-500" />
+              {/* Dot indicators */}
+              {hasDots && !isSelected && (
+                <span className="absolute bottom-0.5 flex gap-px">
+                  {dots.slice(0, 4).map((color, di) => (
+                    <span
+                      key={di}
+                      className="w-1 h-1 rounded-full"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </span>
               )}
             </button>
           );

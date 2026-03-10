@@ -388,6 +388,26 @@ CREATE TABLE IF NOT EXISTS chat_memory (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_memory_user ON chat_memory(user_id);
+
+-- Calendar events
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  start_date TEXT NOT NULL,
+  end_date TEXT,
+  all_day INTEGER DEFAULT 0,
+  color TEXT DEFAULT '#3b82f6',
+  location TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
+CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_date);
+CREATE INDEX IF NOT EXISTS idx_events_user_start ON events(user_id, start_date);
 `;
 
 // Initialize schema
@@ -496,7 +516,58 @@ export function initDatabase() {
     console.log('Migration check (agent_etiquette seed):', err);
   }
 
+  // Seed sample events for existing users (only if they have zero events)
+  try {
+    const users = db.prepare('SELECT id FROM users').all() as any[];
+    for (const user of users) {
+      const count = db.prepare('SELECT COUNT(*) as c FROM events WHERE user_id = ?').get(user.id) as any;
+      if (count.c === 0) {
+        seedSampleEvents(user.id);
+      }
+    }
+  } catch (err) {
+    console.log('Migration check (seed events):', err);
+  }
+
   console.log('Database initialized at:', DB_PATH);
+}
+
+function seedSampleEvents(userId: string) {
+  const { v4: uuid } = require('uuid');
+  const now = new Date();
+  const d = (offset: number, hour?: number, min?: number) => {
+    const dt = new Date(now);
+    dt.setDate(dt.getDate() + offset);
+    if (hour !== undefined) { dt.setHours(hour, min || 0, 0, 0); }
+    return dt.toISOString().slice(0, hour !== undefined ? 16 : 10);
+  };
+  const end = (offset: number, hour: number, min?: number) => {
+    const dt = new Date(now);
+    dt.setDate(dt.getDate() + offset);
+    dt.setHours(hour, min || 0, 0, 0);
+    return dt.toISOString().slice(0, 16);
+  };
+
+  const samples = [
+    { title: 'Team standup',        start: d(0, 9, 30),  end: end(0, 9, 45),   color: '#3b82f6', all_day: 0 },
+    { title: 'Lunch with Alex',     start: d(0, 12, 30), end: end(0, 13, 30),  color: '#10b981', all_day: 0 },
+    { title: 'Dentist appointment', start: d(1, 14, 0),  end: end(1, 15, 0),   color: '#f59e0b', all_day: 0 },
+    { title: 'Sprint planning',     start: d(2, 10, 0),  end: end(2, 11, 30),  color: '#3b82f6', all_day: 0 },
+    { title: 'Mum\'s birthday',     start: d(3),         end: null,             color: '#ec4899', all_day: 1 },
+    { title: 'Project deadline',    start: d(5),         end: null,             color: '#ef4444', all_day: 1 },
+    { title: 'Gym',                 start: d(0, 18, 0),  end: end(0, 19, 0),   color: '#8b5cf6', all_day: 0 },
+    { title: 'Coffee with Sam',     start: d(4, 11, 0),  end: end(4, 11, 45),  color: '#10b981', all_day: 0 },
+    { title: 'Yoga class',          start: d(6, 7, 0),   end: end(6, 8, 0),    color: '#8b5cf6', all_day: 0 },
+    { title: 'Flight to Edinburgh', start: d(8, 6, 30),  end: end(8, 8, 15),   color: '#f59e0b', all_day: 0 },
+  ];
+
+  const stmt = db.prepare(
+    `INSERT INTO events (id, user_id, title, start_date, end_date, color, all_day, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
+  );
+  for (const s of samples) {
+    stmt.run(uuid(), userId, s.title, s.start, s.end, s.color, s.all_day);
+  }
 }
 
 // Types
