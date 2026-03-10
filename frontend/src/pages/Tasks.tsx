@@ -887,6 +887,7 @@ export default function Tasks() {
   // Calendar + Events state
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [newEventInput, setNewEventInput] = useState('');
   const taskDates = useMemo(() => {
     const set = new Set<string>();
     tasks.forEach(t => {
@@ -946,6 +947,26 @@ export default function Tasks() {
     } catch (err) {
       // events are non-critical — don't block the page
       console.warn('Failed to load events:', err);
+    }
+  };
+
+  const handleAddEvent = async () => {
+    const raw = newEventInput.trim();
+    if (!raw) return;
+    // Reuse task parser just for the date extraction
+    const parsed = parseTaskInput(raw);
+    const title = parsed.title || raw;
+    const start = parsed.due_date || new Date().toISOString().slice(0, 10);
+
+    // Detect if it's just a date (no time) → all_day
+    const allDay = !start.includes('T');
+
+    try {
+      await api.createEvent({ title, start_date: start, all_day: allDay });
+      setNewEventInput('');
+      loadEvents();
+    } catch (err) {
+      setError((err as Error).message);
     }
   };
 
@@ -1496,7 +1517,34 @@ export default function Tasks() {
 
                 {/* Upcoming events list */}
                 <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <h4 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Upcoming events</h4>
+                  <h4 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Upcoming events</h4>
+
+                  {/* Quick add event */}
+                  <form
+                    onSubmit={e => { e.preventDefault(); handleAddEvent(); }}
+                    className="mb-3"
+                  >
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-750 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-shadow">
+                      <svg className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={newEventInput}
+                        onChange={e => setNewEventInput(e.target.value)}
+                        placeholder="Add event... (@fri 2pm)"
+                        className="flex-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
+                      />
+                      {newEventInput.trim() && (
+                        <button
+                          type="submit"
+                          className="text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-medium flex-shrink-0"
+                        >
+                          Add
+                        </button>
+                      )}
+                    </div>
+                  </form>
                   {(() => {
                     const today = todayStr();
                     const upcoming = events
