@@ -177,6 +177,133 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(log_type);
 CREATE INDEX IF NOT EXISTS idx_guestbook_user ON guestbook(user_id);
 CREATE INDEX IF NOT EXISTS idx_guestbook_target ON guestbook(target_type, target_id);
 
+-- Projects (task containers, can be nested)
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  parent_project_id TEXT DEFAULT NULL,
+  hex_color TEXT DEFAULT '',
+  is_favorite INTEGER DEFAULT 0 CHECK(is_favorite IN (0, 1)),
+  position REAL DEFAULT 0,
+  archived INTEGER DEFAULT 0 CHECK(archived IN (0, 1)),
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (parent_project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Tasks (work items)
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  project_id TEXT DEFAULT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  done INTEGER DEFAULT 0 CHECK(done IN (0, 1)),
+  done_at TEXT,
+  due_date TEXT,
+  start_date TEXT,
+  end_date TEXT,
+  priority INTEGER DEFAULT 0,
+  hex_color TEXT DEFAULT '',
+  percent_done REAL DEFAULT 0,
+  position REAL DEFAULT 0,
+  bucket_id TEXT DEFAULT NULL,
+  is_favorite INTEGER DEFAULT 0 CHECK(is_favorite IN (0, 1)),
+  repeat_after INTEGER DEFAULT 0,
+  repeat_mode INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
+-- Labels (color-coded tags for tasks)
+CREATE TABLE IF NOT EXISTS labels (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  hex_color TEXT DEFAULT '#e2e8f0',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Task <-> Label junction
+CREATE TABLE IF NOT EXISTS task_labels (
+  task_id TEXT NOT NULL,
+  label_id TEXT NOT NULL,
+  PRIMARY KEY (task_id, label_id),
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
+);
+
+-- Task comments
+CREATE TABLE IF NOT EXISTS task_comments (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Buckets (Kanban columns per project)
+CREATE TABLE IF NOT EXISTS buckets (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  position REAL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Polymorphic task links (many-to-many between tasks and goals/subgoals/habits/pomodoros)
+CREATE TABLE IF NOT EXISTS task_links (
+  task_id TEXT NOT NULL,
+  target_type TEXT NOT NULL CHECK(target_type IN ('goal', 'subgoal', 'habit', 'pomodoro')),
+  target_id TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (task_id, target_type, target_id),
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+-- Pomodoro sessions
+CREATE TABLE IF NOT EXISTS pomodoro_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  duration_minutes INTEGER DEFAULT 25,
+  status TEXT DEFAULT 'completed' CHECK(status IN ('completed', 'cancelled', 'in_progress')),
+  note TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_links_task ON task_links(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_links_target ON task_links(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_user ON pomodoro_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_started ON pomodoro_sessions(started_at);
+
+CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
+CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);
+CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_bucket ON tasks(bucket_id);
+CREATE INDEX IF NOT EXISTS idx_labels_user ON labels(user_id);
+CREATE INDEX IF NOT EXISTS idx_task_labels_task ON task_labels(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_labels_label ON task_labels(label_id);
+CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments(task_id);
+CREATE INDEX IF NOT EXISTS idx_buckets_project ON buckets(project_id);
+
 -- OAuth tables for remote MCP endpoint
 CREATE TABLE IF NOT EXISTS oauth_clients (
   client_id TEXT PRIMARY KEY,
@@ -304,6 +431,25 @@ export function initDatabase() {
     console.log('Migration check (habits subgoal_id):', err);
   }
 
+  // Migration: Move task/project subgoal_id data to task_links
+  try {
+    const taskCols = db.prepare("PRAGMA table_info(tasks)").all() as any[];
+    if (taskCols.some((col: any) => col.name === 'subgoal_id')) {
+      // Migrate any existing subgoal_id references to task_links
+      const tasksWithSubgoal = db.prepare("SELECT id, subgoal_id FROM tasks WHERE subgoal_id IS NOT NULL").all() as any[];
+      if (tasksWithSubgoal.length > 0) {
+        const insert = db.prepare("INSERT OR IGNORE INTO task_links (task_id, target_type, target_id) VALUES (?, 'subgoal', ?)");
+        for (const t of tasksWithSubgoal) {
+          insert.run(t.id, t.subgoal_id);
+        }
+        db.prepare("UPDATE tasks SET subgoal_id = NULL WHERE subgoal_id IS NOT NULL").run();
+        console.log(`Migrated ${tasksWithSubgoal.length} task subgoal links to task_links`);
+      }
+    }
+  } catch (err) {
+    console.log('Migration check (task subgoal_id -> task_links):', err);
+  }
+
   // Migration: Seed default agent etiquette for existing users
   try {
     const users = db.prepare('SELECT id FROM users').all() as any[];
@@ -419,6 +565,88 @@ export interface HabitLog {
   id: string;
   habit_id: string;
   log_date: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface Project {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  parent_project_id: string | null;
+  hex_color: string;
+  is_favorite: number;
+  position: number;
+  archived: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Task {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  title: string;
+  description: string | null;
+  done: number;
+  done_at: string | null;
+  due_date: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  priority: number;
+  hex_color: string;
+  percent_done: number;
+  position: number;
+  bucket_id: string | null;
+  is_favorite: number;
+  repeat_after: number;
+  repeat_mode: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Label {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  hex_color: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Bucket {
+  id: string;
+  project_id: string;
+  title: string;
+  position: number;
+  created_at: string;
+}
+
+export interface TaskLink {
+  task_id: string;
+  target_type: 'goal' | 'subgoal' | 'habit' | 'pomodoro';
+  target_id: string;
+  created_at: string;
+}
+
+export interface PomodoroSession {
+  id: string;
+  user_id: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_minutes: number;
+  status: 'completed' | 'cancelled' | 'in_progress';
   note: string | null;
   created_at: string;
 }

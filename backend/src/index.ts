@@ -15,6 +15,10 @@ import agentsRouter from './routes/agents';
 import { shareManagementRouter, sharePublicRouter } from './routes/share';
 import etiquetteRouter from './routes/etiquette';
 import habitsRouter from './routes/habits';
+import tasksRouter from './routes/tasks';
+import projectsRouter from './routes/projects';
+import labelsRouter from './routes/labels';
+import pomodorosRouter from './routes/pomodoros';
 import adminRouter from './routes/admin';
 import { setupMcpRoutes } from './mcp/server';
 
@@ -141,6 +145,10 @@ app.use('/api/share', requireAuth, shareManagementRouter);
 app.use('/api/shared', sharePublicRouter);
 app.use('/api/etiquette', requireAuth, etiquetteRouter);
 app.use('/api/habits', requireAuth, habitsRouter);
+app.use('/api/tasks', requireAuth, tasksRouter);
+app.use('/api/projects', requireAuth, projectsRouter);
+app.use('/api/labels', requireAuth, labelsRouter);
+app.use('/api/pomodoros', requireAuth, pomodorosRouter);
 app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
 
 // Remote MCP endpoint with OAuth (must be before static files/SPA fallback)

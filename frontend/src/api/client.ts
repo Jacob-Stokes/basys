@@ -179,6 +179,86 @@ export const api = {
   getHabitCalendar: (habitId: string, year: number, month: number) =>
     apiRequest<{ loggedDates: string[]; stats: any }>(`/api/habits/${habitId}/calendar?year=${year}&month=${month}`),
 
+  // Tasks
+  getTasks: (params?: { project_id?: string; done?: string; priority?: string; label?: string; due_before?: string; due_after?: string; search?: string; favorite?: string }) => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined) query.append(k, v); });
+    }
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<any[]>(`/api/tasks${qs}`);
+  },
+  createTask: (data: any) =>
+    apiRequest<any>('/api/tasks', { method: 'POST', body: JSON.stringify(data) }),
+  getTask: (id: string) => apiRequest<any>(`/api/tasks/${id}`),
+  updateTask: (id: string, data: any) =>
+    apiRequest<any>(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteTask: (id: string) =>
+    apiRequest<any>(`/api/tasks/${id}`, { method: 'DELETE' }),
+  toggleTask: (id: string) =>
+    apiRequest<any>(`/api/tasks/${id}/done`, { method: 'PATCH' }),
+  toggleTaskFavorite: (id: string) =>
+    apiRequest<any>(`/api/tasks/${id}/favorite`, { method: 'PATCH' }),
+  addTaskLabel: (taskId: string, labelId: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/labels/${labelId}`, { method: 'POST' }),
+  removeTaskLabel: (taskId: string, labelId: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/labels/${labelId}`, { method: 'DELETE' }),
+  getTaskComments: (taskId: string) =>
+    apiRequest<any[]>(`/api/tasks/${taskId}/comments`),
+  createTaskComment: (taskId: string, content: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/comments`, { method: 'POST', body: JSON.stringify({ content }) }),
+  deleteTaskComment: (taskId: string, commentId: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/comments/${commentId}`, { method: 'DELETE' }),
+
+  // Projects
+  getProjects: () => apiRequest<any[]>('/api/projects'),
+  createProject: (data: any) =>
+    apiRequest<any>('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
+  getProject: (id: string) => apiRequest<any>(`/api/projects/${id}`),
+  updateProject: (id: string, data: any) =>
+    apiRequest<any>(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProject: (id: string) =>
+    apiRequest<any>(`/api/projects/${id}`, { method: 'DELETE' }),
+  toggleProjectFavorite: (id: string) =>
+    apiRequest<any>(`/api/projects/${id}/favorite`, { method: 'PATCH' }),
+  toggleProjectArchive: (id: string) =>
+    apiRequest<any>(`/api/projects/${id}/archive`, { method: 'PATCH' }),
+
+  // Labels
+  getLabels: () => apiRequest<any[]>('/api/labels'),
+  createLabel: (data: any) =>
+    apiRequest<any>('/api/labels', { method: 'POST', body: JSON.stringify(data) }),
+  updateLabel: (id: string, data: any) =>
+    apiRequest<any>(`/api/labels/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteLabel: (id: string) =>
+    apiRequest<any>(`/api/labels/${id}`, { method: 'DELETE' }),
+
+  // Task Links
+  getTaskLinks: (taskId: string) =>
+    apiRequest<any[]>(`/api/tasks/${taskId}/links`),
+  addTaskLink: (taskId: string, target_type: string, target_id: string) =>
+    apiRequest<any[]>(`/api/tasks/${taskId}/links`, { method: 'POST', body: JSON.stringify({ target_type, target_id }) }),
+  removeTaskLink: (taskId: string, targetType: string, targetId: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/links/${targetType}/${targetId}`, { method: 'DELETE' }),
+
+  // Pomodoros
+  getPomodoros: (params?: { status?: string; limit?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.limit) query.append('limit', params.limit);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<any[]>(`/api/pomodoros${qs}`);
+  },
+  createPomodoro: (data: { duration_minutes?: number; note?: string; task_id?: string }) =>
+    apiRequest<any>('/api/pomodoros', { method: 'POST', body: JSON.stringify(data) }),
+  getPomodoro: (id: string) => apiRequest<any>(`/api/pomodoros/${id}`),
+  updatePomodoro: (id: string, data: any) =>
+    apiRequest<any>(`/api/pomodoros/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  completePomodoro: (id: string) =>
+    apiRequest<any>(`/api/pomodoros/${id}/complete`, { method: 'PATCH' }),
+  deletePomodoro: (id: string) =>
+    apiRequest<any>(`/api/pomodoros/${id}`, { method: 'DELETE' }),
+
   // Sub-goal search (for typeahead)
   searchSubGoals: (q: string) =>
     apiRequest<any[]>(`/api/subgoals/search?q=${encodeURIComponent(q)}`),

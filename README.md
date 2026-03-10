@@ -54,6 +54,63 @@ The endpoint provides 12 tools covering goal/sub-goal/action management, activit
 
 For a standalone stdio MCP server (local Claude Desktop via API key), see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)**.
 
+## Data Model
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  USERS & AUTH                                                       │
+│                                                                     │
+│  users ──┬── api_keys                                               │
+│          ├── oauth_tokens ──── oauth_clients ──── oauth_auth_codes   │
+│          └── agent_etiquette                                        │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  HARADA METHOD (Goal Hierarchy)                                     │
+│                                                                     │
+│  primary_goals ──── sub_goals ──── action_items ──── activity_logs  │
+│       │                                                             │
+│       ├── shared_goals          (public sharing tokens)             │
+│       └── guestbook             (AI agent feedback at any level)    │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  TASK MANAGEMENT                                                    │
+│                                                                     │
+│  projects ──┬── tasks ──┬── task_labels ──── labels                 │
+│      │      │           ├── task_comments                           │
+│      │      │           └── task_links ─ ─ ─ ┐                     │
+│      │      └── buckets                      │ (polymorphic)       │
+│      └── projects  (self-referencing)        │                     │
+│                                              ▼                     │
+│                              ┌────────────────────────┐            │
+│                              │ primary_goals          │            │
+│                              │ sub_goals              │            │
+│                              │ habits                 │            │
+│                              │ pomodoro_sessions      │            │
+│                              └────────────────────────┘            │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  HABITS & POMODORO                                                  │
+│                                                                     │
+│  habits ──── habit_logs         (daily/weekly tracking)             │
+│                                                                     │
+│  pomodoro_sessions              (focus timer sessions)              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**22 tables** across four domains:
+
+| Domain | Tables | Purpose |
+|--------|--------|---------|
+| Users & Auth | `users`, `api_keys`, `oauth_clients`, `oauth_auth_codes`, `oauth_tokens`, `agent_etiquette` | Multi-user accounts, API keys, OAuth 2.1 for MCP, AI agent behavior rules |
+| Harada Method | `primary_goals`, `sub_goals`, `action_items`, `activity_logs`, `guestbook`, `shared_goals` | 1→8→8 goal hierarchy, continuous progress logging, AI coaching, public sharing |
+| Task Management | `projects`, `tasks`, `labels`, `task_labels`, `task_comments`, `buckets`, `task_links` | Projects with Kanban buckets, labeled tasks, polymorphic links to goals/habits/pomodoros |
+| Habits & Pomodoro | `habits`, `habit_logs`, `pomodoro_sessions` | Daily/weekly habit tracking, focus timer sessions |
+
+`task_links` uses a polymorphic junction pattern — `target_type` + `target_id` — to connect any task to goals, sub-goals, habits, or pomodoro sessions without separate foreign keys per type.
+
 ## Tech Stack
 
 Node.js + TypeScript + Express + SQLite | React + Vite + Tailwind CSS | Docker
