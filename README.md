@@ -23,26 +23,47 @@ Progress is tracked through continuous activity logging rather than completion c
 
 ## Quick Start
 
-```yaml
-# docker-compose.yml
-services:
-  basys:
-    image: ghcr.io/jacob-stokes/basys:latest
-    ports:
-      - "4000:3001"
-    volumes:
-      - ./data:/app/data
-    environment:
-      - SESSION_SECRET=change-me-to-something-secure
-      # - MCP_SERVER_URL=https://home.jacob.st  # OAuth issuer URL
-    restart: unless-stopped
-```
-
 ```bash
-docker-compose up -d
+git clone https://github.com/Jacob-Stokes/basys.git
+cd basys
+docker compose up --build -d
 ```
 
 Visit http://localhost:4000, register an account, and start tracking your goals, tasks, and habits.
+
+The default `docker-compose.yml` runs two services:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| `basys` | 4000 | Main app (frontend + backend + MCP endpoint) |
+| `terminal` | 4001 | In-browser Claude Code terminal |
+
+### Claude Auth (AI assistant + terminal)
+
+Both the built-in AI assistant sidebar and the Terminal page use your local **Claude Max subscription** rather than an API key. Mount your Claude credentials:
+
+```yaml
+# docker-compose.yml (already included by default)
+services:
+  basys:
+    volumes:
+      - ~/.claude:/root/.claude   # Claude auth for AI sidebar
+  terminal:
+    volumes:
+      - ~/.claude:/root/.claude   # Claude auth for terminal
+```
+
+Make sure you're logged into Claude Code on your host machine (`claude` CLI) before starting the containers. No `ANTHROPIC_API_KEY` needed.
+
+### Environment Variables
+
+| Variable | Service | Default | Description |
+|----------|---------|---------|-------------|
+| `SESSION_SECRET` | basys | `change-me-to-something-secure` | **Change this** — signs session cookies |
+| `TERMINAL_SHARED_SECRET` | both | `basys-terminal-secret-change-me` | **Change this** — authenticates terminal WebSocket |
+| `DATABASE_URL` | basys | `file:/app/data/harada.db` | SQLite path inside container |
+| `CLAUDE_MODEL` | basys | `sonnet` | Claude model for AI sidebar (`sonnet`, `opus`, `haiku`) |
+| `MCP_SERVER_URL` | basys | — | Your public URL, required for remote MCP OAuth |
 
 ## MCP Server
 
