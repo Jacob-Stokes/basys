@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db, ChatConversation, ChatMessage } from '../db/database';
-import { streamChatResponse } from '../chat/claude';
+import { streamChatResponse, warmupConversation } from '../chat/claude';
 import { ok, fail, serverError } from '../utils/response';
 
 const router = Router();
@@ -23,12 +23,18 @@ router.get('/conversations', (req, res) => {
   }
 });
 
-// Create conversation
-router.post('/conversations', (req, res) => {
+// Create conversation — awaits warmup so greeting is guaranteed in DB before responding
+router.post('/conversations', async (req, res) => {
   try {
     const userId = req.user!.id;
     const id = uuidv4();
     db.prepare('INSERT INTO chat_conversations (id, user_id) VALUES (?, ?)').run(id, userId);
+
+    const greeting = await warmupConversation(userId);
+    const msgId = uuidv4();
+    db.prepare('INSERT INTO chat_messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)')
+      .run(msgId, id, 'assistant', JSON.stringify([{ type: 'text', text: greeting }]));
+
     const conversation = db.prepare('SELECT * FROM chat_conversations WHERE id = ?').get(id);
     ok(res, conversation, 201);
   } catch (err) {

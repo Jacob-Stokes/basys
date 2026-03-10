@@ -17,6 +17,7 @@ import SharedGoalView from './pages/SharedGoalView';
 import NavBar from './components/NavBar';
 import TimerFooter from './components/TimerFooter';
 import ChatSidebar from './components/chat/ChatSidebar';
+import PixelMan from './components/chat/PixelMan';
 import { ChatSidebarProvider, useChatSidebarSafe } from './context/ChatSidebarContext';
 import { api } from './api/client';
 
@@ -67,6 +68,7 @@ function AuthenticatedLayout() {
 function MainContent() {
   const sidebar = useChatSidebarSafe();
   const sidebarOpen = sidebar?.isOpen ?? false;
+  const agentState = sidebar?.agentState ?? 'idle';
 
   return (
     <>
@@ -80,6 +82,11 @@ function MainContent() {
         <TimerFooter />
       </div>
       <ChatSidebar />
+      {sidebarOpen && (
+        <div className="fixed top-0 right-0 w-[400px] h-14 hidden sm:flex items-end justify-center pb-0 z-40 pointer-events-none">
+          <PixelMan state={agentState} />
+        </div>
+      )}
     </>
   );
 }

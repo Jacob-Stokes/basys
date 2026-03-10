@@ -54,6 +54,45 @@ function buildMcpServer(userId: string) {
 }
 
 /**
+ * Run a silent warmup exchange when a conversation is created.
+ * Sends a hidden "session started" prompt and returns the greeting text.
+ * Not streamed — result is returned directly so the caller can save it to DB.
+ */
+export async function warmupConversation(userId: string): Promise<string> {
+  const systemPrompt = buildSystemPrompt(userId);
+  const mcpServer = buildMcpServer(userId);
+
+  let greeting = '';
+
+  for await (const message of query({
+    prompt: 'The user just opened the chat sidebar. Greet them briefly (1-2 sentences max) and mention one thing you noticed about their current goals or tasks if they have any. Be warm and natural — not robotic.',
+    options: {
+      systemPrompt,
+      model: MODEL,
+      maxTurns: 1,
+      mcpServers: { basys: mcpServer },
+      allowedTools: ['mcp__basys__*'],
+      disallowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'NotebookEdit'],
+      persistSession: false,
+    },
+  })) {
+    if (message.type === 'assistant') {
+      const msg = (message as any).message;
+      if (msg?.content) {
+        for (const block of msg.content) {
+          if (block.type === 'text') greeting = block.text;
+        }
+      }
+    } else if (message.type === 'result') {
+      const result = (message as any).result;
+      if (typeof result === 'string' && result) greeting = result;
+    }
+  }
+
+  return greeting || 'Hey! Ready when you are.';
+}
+
+/**
  * Stream a chat response via SSE using the Claude Agent SDK.
  */
 export async function streamChatResponse(

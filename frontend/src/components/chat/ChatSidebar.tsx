@@ -12,12 +12,22 @@ interface Conversation {
 }
 
 export default function ChatSidebar() {
-  const { isOpen, close, activeConversationId, setActiveConversationId } = useChatSidebar();
+  const { isOpen, close, activeConversationId, setActiveConversationId, setAgentState } = useChatSidebar();
   const { sendMessage, isStreaming, error, cancel } = useChatStream();
+
+  // Drive pixel man state from streaming
+  useEffect(() => {
+    if (isStreaming) {
+      setAgentState('talking');
+    } else {
+      setAgentState('idle');
+    }
+  }, [isStreaming, setAgentState]);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [showList, setShowList] = useState(false);
+  const [creatingConv, setCreatingConv] = useState(false);
 
   // Load conversations when sidebar opens
   useEffect(() => {
@@ -25,7 +35,7 @@ export default function ChatSidebar() {
     api.listConversations().then(setConversations).catch(() => {});
   }, [isOpen]);
 
-  // Load messages when active conversation changes
+  // Load messages when active conversation changes (handles selecting from list)
   useEffect(() => {
     if (!activeConversationId) {
       setMessages([]);
@@ -37,27 +47,39 @@ export default function ChatSidebar() {
   }, [activeConversationId]);
 
   const handleNewConversation = useCallback(async () => {
+    setCreatingConv(true);
     try {
-      const conv = await api.createConversation();
+      const conv = await api.createConversation(); // blocks until greeting is in DB
+      const loaded = await api.getConversation(conv.id);
+      setMessages(parseStoredMessages(loaded.messages || []));
       setActiveConversationId(conv.id);
       setConversations(prev => [conv, ...prev]);
       setShowList(false);
-    } catch {}
+    } catch {} finally {
+      setCreatingConv(false);
+    }
   }, [setActiveConversationId]);
 
   const handleSend = useCallback(async (content: string) => {
+    setAgentState('thinking');
     let convId = activeConversationId;
 
     // Auto-create conversation if none active
     if (!convId) {
+      setCreatingConv(true);
       try {
-        const conv = await api.createConversation();
+        const conv = await api.createConversation(); // blocks until greeting is in DB
         convId = conv.id;
         setActiveConversationId(conv.id);
         setConversations(prev => [conv, ...prev]);
+        // Load greeting so it shows before the user's streaming reply
+        const loaded = await api.getConversation(conv.id);
+        setMessages(parseStoredMessages(loaded.messages || []));
       } catch {
+        setCreatingConv(false);
         return;
       }
+      setCreatingConv(false);
     }
 
     // Add user message optimistically
@@ -151,12 +173,20 @@ export default function ChatSidebar() {
         <div className="flex items-center gap-1">
           <button
             onClick={handleNewConversation}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+            disabled={creatingConv}
+            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
             title="New conversation"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
+            {creatingConv ? (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            )}
           </button>
           <button
             onClick={close}
@@ -213,7 +243,7 @@ export default function ChatSidebar() {
       <ChatMessageList messages={messages} />
 
       {/* Input */}
-      <ChatInput onSend={handleSend} disabled={isStreaming} />
+      <ChatInput onSend={handleSend} disabled={isStreaming || creatingConv} />
 
       {/* Cancel streaming */}
       {isStreaming && (
