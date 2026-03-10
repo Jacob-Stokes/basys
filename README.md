@@ -44,13 +44,13 @@ Visit http://localhost:3001, register an account, and create your first goal.
 
 ## MCP Server
 
-Xharada has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication — the recommended way to connect AI agents. Works with Claude mobile, Claude web, and any MCP-compatible client.
+Basys has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication — the recommended way to connect AI agents. Works with Claude mobile, Claude web, and any MCP-compatible client.
 
 1. Deploy with `MCP_SERVER_URL` set to your public URL
 2. Add as a custom integration in your MCP client, pointing to `https://your-domain.com/mcp`
-3. Authenticate with your Xharada username and password
+3. Authenticate with your Basys username and password
 
-The endpoint provides 12 tools covering goal/sub-goal/action management, activity logging, guestbook operations, and bulk import.
+The endpoint provides **22 tools** covering goals, tasks, projects, habits, pomodoros, labels, sharing, agent etiquette, and cross-domain search.
 
 For a standalone stdio MCP server (local Claude Desktop via API key), see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)**.
 
