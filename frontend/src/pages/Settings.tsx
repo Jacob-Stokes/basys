@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, FormEvent, ChangeEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import ConfirmModal from '../components/ConfirmModal';
@@ -36,6 +35,7 @@ export default function Settings() {
   const [allowQueryParamAuth, setAllowQueryParamAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<'account' | 'api' | 'display' | 'data' | 'etiquette' | 'admin'>('account');
   const [apiSubTab, setApiSubTab] = useState<'keys' | 'security' | 'docs'>('keys');
+  const [displaySubTab, setDisplaySubTab] = useState<'general' | 'goals'>('general');
 
   // Password change state
   const [currentPasswordField, setCurrentPasswordField] = useState('');
@@ -105,19 +105,6 @@ export default function Settings() {
   const customPaletteNameRef = useRef<HTMLInputElement>(null);
   const previewBaseColor = computedColors[1] || DEFAULT_FALLBACK_COLOR;
   const previewActionColor = lightenColor(previewBaseColor, displaySettings.actionShadePercent);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const locationState = (location.state as { from?: string } | null) ?? null;
-  const candidateBackTarget = locationState?.from;
-  const backTarget = candidateBackTarget && candidateBackTarget.startsWith('/')
-    ? candidateBackTarget
-    : '/';
-  const cameFromGoal = backTarget.startsWith('/goal/');
-  const backLabel = cameFromGoal ? t('settings.backToGoal') : t('settings.backToGoals');
-
-  const handleBackClick = () => {
-    navigate(backTarget);
-  };
 
   const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault();
@@ -564,13 +551,6 @@ export default function Settings() {
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <header className="mb-8">
-          <button
-            type="button"
-            onClick={handleBackClick}
-            className="text-blue-600 hover:underline mb-2 inline-block"
-          >
-            {backLabel}
-          </button>
           <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">{t('settings.title')}</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
             {t('settings.subtitle')}
@@ -997,82 +977,25 @@ curl -X POST "$API_URL/api/guestbook" \\
               </p>
             </div>
 
-            {/* Default View */}
-            <section>
-              <h3 className="text-lg font-semibold mb-2">{t('settings.defaultGoalView')}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                {t('settings.defaultGoalViewDesc')}
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                {(['list', 'compact', 'full'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => updateDisplaySettings({ defaultView: mode })}
-                    className={`flex-1 border rounded-lg px-4 py-3 text-left transition-colors ${
-                      displaySettings.defaultView === mode
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
-                    }`}
-                  >
-                    <div className="font-medium capitalize">{mode}{t('settings.viewSuffix')}</div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {mode === 'list'
-                        ? t('settings.listViewDesc')
-                        : mode === 'compact'
-                          ? t('settings.compactViewDesc')
-                          : t('settings.fullViewDesc')}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </section>
+            {/* Display sub-tabs */}
+            <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 -mt-4">
+              {(['general', 'goals'] as const).map((sub) => (
+                <button
+                  key={sub}
+                  onClick={() => setDisplaySubTab(sub)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors capitalize ${
+                    displaySubTab === sub
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                  }`}
+                >
+                  {sub}
+                </button>
+              ))}
+            </div>
 
-            {/* Goals Per Page */}
-            <section>
-              <h3 className="text-lg font-semibold mb-2">{t('settings.goalsPerPage')}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                {t('settings.goalsPerPageDesc')}
-              </p>
-              <div className="flex items-center gap-3">
-                {[3, 5, 10, 25].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => updateDisplaySettings({ goalsPerPage: n })}
-                    className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
-                      displaySettings.goalsPerPage === n
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* Guestbook Per Page */}
-            <section>
-              <h3 className="text-lg font-semibold mb-2">{t('settings.guestbookPerPage')}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                {t('settings.guestbookPerPageDesc')}
-              </p>
-              <div className="flex items-center gap-3">
-                {[3, 5, 10, 25].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => updateDisplaySettings({ guestbookPerPage: n })}
-                    className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
-                      displaySettings.guestbookPerPage === n
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </section>
-
+            {/* General sub-tab */}
+            {displaySubTab === 'general' && <>
             {/* Language */}
             <section>
               <h3 className="text-lg font-semibold mb-2">{t('settings.language')}</h3>
@@ -1195,6 +1118,86 @@ curl -X POST "$API_URL/api/guestbook" \\
                   {t('settings.showHeaderBranding')}
                 </span>
               </label>
+            </section>
+            </>}
+
+            {/* Goals sub-tab */}
+            {displaySubTab === 'goals' && <>
+
+            {/* Default View */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">{t('settings.defaultGoalView')}</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                {t('settings.defaultGoalViewDesc')}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                {(['list', 'compact', 'full'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => updateDisplaySettings({ defaultView: mode })}
+                    className={`flex-1 border rounded-lg px-4 py-3 text-left transition-colors ${
+                      displaySettings.defaultView === mode
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="font-medium capitalize">{mode}{t('settings.viewSuffix')}</div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {mode === 'list'
+                        ? t('settings.listViewDesc')
+                        : mode === 'compact'
+                          ? t('settings.compactViewDesc')
+                          : t('settings.fullViewDesc')}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Goals Per Page */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">{t('settings.goalsPerPage')}</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                {t('settings.goalsPerPageDesc')}
+              </p>
+              <div className="flex items-center gap-3">
+                {[3, 5, 10, 25].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => updateDisplaySettings({ goalsPerPage: n })}
+                    className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                      displaySettings.goalsPerPage === n
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Guestbook Per Page */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">{t('settings.guestbookPerPage')}</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                {t('settings.guestbookPerPageDesc')}
+              </p>
+              <div className="flex items-center gap-3">
+                {[3, 5, 10, 25].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => updateDisplaySettings({ guestbookPerPage: n })}
+                    className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                      displaySettings.guestbookPerPage === n
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
             </section>
 
             {/* Palette */}
@@ -1433,6 +1436,7 @@ curl -X POST "$API_URL/api/guestbook" \\
                 ))}
               </div>
             </section>
+            </>}
           </div>
         )}
 
