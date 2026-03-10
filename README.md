@@ -1,20 +1,22 @@
 <div align="left">
-  <img src="frontend/public/logo.svg?v=2" alt="Xharada logo" width="120" height="120">
-  <sup>原田メソッド</sup>
-  <h1>Xharada</h1>
+  <img src="frontend/public/logo.svg?v=2" alt="Basys logo" width="120" height="120">
+  <h1>Basys</h1>
 </div>
 
-A **single source of truth** for your life goals — structured for both humans and AI agents.
+A **personal productivity suite** — goals, tasks, habits, and focus timers in one place, structured for both humans and AI agents.
 
 ## Philosophy
 
-Your goals, sub-goals, and actions should live in one place that any AI agent can read, write to, and reason about. Xharada is that place. It uses the **Harada Method** — a Japanese framework that structures goals as **1 Primary Goal → 8 Sub-Goals → 8 Actions each = 64 total actions** — and exposes everything through an MCP endpoint and REST API.
+Your productivity tools should live in one place that any AI agent can read, write to, and reason about. Basys is that place. It combines the **Harada Method** (a Japanese goal-setting framework: 1 Primary Goal → 8 Sub-Goals → 8 Actions each), task management, habit tracking, and pomodoro timers — all exposed through an MCP endpoint and REST API.
 
-Progress is tracked through continuous activity logging rather than completion checkboxes. Frequency and consistency matter more than "done" states. AI agents can provide coaching, track patterns, and leave feedback at any level of the goal hierarchy.
+Progress is tracked through continuous activity logging rather than completion checkboxes. Frequency and consistency matter more than "done" states. AI agents can provide coaching, track patterns, and leave feedback at any level.
 
 ## Features
 
-- **Visual grids**: 3x3 compact view and 9x9 full Harada grid with configurable aspect ratios
+- **Harada goals**: 3x3 compact view and 9x9 full grid with configurable aspect ratios
+- **Task management**: Projects, labels, Kanban buckets, and polymorphic links to goals/habits
+- **Habit tracking**: Daily/weekly habits and quits with streaks and calendar views
+- **Pomodoro timer**: Focus sessions linked to tasks
 - **Activity logging**: Continuous logging with metrics, mood tracking, and media attachments
 - **AI agent integration**: Built-in MCP endpoint, REST API, and guestbook system for AI coaching
 - **Multi-user**: OAuth 2.1 authentication with per-user data isolation
@@ -24,15 +26,15 @@ Progress is tracked through continuous activity logging rather than completion c
 ```yaml
 # docker-compose.yml
 services:
-  xharada:
-    image: ghcr.io/jacob-stokes/xharada:latest
+  basys:
+    image: ghcr.io/jacob-stokes/basys:latest
     ports:
-      - "3001:3001"
+      - "4000:3001"
     volumes:
       - ./data:/app/data
     environment:
       - SESSION_SECRET=change-me-to-something-secure
-      # - MCP_SERVER_URL=https://mcp.example.com  # For remote MCP
+      # - MCP_SERVER_URL=https://home.jacob.st  # OAuth issuer URL
     restart: unless-stopped
 ```
 
@@ -40,19 +42,17 @@ services:
 docker-compose up -d
 ```
 
-Visit http://localhost:3001, register an account, and create your first goal.
+Visit http://localhost:4000, register an account, and start tracking your goals, tasks, and habits.
 
 ## MCP Server
 
 Basys has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication — the recommended way to connect AI agents. Works with Claude mobile, Claude web, and any MCP-compatible client.
 
-1. Deploy with `MCP_SERVER_URL` set to your public URL
-2. Add as a custom integration in your MCP client, pointing to `https://your-domain.com/mcp`
+1. Deploy with `MCP_SERVER_URL` set to your public URL (e.g. `https://home.jacob.st`)
+2. Add as a custom integration in your MCP client, pointing to `https://home.jacob.st/mcp`
 3. Authenticate with your Basys username and password
 
 The endpoint provides **22 tools** covering goals, tasks, projects, habits, pomodoros, labels, sharing, agent etiquette, and cross-domain search.
-
-For a standalone stdio MCP server (local Claude Desktop via API key), see **[xharada-mcp](https://github.com/Jacob-Stokes/xharada-mcp)**.
 
 ## Data Model
 
@@ -125,8 +125,8 @@ cd backend && npm install && npm run dev  # port 3001
 cd frontend && npm install && npm run dev  # port 3000
 ```
 
-See the [wiki](https://github.com/Jacob-Stokes/xharada/wiki) for API documentation, database schema, and architecture details.
+See the [wiki](https://github.com/Jacob-Stokes/basys/wiki) for API documentation, database schema, and architecture details.
 
 ## License
 
-MIT — Based on the Harada Method by Takashi Harada.
+MIT
