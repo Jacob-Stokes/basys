@@ -17,7 +17,7 @@ import SharedGoalView from './pages/SharedGoalView';
 import NavBar from './components/NavBar';
 import TimerFooter from './components/TimerFooter';
 import ChatSidebar from './components/chat/ChatSidebar';
-import { ChatSidebarProvider } from './context/ChatSidebarContext';
+import { ChatSidebarProvider, useChatSidebarSafe } from './context/ChatSidebarContext';
 import { api } from './api/client';
 
 // Protected Route Component
@@ -58,14 +58,29 @@ function AuthenticatedLayout() {
   return (
     <ProtectedRoute>
       <ChatSidebarProvider>
+        <MainContent />
+      </ChatSidebarProvider>
+    </ProtectedRoute>
+  );
+}
+
+function MainContent() {
+  const sidebar = useChatSidebarSafe();
+  const sidebarOpen = sidebar?.isOpen ?? false;
+
+  return (
+    <>
+      <div
+        className={`transition-[margin] duration-200 ease-in-out ${sidebarOpen ? 'sm:mr-[400px]' : ''}`}
+      >
         <NavBar />
         <div className="pb-14">
           <Outlet />
         </div>
         <TimerFooter />
-        <ChatSidebar />
-      </ChatSidebarProvider>
-    </ProtectedRoute>
+      </div>
+      <ChatSidebar />
+    </>
   );
 }
 

@@ -5,6 +5,7 @@ import { api, API_URL } from '../api/client';
 import { useDisplaySettings } from '../context/DisplaySettingsContext';
 import { useChatSidebar } from '../context/ChatSidebarContext';
 import LogoGrid from './LogoGrid';
+import QuickCreateMenu from './QuickCreateMenu';
 
 export default function NavBar() {
   const { t } = useTranslation();
@@ -51,9 +52,8 @@ export default function NavBar() {
     <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
       <div className="container mx-auto px-4 sm:px-16 flex items-center justify-between h-14">
         {/* Left: Logo + brand */}
-        <Link to="/" className="flex items-center gap-3 shrink-0">
+        <Link to="/" className="flex items-center shrink-0">
           <LogoGrid theme={displaySettings.appTheme} size={28} />
-          <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">Basys</span>
         </Link>
 
         {/* Center: nav links (desktop) */}
@@ -84,8 +84,9 @@ export default function NavBar() {
           </Link>
         </div>
 
-        {/* Right: chat toggle + username dropdown (desktop) */}
+        {/* Right: quick create + chat toggle + username dropdown (desktop) */}
         <div className="hidden sm:flex items-center gap-1 relative" ref={userMenuRef}>
+          <QuickCreateMenu />
           <button
             onClick={toggleChat}
             className={`p-1.5 rounded transition-colors ${
@@ -138,8 +139,9 @@ export default function NavBar() {
           )}
         </div>
 
-        {/* Mobile: chat toggle + burger */}
+        {/* Mobile: quick create + chat toggle + burger */}
         <div className="flex items-center gap-1 sm:hidden">
+          <QuickCreateMenu compact />
           <button
             onClick={toggleChat}
             className={`p-2 rounded transition-colors ${
