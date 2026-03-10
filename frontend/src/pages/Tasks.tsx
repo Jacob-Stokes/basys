@@ -1165,7 +1165,7 @@ export default function Tasks() {
         />
 
         {/* Filter row: Home left, pills right */}
-        <div className="px-3 py-2 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+        <div className="px-3 py-2 mt-[0.4rem] flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
           {/* Home icon */}
           <button
             onClick={() => { setTaskFilter('home'); setFilterLabel(null); }}
