@@ -1461,7 +1461,7 @@ export default function Tasks() {
           {/* Calendar — 2/5 */}
           {tab === 'overview' && (
             <div className="w-full lg:w-2/5">
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 lg:sticky lg:top-8 lg:mt-[5.1rem]">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 lg:sticky lg:top-8 lg:mt-[2.45rem]">
                 <Calendar
                   taskDates={taskDates}
                   eventDateColors={eventDateColors}
