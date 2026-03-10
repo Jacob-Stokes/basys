@@ -1,6 +1,6 @@
 /**
  * MCP tool definitions for the remote Harada MCP endpoint.
- * Ported from xharada-mcp but with direct DB access instead of HTTP calls.
+ * MCP tool definitions with direct DB access.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -25,7 +25,7 @@ function getUserId(extra: any): string {
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
-    name: 'xharada',
+    name: 'basys',
     version: '1.0.0',
   });
 

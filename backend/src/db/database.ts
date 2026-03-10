@@ -135,6 +135,38 @@ CREATE TABLE IF NOT EXISTS agent_etiquette (
 
 CREATE INDEX IF NOT EXISTS idx_agent_etiquette_user ON agent_etiquette(user_id);
 
+-- Habits and Quits tracker
+CREATE TABLE IF NOT EXISTS habits (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  emoji TEXT DEFAULT '',
+  type TEXT NOT NULL CHECK(type IN ('habit', 'quit')),
+  frequency TEXT DEFAULT 'daily' CHECK(frequency IN ('daily', 'weekly')),
+  quit_date TEXT,
+  subgoal_id TEXT DEFAULT NULL,
+  archived INTEGER DEFAULT 0 CHECK(archived IN (0, 1)),
+  position INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS habit_logs (
+  id TEXT PRIMARY KEY,
+  habit_id TEXT NOT NULL,
+  log_date TEXT NOT NULL,
+  note TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id);
+CREATE INDEX IF NOT EXISTS idx_habits_type ON habits(type);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_habit ON habit_logs(habit_id);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(log_date);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON habit_logs(habit_id, log_date);
+
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_sub_goals_primary_goal ON sub_goals(primary_goal_id);
 CREATE INDEX IF NOT EXISTS idx_action_items_sub_goal ON action_items(sub_goal_id);
@@ -259,6 +291,19 @@ export function initDatabase() {
     console.log('Migration check (theme_json):', err);
   }
 
+  // Migration: Add subgoal_id to habits table
+  try {
+    const habitCols = db.prepare("PRAGMA table_info(habits)").all() as any[];
+    if (!habitCols.some((col: any) => col.name === 'subgoal_id')) {
+      db.exec(`ALTER TABLE habits ADD COLUMN subgoal_id TEXT DEFAULT NULL`);
+      console.log('Added subgoal_id column to habits table');
+    }
+    // Always ensure index exists (safe for both fresh and migrated DBs)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_habits_subgoal ON habits(subgoal_id)`);
+  } catch (err) {
+    console.log('Migration check (habits subgoal_id):', err);
+  }
+
   // Migration: Seed default agent etiquette for existing users
   try {
     const users = db.prepare('SELECT id FROM users').all() as any[];
@@ -352,5 +397,28 @@ export interface GuestbookEntry {
   comment: string;
   target_type: 'user' | 'goal' | 'subgoal' | 'action';
   target_id: string | null;
+  created_at: string;
+}
+
+export interface Habit {
+  id: string;
+  user_id: string;
+  title: string;
+  emoji: string;
+  type: 'habit' | 'quit';
+  frequency: string;
+  quit_date: string | null;
+  subgoal_id: string | null;
+  archived: number;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HabitLog {
+  id: string;
+  habit_id: string;
+  log_date: string;
+  note: string | null;
   created_at: string;
 }

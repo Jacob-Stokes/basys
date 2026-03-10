@@ -85,6 +85,10 @@ export default function GoalGrid() {
   const [textModalSubmitting, setTextModalSubmitting] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [confirmDeleteAction, setConfirmDeleteAction] = useState<ActionItem | null>(null);
+  const [subGoalHabits, setSubGoalHabits] = useState<any[]>([]);
+  const [showAddHabitInline, setShowAddHabitInline] = useState<'habit' | 'quit' | null>(null);
+  const [inlineHabitTitle, setInlineHabitTitle] = useState('');
+  const [inlineHabitEmoji, setInlineHabitEmoji] = useState('');
   const subGoalCardRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const actionSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -145,6 +149,19 @@ export default function GoalGrid() {
     setViewMode(displaySettings.defaultView);
   }, [displaySettings.defaultView]);
 
+  // Load linked habits when subgoal modal opens
+  useEffect(() => {
+    if (showSubGoalModal && selectedSubGoal) {
+      api.getHabitsBySubGoal(selectedSubGoal.id)
+        .then(setSubGoalHabits)
+        .catch(() => setSubGoalHabits([]));
+    } else {
+      setSubGoalHabits([]);
+      setShowAddHabitInline(null);
+      setInlineHabitTitle('');
+      setInlineHabitEmoji('');
+    }
+  }, [showSubGoalModal, selectedSubGoal?.id]);
 
   const loadGoal = async (showLoading = false) => {
     try {
@@ -1167,6 +1184,141 @@ export default function GoalGrid() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Linked Habits & Quits */}
+            <div className="p-6 border-t dark:border-gray-700">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">{t('goalGrid.linkedHabits', 'Linked Habits & Quits')}</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowAddHabitInline('habit'); setInlineHabitTitle(''); setInlineHabitEmoji(''); }}
+                    className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                  >
+                    + {t('habits.habit', 'Habit')}
+                  </button>
+                  <button
+                    onClick={() => { setShowAddHabitInline('quit'); setInlineHabitTitle(''); setInlineHabitEmoji(''); }}
+                    className="text-xs px-2 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 rounded hover:bg-yellow-200 dark:hover:bg-yellow-800 transition-colors"
+                  >
+                    + {t('habits.quit', 'Quit')}
+                  </button>
+                </div>
+              </div>
+
+              {/* Inline add form */}
+              {showAddHabitInline && (
+                <div className="mb-3 p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                    {showAddHabitInline === 'habit'
+                      ? t('habits.newHabit', 'New Habit')
+                      : t('habits.newQuit', 'New Quit')}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={inlineHabitEmoji}
+                      onChange={(e) => setInlineHabitEmoji(e.target.value)}
+                      placeholder="😀"
+                      className="w-12 px-2 py-1.5 text-center border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm"
+                      maxLength={4}
+                    />
+                    <input
+                      type="text"
+                      value={inlineHabitTitle}
+                      onChange={(e) => setInlineHabitTitle(e.target.value)}
+                      placeholder={showAddHabitInline === 'habit'
+                        ? t('habits.titlePlaceholder', 'e.g. Meditate daily')
+                        : t('habits.quitTitlePlaceholder', 'e.g. Stop smoking')}
+                      className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm"
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && inlineHabitTitle.trim()) {
+                          try {
+                            await api.createHabit({
+                              title: inlineHabitTitle.trim(),
+                              emoji: inlineHabitEmoji || undefined,
+                              type: showAddHabitInline!,
+                              subgoal_id: selectedSubGoal.id,
+                            });
+                            const updated = await api.getHabitsBySubGoal(selectedSubGoal.id);
+                            setSubGoalHabits(updated);
+                            setInlineHabitTitle('');
+                            setInlineHabitEmoji('');
+                            setShowAddHabitInline(null);
+                          } catch (err) {
+                            setError((err as Error).message);
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!inlineHabitTitle.trim()) return;
+                        try {
+                          await api.createHabit({
+                            title: inlineHabitTitle.trim(),
+                            emoji: inlineHabitEmoji || undefined,
+                            type: showAddHabitInline!,
+                            subgoal_id: selectedSubGoal.id,
+                          });
+                          const updated = await api.getHabitsBySubGoal(selectedSubGoal.id);
+                          setSubGoalHabits(updated);
+                          setInlineHabitTitle('');
+                          setInlineHabitEmoji('');
+                          setShowAddHabitInline(null);
+                        } catch (err) {
+                          setError((err as Error).message);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"
+                    >
+                      {t('common.add', 'Add')}
+                    </button>
+                    <button
+                      onClick={() => { setShowAddHabitInline(null); setInlineHabitTitle(''); setInlineHabitEmoji(''); }}
+                      className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* List of linked habits/quits */}
+              {subGoalHabits.length > 0 ? (
+                <div className="space-y-2">
+                  {subGoalHabits.map((h: any) => (
+                    <div
+                      key={h.id}
+                      className="flex items-center gap-3 p-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800"
+                    >
+                      <span className="text-lg">{h.emoji || (h.type === 'habit' ? '✅' : '🚫')}</span>
+                      <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">{h.title}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        h.type === 'habit'
+                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                          : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300'
+                      }`}>
+                        {h.type === 'habit' ? t('habits.habit', 'Habit') : t('habits.quit', 'Quit')}
+                      </span>
+                      {h.type === 'habit' && h.stats && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          🔥 {h.stats.currentStreak}
+                        </span>
+                      )}
+                      {h.type === 'quit' && h.stats && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {h.stats.elapsedDays}d
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+                  {t('goalGrid.noLinkedHabits', 'No habits or quits linked to this sub-goal yet.')}
+                </p>
+              )}
             </div>
 
             {/* Guestbook for this sub-goal */}

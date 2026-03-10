@@ -28,9 +28,9 @@ export function setupMcpRoutes(app: Express): void {
   app.use(mcpAuthRouter({
     provider,
     issuerUrl,
-    serviceDocumentationUrl: new URL('https://github.com/Jacob-Stokes/xharada'),
+    serviceDocumentationUrl: new URL('https://github.com/Jacob-Stokes/basys'),
     scopesSupported: ['harada'],
-    resourceName: 'Xharada MCP',
+    resourceName: 'Basys MCP',
   }));
 
   // ─── OAuth login callback ──────────────────────────────

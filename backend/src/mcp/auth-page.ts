@@ -24,7 +24,7 @@ export function renderLoginPage(params: LoginPageParams): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign in to Xharada</title>
+  <title>Sign in to Basys</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -98,7 +98,7 @@ export function renderLoginPage(params: LoginPageParams): string {
 </head>
 <body>
   <div class="card">
-    <h1>Sign in to Xharada</h1>
+    <h1>Sign in to Basys</h1>
     <p class="subtitle">Authorize access to your Harada goals</p>
     ${errorHtml}
     <form method="POST" action="/oauth/callback">

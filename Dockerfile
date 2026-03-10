@@ -42,6 +42,10 @@ COPY --from=backend-builder /app/backend/dist ./dist
 # Copy frontend build into public/ for Express to serve
 COPY --from=frontend-builder /app/frontend/dist ./public
 
+RUN mkdir -p /data
+
+ENV DATABASE_URL=file:/data/harada.db
+
 EXPOSE 3001
 
 CMD ["npm", "start"]

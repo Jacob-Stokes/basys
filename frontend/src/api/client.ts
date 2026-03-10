@@ -156,6 +156,33 @@ export const api = {
     method: 'POST',
   }),
 
+  // Habits
+  getHabits: (params?: { type?: string; archived?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.type) query.append('type', params.type);
+    if (params?.archived) query.append('archived', params.archived);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<any[]>(`/api/habits${qs}`);
+  },
+  createHabit: (data: { title: string; emoji?: string; type: string; frequency?: string; quit_date?: string; subgoal_id?: string | null }) =>
+    apiRequest<any>('/api/habits', { method: 'POST', body: JSON.stringify(data) }),
+  updateHabit: (id: string, data: any) =>
+    apiRequest<any>(`/api/habits/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteHabit: (id: string) =>
+    apiRequest<any>(`/api/habits/${id}`, { method: 'DELETE' }),
+  createHabitLog: (habitId: string, data: { log_date: string; note?: string }) =>
+    apiRequest<any>(`/api/habits/${habitId}/logs`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteHabitLog: (habitId: string, logId: string) =>
+    apiRequest<any>(`/api/habits/${habitId}/logs/${logId}`, { method: 'DELETE' }),
+  getHabitsBySubGoal: (subgoalId: string) =>
+    apiRequest<any[]>(`/api/habits/by-subgoal/${subgoalId}`),
+  getHabitCalendar: (habitId: string, year: number, month: number) =>
+    apiRequest<{ loggedDates: string[]; stats: any }>(`/api/habits/${habitId}/calendar?year=${year}&month=${month}`),
+
+  // Sub-goal search (for typeahead)
+  searchSubGoals: (q: string) =>
+    apiRequest<any[]>(`/api/subgoals/search?q=${encodeURIComponent(q)}`),
+
   getSharedGoal: async (token: string) => {
     const response = await fetch(`${API_URL}/api/shared/${token}/goal`);
     const parsed = await response.json();

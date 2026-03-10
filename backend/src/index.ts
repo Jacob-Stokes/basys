@@ -14,6 +14,7 @@ import { requireAuth, optionalAuth, requireAdmin } from './middleware/auth';
 import agentsRouter from './routes/agents';
 import { shareManagementRouter, sharePublicRouter } from './routes/share';
 import etiquetteRouter from './routes/etiquette';
+import habitsRouter from './routes/habits';
 import adminRouter from './routes/admin';
 import { setupMcpRoutes } from './mcp/server';
 
@@ -55,7 +56,7 @@ initDatabase();
 
 // Routes
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Harada Method API is running' });
+  res.json({ status: 'ok', message: 'Basys API is running' });
 });
 
 // Auth routes (no auth required)
@@ -65,7 +66,7 @@ app.use('/api/auth', authRouter);
 app.get('/api', optionalAuth, (req, res) => {
   const username = req.user?.username || 'the authenticated user';
   res.json({
-    name: 'Harada Method API',
+    name: 'Basys API',
     description: `API for ${username}'s Harada Method goal tracking system. The Harada Method is a Japanese goal-setting framework using nested 64-square grids.`,
     owner: username,
     structure: {
@@ -139,6 +140,7 @@ app.use('/api/agents', optionalAuth, agentsRouter);
 app.use('/api/share', requireAuth, shareManagementRouter);
 app.use('/api/shared', sharePublicRouter);
 app.use('/api/etiquette', requireAuth, etiquetteRouter);
+app.use('/api/habits', requireAuth, habitsRouter);
 app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
 
 // Remote MCP endpoint with OAuth (must be before static files/SPA fallback)

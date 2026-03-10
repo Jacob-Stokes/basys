@@ -6,6 +6,32 @@ import { ok, fail, serverError } from '../utils/response';
 
 const router = Router();
 
+// Search sub-goals by title across all user's goals (for typeahead)
+router.get('/search', (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const q = (req.query.q as string || '').trim();
+
+    if (!q || q.length < 1) {
+      return ok(res, []);
+    }
+
+    const likeTerm = `%${q}%`;
+    const results = db.prepare(`
+      SELECT sg.id, sg.title, sg.position, pg.id as goal_id, pg.title as goal_title
+      FROM sub_goals sg
+      JOIN primary_goals pg ON sg.primary_goal_id = pg.id
+      WHERE pg.user_id = ? AND sg.title LIKE ?
+      ORDER BY pg.title ASC, sg.position ASC
+      LIMIT 20
+    `).all(userId, likeTerm);
+
+    ok(res, results);
+  } catch (error) {
+    serverError(res, error);
+  }
+});
+
 // Get specific sub-goal with actions
 router.get('/:subgoalId', (req: Request, res: Response) => {
   try {

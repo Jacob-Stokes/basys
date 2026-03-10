@@ -113,6 +113,14 @@ code {
 .academia .hover\:bg-green-700:hover { background-color: #4d5a30 !important; }
 .academia .hover\:bg-green-600:hover { background-color: #5c6b3c !important; }
 
+/* Emerald/teal — warm sage for habit completion squares */
+.academia .bg-emerald-500 { background-color: #5c6b3c !important; }
+.academia .bg-emerald-600 { background-color: #4d5a30 !important; }
+.academia .text-emerald-600 { color: #5c6b3c !important; }
+
+/* Habit week grid: give unfilled cells a visible warm fill */
+.academia .habit-week-cell.bg-gray-200 { background-color: #e8e6dc !important; }
+
 /* Red/destructive — soften to warm brick */
 .academia .bg-red-600 { background-color: #9e4a4a !important; }
 .academia .bg-red-500 { background-color: #a85454 !important; }
@@ -139,6 +147,8 @@ code {
 .academia.dark .text-blue-400 { color: #c99a9e !important; }
 .academia.dark .bg-green-600 { background-color: #6b7c48 !important; }
 .academia.dark .bg-green-700 { background-color: #5c6b3c !important; }
+.academia.dark .bg-emerald-500 { background-color: #6b7c48 !important; }
+.academia.dark .habit-week-cell.bg-gray-700 { background-color: #353530 !important; }
 .academia.dark .text-green-400 { color: #a3b082 !important; }
 .academia.dark .text-green-300 { color: #b5c09e !important; }
 .academia.dark .bg-green-900\/30 { background-color: rgba(92, 107, 60, 0.3) !important; }

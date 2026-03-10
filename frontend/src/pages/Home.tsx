@@ -1,11 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api, API_URL } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
 import Guestbook from '../components/Guestbook';
 import { useDisplaySettings } from '../context/DisplaySettingsContext';
-import LogoGrid from '../components/LogoGrid';
 
 interface Goal {
   id: string;
@@ -31,11 +30,8 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'archived' | 'all' | 'guestbook'>('active');
   const [openMenuGoalId, setOpenMenuGoalId] = useState<string | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const { settings: displaySettings } = useDisplaySettings();
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     loadGoals();
@@ -73,18 +69,6 @@ export default function Home() {
       loadGoals();
     } catch (err) {
       setError((err as Error).message);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      navigate('/login');
-    } catch (err) {
-      console.error('Logout failed:', err);
     }
   };
 
@@ -176,84 +160,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-      <div className="container mx-auto px-4 sm:px-16 pt-12 pb-8">
-        <header className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <LogoGrid theme={displaySettings.appTheme} />
-            {displaySettings.showHeaderBranding && (
-              <div>
-                <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">Xharada</h1>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">Goal Planning System</p>
-              </div>
-            )}
-          </div>
-          {/* Desktop nav buttons */}
-          <div className="hidden sm:flex gap-3">
-            <button
-              onClick={handleOpenAgentDialog}
-              className="px-4 py-2 text-sm text-blue-600 hover:text-blue-900 border border-blue-200 rounded hover:bg-blue-50"
-            >
-              {t('home.agentLanding')}
-            </button>
-            <Link
-              to="/settings"
-              state={{ from: location.pathname }}
-              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              {t('home.settings')}
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              {t('home.logout')}
-            </button>
-          </div>
-          {/* Mobile burger menu */}
-          <div className="relative sm:hidden">
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {mobileMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
-            {mobileMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setMobileMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 z-20 py-1">
-                  <button
-                    onClick={() => { handleOpenAgentDialog(); setMobileMenuOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                  >
-                    {t('home.agentLanding')}
-                  </button>
-                  <Link
-                    to="/settings"
-                    state={{ from: location.pathname }}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                  >
-                    {t('home.settings')}
-                  </Link>
-                  <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
-                  <button
-                    onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    {t('home.logout')}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </header>
-
+      <div className="container mx-auto px-4 sm:px-16 pt-8 pb-8">
         {error && (
           <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-400 px-4 py-3 rounded mb-4">
             {error}
@@ -261,7 +168,15 @@ export default function Home() {
         )}
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-2xl font-semibold dark:text-gray-100 mb-4">{t('home.createNewGoal')}</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-semibold dark:text-gray-100">{t('home.createNewGoal')}</h2>
+            <button
+              onClick={handleOpenAgentDialog}
+              className="px-3 py-1.5 text-sm text-blue-600 hover:text-blue-900 border border-blue-200 rounded hover:bg-blue-50"
+            >
+              {t('home.agentLanding')}
+            </button>
+          </div>
           <form onSubmit={handleCreateGoal} className="flex gap-4">
             <input
               type="text"

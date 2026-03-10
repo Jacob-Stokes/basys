@@ -1,6 +1,6 @@
 /**
  * OAuth 2.1 provider for the remote MCP endpoint.
- * Authenticates against the existing xharada users table.
+ * Authenticates against the users table.
  */
 
 import { v4 as uuidv4 } from 'uuid';

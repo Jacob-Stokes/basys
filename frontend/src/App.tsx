@@ -1,16 +1,22 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import Dashboard from './pages/Dashboard';
+import Timer from './pages/Timer';
 import Home from './pages/Home';
+import Habits from './pages/Habits';
+import Tasks from './pages/Tasks';
 import GoalGrid from './pages/GoalGrid';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
 import Agents from './pages/Agents';
 import SharedGoalView from './pages/SharedGoalView';
+import NavBar from './components/NavBar';
+import TimerFooter from './components/TimerFooter';
 import { api } from './api/client';
 
 // Protected Route Component
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedRoute({ children }: { children?: React.ReactNode }) {
   const { t } = useTranslation();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
@@ -39,7 +45,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <>{children || <Outlet />}</>;
+}
+
+// Layout with persistent nav bar and timer footer
+function AuthenticatedLayout() {
+  return (
+    <ProtectedRoute>
+      <NavBar />
+      <div className="pb-14">
+        <Outlet />
+      </div>
+      <TimerFooter />
+    </ProtectedRoute>
+  );
 }
 
 function App() {
@@ -47,38 +66,19 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/goal/:goalId"
-          element={
-            <ProtectedRoute>
-              <GoalGrid />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/agents"
-          element={<Agents />}
-        />
-        <Route
-          path="/share/:token"
-          element={<SharedGoalView />}
-        />
+        <Route path="/agents" element={<Agents />} />
+        <Route path="/share/:token" element={<SharedGoalView />} />
+
+        {/* Authenticated routes with persistent nav */}
+        <Route element={<AuthenticatedLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/timer" element={<Timer />} />
+          <Route path="/goals" element={<Home />} />
+          <Route path="/habits" element={<Habits />} />
+          <Route path="/tasks" element={<Tasks />} />
+          <Route path="/goal/:goalId" element={<GoalGrid />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

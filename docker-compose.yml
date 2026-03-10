@@ -1,10 +1,10 @@
 version: '3.8'
 
 services:
-  xharada:
+  basys:
     build: .
     ports:
-      - "3001:3001"
+      - "4000:3001"
     volumes:
       - ./data:/app/data
     environment:
