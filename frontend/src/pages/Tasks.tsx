@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
 import { parseTaskInput, formatParsedPreview } from '../utils/taskParser';
+import Calendar from '../components/Calendar';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -872,6 +873,16 @@ export default function Tasks() {
   const [editingLabel, setEditingLabel] = useState<LabelItem | null | 'new'>(null);
   const [filterLabel, setFilterLabel] = useState<string | null>(null);
 
+  // Calendar state
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const taskDates = useMemo(() => {
+    const set = new Set<string>();
+    tasks.forEach(t => {
+      if (t.due_date && !t.done) set.add(datePart(t.due_date));
+    });
+    return set;
+  }, [tasks]);
+
   // ── Load data ──────────────────────────────────────────────────
 
   const loadTasks = async () => {
@@ -1378,16 +1389,68 @@ export default function Tasks() {
 
         <div className="mt-6" />
 
-        {/* Content card */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-          {loading ? (
-            <div className="py-12 text-center text-gray-400">Loading...</div>
-          ) : (
-            <>
-              {tab === 'overview' && renderOverview()}
-              {tab === 'projects' && renderProjects()}
-              {tab === 'labels' && renderLabels()}
-            </>
+        {/* Main content: tasks + calendar side by side */}
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Tasks — 3/5 */}
+          <div className="w-full lg:w-3/5">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+              {loading ? (
+                <div className="py-12 text-center text-gray-400">Loading...</div>
+              ) : (
+                <>
+                  {tab === 'overview' && renderOverview()}
+                  {tab === 'projects' && renderProjects()}
+                  {tab === 'labels' && renderLabels()}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Calendar — 2/5 */}
+          {tab === 'overview' && (
+            <div className="w-full lg:w-2/5">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 lg:sticky lg:top-8">
+                <Calendar
+                  taskDates={taskDates}
+                  selectedDate={selectedDate}
+                  onDateClick={(date) => setSelectedDate(date === selectedDate ? null : date)}
+                />
+
+                {/* Selected date task summary */}
+                {selectedDate && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h4 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </h4>
+                    {(() => {
+                      const dayTasks = tasks.filter(t => t.due_date && datePart(t.due_date) === selectedDate && !t.done);
+                      if (dayTasks.length === 0) {
+                        return <p className="text-xs text-gray-400 dark:text-gray-500 italic">No tasks</p>;
+                      }
+                      return (
+                        <ul className="space-y-1.5">
+                          {dayTasks.map(t => (
+                            <li
+                              key={t.id}
+                              className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 rounded px-2 py-1 -mx-2 transition-colors"
+                              onClick={() => setEditingTask(t)}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: priorityColor(t.priority) }} />
+                              <span className="text-gray-700 dark:text-gray-300 truncate">{t.title}</span>
+                              {t.due_date && t.due_date.includes('T') && (
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 ml-auto">
+                                  {t.due_date.slice(11, 16)}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
