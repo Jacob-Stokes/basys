@@ -121,7 +121,7 @@ function SubGoalSearchInput({
     return (
       <div className="flex items-center gap-2 px-4 py-2 border border-green-300 dark:border-green-600 rounded-lg bg-green-50 dark:bg-green-900/20">
         <span className="text-sm text-green-700 dark:text-green-400 truncate flex-1">
-          {linkedSubGoal.goal_title} › {linkedSubGoal.title}
+          {linkedSubGoal.goal_title || '(deleted goal)'} › {linkedSubGoal.title || '(deleted sub-goal)'}
         </span>
         <button
           type="button"
@@ -421,7 +421,7 @@ function HabitCard({
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{habit.title}</h3>
             <div className="text-xs text-gray-400 dark:text-gray-500 truncate h-4">
-              {habit.linked_subgoal
+              {(habit.linked_subgoal?.goal_title && habit.linked_subgoal?.title)
                 ? `${habit.linked_subgoal.goal_title} › ${habit.linked_subgoal.title}`
                 : '\u00A0'}
             </div>
@@ -556,7 +556,7 @@ function QuitCard({
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{habit.title}</h3>
             <div className="text-xs text-gray-400 dark:text-gray-500 truncate h-4">
-              {habit.linked_subgoal
+              {(habit.linked_subgoal?.goal_title && habit.linked_subgoal?.title)
                 ? `${habit.linked_subgoal.goal_title} › ${habit.linked_subgoal.title}`
                 : '\u00A0'}
             </div>

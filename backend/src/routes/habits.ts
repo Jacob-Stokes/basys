@@ -168,7 +168,9 @@ router.get('/', (req: Request, res: Response) => {
         type: h.type, frequency: h.frequency, quit_date: h.quit_date,
         subgoal_id: h.subgoal_id, archived: h.archived, position: h.position,
         created_at: h.created_at, updated_at: h.updated_at,
-        linked_subgoal: h.subgoal_id ? {
+        // subgoal_title is null when the linked sub-goal (or its parent goal) has
+        // been deleted — treat as if no link exists rather than returning null titles
+        linked_subgoal: (h.subgoal_id && h.subgoal_title) ? {
           id: h.subgoal_id,
           title: h.subgoal_title,
           position: h.subgoal_position,
