@@ -101,6 +101,9 @@ export const api = {
   // User
   getUserSummary: () => apiRequest<any>('/api/user/summary'),
 
+  // Terminal
+  getTerminalToken: () => apiRequest<{ token: string }>('/api/auth/terminal-token'),
+
   // API Keys
   getApiKeys: () => apiRequest<any[]>('/api/auth/api-keys'),
 

@@ -7,9 +7,27 @@ services:
       - "4000:3001"
     volumes:
       - ./data:/app/data
+      - .:/workspace:ro
     environment:
       - DATABASE_URL=file:/app/data/harada.db
       - NODE_ENV=production
       - PORT=3001
       - SESSION_SECRET=change-me-to-something-secure
+      - TERMINAL_SHARED_SECRET=basys-terminal-secret-change-me
+    restart: unless-stopped
+
+  terminal:
+    build: ./terminal
+    ports:
+      - "4001:4001"
+    volumes:
+      - ~/.claude:/root/.claude
+      - .:/workspace
+      - ./data:/app/data
+    environment:
+      - PORT=4001
+      - TERMINAL_SHARED_SECRET=basys-terminal-secret-change-me
+      - TERMINAL_CWD=/workspace
+    depends_on:
+      - basys
     restart: unless-stopped

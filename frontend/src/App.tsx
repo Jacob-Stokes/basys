@@ -8,6 +8,7 @@ import Habits from './pages/Habits';
 import Tasks from './pages/Tasks';
 import Phonebook from './pages/Phonebook';
 import Journal from './pages/Journal';
+import Terminal from './pages/Terminal';
 import GoalGrid from './pages/GoalGrid';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
@@ -80,6 +81,7 @@ function App() {
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/phonebook" element={<Phonebook />} />
           <Route path="/journal" element={<Journal />} />
+          <Route path="/terminal" element={<Terminal />} />
           <Route path="/goal/:goalId" element={<GoalGrid />} />
           <Route path="/settings" element={<Settings />} />
         </Route>

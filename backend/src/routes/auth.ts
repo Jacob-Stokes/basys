@@ -239,4 +239,23 @@ router.put('/password', requireAuth, (req, res) => {
   }
 });
 
+// Terminal token — return shared secret to authenticated users
+router.get('/terminal-token', requireAuth, (req, res) => {
+  const secret = process.env.TERMINAL_SHARED_SECRET;
+  if (!secret) {
+    return fail(res, 503, 'Terminal service is not configured');
+  }
+  ok(res, { token: secret });
+});
+
+// Terminal token validation — called server-to-server by sidecar (no session auth)
+router.post('/terminal-validate', (req, res) => {
+  const { token } = req.body;
+  const secret = process.env.TERMINAL_SHARED_SECRET;
+  if (!secret || !token || token !== secret) {
+    return fail(res, 401, 'Invalid token');
+  }
+  ok(res, { valid: true });
+});
+
 export default router;

@@ -77,6 +77,9 @@ export default function NavBar() {
           <Link to="/phonebook" className={linkClass('/phonebook')}>
             Phonebook
           </Link>
+          <Link to="/terminal" className={linkClass('/terminal')}>
+            Terminal
+          </Link>
         </div>
 
         {/* Right: username dropdown (desktop) */}
@@ -194,6 +197,13 @@ export default function NavBar() {
                   className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
                 >
                   Phonebook
+                </Link>
+                <Link
+                  to="/terminal"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                >
+                  Terminal
                 </Link>
                 <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
                 <Link
