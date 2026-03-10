@@ -1461,14 +1461,14 @@ export default function Tasks() {
           {/* Calendar — 2/5 */}
           {tab === 'overview' && (
             <div className="w-full lg:w-2/5">
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-5 lg:sticky lg:top-8 lg:mt-[2.45rem]">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-[2.45rem]">
                 {/* Quick add event — above calendar */}
                 <form
                   onSubmit={e => { e.preventDefault(); handleAddEvent(); }}
                   className="mb-4"
                 >
-                  <div className="flex items-center gap-1.5 px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-750 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-shadow">
-                    <svg className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-shadow">
+                    <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                     </svg>
                     <input
@@ -1476,12 +1476,12 @@ export default function Tasks() {
                       value={newEventInput}
                       onChange={e => setNewEventInput(e.target.value)}
                       placeholder="Add event... (@fri 2pm)"
-                      className="flex-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
+                      className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
                     />
                     {newEventInput.trim() && (
                       <button
                         type="submit"
-                        className="text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-medium flex-shrink-0"
+                        className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
                       >
                         Add
                       </button>
