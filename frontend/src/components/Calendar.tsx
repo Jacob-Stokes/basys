@@ -72,7 +72,7 @@ export default function Calendar({ taskDates, eventDateColors, selectedDate, onD
   return (
     <div className="select-none">
       {/* Header: month nav */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-0">
         <button
           onClick={prev}
           className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
