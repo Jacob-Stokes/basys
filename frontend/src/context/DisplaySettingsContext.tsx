@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-export type ViewMode = 'compact' | 'full';
+export type ViewMode = 'list' | 'compact' | 'full';
 export type CenterLayout = 'single' | 'radial';
 export type CenterBackdrop = 'page' | 'card';
 export type AppThemeName = 'default' | 'academia' | 'custom-theme';

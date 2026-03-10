@@ -1004,7 +1004,7 @@ curl -X POST "$API_URL/api/guestbook" \\
                 {t('settings.defaultGoalViewDesc')}
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
-                {(['compact', 'full'] as const).map((mode) => (
+                {(['list', 'compact', 'full'] as const).map((mode) => (
                   <button
                     key={mode}
                     onClick={() => updateDisplaySettings({ defaultView: mode })}
@@ -1016,9 +1016,11 @@ curl -X POST "$API_URL/api/guestbook" \\
                   >
                     <div className="font-medium capitalize">{mode}{t('settings.viewSuffix')}</div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {mode === 'compact'
-                        ? t('settings.compactViewDesc')
-                        : t('settings.fullViewDesc')}
+                      {mode === 'list'
+                        ? t('settings.listViewDesc')
+                        : mode === 'compact'
+                          ? t('settings.compactViewDesc')
+                          : t('settings.fullViewDesc')}
                     </p>
                   </button>
                 ))}

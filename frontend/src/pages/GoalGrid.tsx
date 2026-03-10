@@ -68,11 +68,12 @@ export default function GoalGrid() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [actionLogs, setActionLogs] = useState<ActivityLog[]>([]);
   const { settings: displaySettings } = useDisplaySettings();
-  const [viewMode, setViewMode] = useState<'compact' | 'full'>(displaySettings.defaultView);
+  const [viewMode, setViewMode] = useState<'list' | 'compact' | 'full'>(displaySettings.defaultView);
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [themeEdit, setThemeEdit] = useState<GoalTheme | null>(null);
   const [showGoalMenu, setShowGoalMenu] = useState(false);
   const [gridAspect, setGridAspect] = useState<'square' | 'rectangle'>('square');
+  const [editMode, setEditMode] = useState(false);
   const [selectedSubGoal, setSelectedSubGoal] = useState<SubGoal | null>(null);
   const [showSubGoalModal, setShowSubGoalModal] = useState(false);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
@@ -562,6 +563,16 @@ export default function GoalGrid() {
             {/* View Mode Toggle */}
             <div className="flex flex-wrap gap-2 bg-white dark:bg-gray-800 rounded-lg shadow p-1">
               <button
+                onClick={() => setViewMode('list')}
+                className={`flex-1 sm:flex-none px-4 py-2 rounded transition-colors text-sm ${
+                  viewMode === 'list'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                {t('goalGrid.listView')}
+              </button>
+              <button
                 onClick={() => setViewMode('compact')}
                 className={`flex-1 sm:flex-none px-4 py-2 rounded transition-colors text-sm ${
                   viewMode === 'compact'
@@ -605,6 +616,32 @@ export default function GoalGrid() {
                   }`}
                 >
                   {t('goalGrid.rectangle')}
+                </button>
+              </div>
+            )}
+
+            {/* View / Edit Toggle (only show in full mode) */}
+            {viewMode === 'full' && (
+              <div className="flex flex-wrap gap-2 bg-white dark:bg-gray-800 rounded-lg shadow p-1">
+                <button
+                  onClick={() => setEditMode(false)}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded transition-colors text-sm ${
+                    !editMode
+                      ? 'bg-violet-600 text-white'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {t('goalGrid.view')}
+                </button>
+                <button
+                  onClick={() => setEditMode(true)}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded transition-colors text-sm ${
+                    editMode
+                      ? 'bg-violet-600 text-white'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {t('goalGrid.edit')}
                 </button>
               </div>
             )}
@@ -701,10 +738,67 @@ export default function GoalGrid() {
                 onActionDragStart={handleActionDragStart}
                 onActionDrop={handleActionDrop}
                 onActionDragEnd={handleActionDragEnd}
+                editMode={editMode}
               />
             </div>
 
             {/* Guestbook for this goal in full view */}
+            <div className="mt-8 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
+              <Guestbook targetType="goal" targetId={goal.id} />
+            </div>
+          </>
+        ) : viewMode === 'list' ? (
+          <>
+            {/* List View — clean indented hierarchy */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg py-6 px-4 md:px-8">
+              <ul className="space-y-5">
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((pos) => {
+                  const sg = goal.subGoals.find((s) => s.position === pos);
+                  if (!sg) return null;
+                  const color = effectiveColors[pos] || DEFAULT_FALLBACK_COLOR;
+                  return (
+                    <li key={sg.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleSubGoalClick(sg)}
+                        className="flex items-center gap-2.5 group text-left w-full"
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0 mt-0.5"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="font-medium text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          {sg.title}
+                        </span>
+                      </button>
+                      {sg.actions.length > 0 && (
+                        <ul className="mt-1.5 ml-[18px] space-y-0.5">
+                          {sg.actions
+                            .slice()
+                            .sort((a, b) => a.position - b.position)
+                            .map((action) => (
+                              <li key={action.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleActionClick(action)}
+                                  className="flex items-center gap-2 py-1 text-left w-full group"
+                                >
+                                  <span className="text-gray-300 dark:text-gray-600 text-xs select-none">&#8211;</span>
+                                  <span className="text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200 transition-colors">
+                                    {action.title}
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            {/* Guestbook for this goal */}
             <div className="mt-8 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
               <Guestbook targetType="goal" targetId={goal.id} />
             </div>
