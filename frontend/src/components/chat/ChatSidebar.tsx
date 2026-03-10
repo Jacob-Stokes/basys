@@ -29,10 +29,15 @@ export default function ChatSidebar() {
   const [showList, setShowList] = useState(false);
   const [creatingConv, setCreatingConv] = useState(false);
 
-  // Load conversations when sidebar opens
+  // Load conversations when sidebar opens; auto-select latest if none active
   useEffect(() => {
     if (!isOpen) return;
-    api.listConversations().then(setConversations).catch(() => {});
+    api.listConversations().then(convs => {
+      setConversations(convs);
+      if (!activeConversationId && convs.length > 0) {
+        setActiveConversationId(convs[0].id);
+      }
+    }).catch(() => {});
   }, [isOpen]);
 
   // Load messages when active conversation changes (handles selecting from list)
@@ -109,8 +114,12 @@ export default function ChatSidebar() {
           m.id === assistantId ? { ...m, content: m.content + text } : m
         ));
       },
-      // onToolUse
+      // onToolUse — also trigger side effects (e.g. start timer when agent creates a pomodoro)
       (tool: ToolCall) => {
+        if ((tool.name === 'manage_pomodoro' || tool.name === 'mcp__basys__manage_pomodoro') && tool.input?.action === 'create') {
+          const minutes = tool.input?.duration_minutes ?? 25;
+          window.dispatchEvent(new CustomEvent('basys:timer-start', { detail: { duration_minutes: minutes } }));
+        }
         setMessages(prev => prev.map(m =>
           m.id === assistantId ? { ...m, toolCalls: [...(m.toolCalls || []), tool] } : m
         ));

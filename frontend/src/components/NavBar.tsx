@@ -35,9 +35,8 @@ export default function NavBar() {
   };
 
   const isActive = (path: string) => {
-    if (path === '/goals') {
-      return location.pathname === '/goals' || location.pathname.startsWith('/goal/');
-    }
+    if (path === '/') return location.pathname === '/';
+    if (path === '/goals') return location.pathname === '/goals' || location.pathname.startsWith('/goal/');
     return location.pathname === path;
   };
 
@@ -59,7 +58,7 @@ export default function NavBar() {
         {/* Center: nav links (desktop) */}
         <div className="hidden sm:flex items-center gap-1">
           <Link to="/" className={linkClass('/')}>
-            Home
+            Todo
           </Link>
           <Link to="/timer" className={linkClass('/timer')}>
             Pomo
@@ -69,9 +68,6 @@ export default function NavBar() {
           </Link>
           <Link to="/habits" className={linkClass('/habits')}>
             Habits
-          </Link>
-          <Link to="/tasks" className={linkClass('/tasks')}>
-            Todo
           </Link>
           <Link to="/journal" className={linkClass('/journal')}>
             Journal
@@ -185,7 +181,7 @@ export default function NavBar() {
                   onClick={() => setMobileMenuOpen(false)}
                   className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
                 >
-                  Home
+                  Todo
                 </Link>
                 <Link
                   to="/timer"
@@ -207,13 +203,6 @@ export default function NavBar() {
                   className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
                 >
                   Habits
-                </Link>
-                <Link
-                  to="/tasks"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  Todo
                 </Link>
                 <Link
                   to="/journal"

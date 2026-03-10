@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import Dashboard from './pages/Dashboard';
 import Timer from './pages/Timer';
 import Home from './pages/Home';
 import Habits from './pages/Habits';
@@ -101,11 +100,11 @@ function App() {
 
         {/* Authenticated routes with persistent nav */}
         <Route element={<AuthenticatedLayout />}>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Tasks />} />
+          <Route path="/tasks" element={<Navigate to="/" replace />} />
           <Route path="/timer" element={<Timer />} />
           <Route path="/goals" element={<Home />} />
           <Route path="/habits" element={<Habits />} />
-          <Route path="/tasks" element={<Tasks />} />
           <Route path="/phonebook" element={<Phonebook />} />
           <Route path="/journal" element={<Journal />} />
           <Route path="/terminal" element={<Terminal />} />

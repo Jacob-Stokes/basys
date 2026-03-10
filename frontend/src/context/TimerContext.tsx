@@ -30,12 +30,45 @@ export const MODE_COLORS: Record<TimerMode, string> = {
 };
 
 const STORAGE_KEY = 'basys-pomo-history';
+const TIMER_STATE_KEY = 'basys-pomo-timer';
+
+interface PersistedTimerState {
+  mode: TimerMode;
+  startedAt: number;   // Date.now() when timer was started
+  totalSeconds: number; // total duration in seconds
+}
 
 // ── Helpers ────────────────────────────────────────────────────────
 export function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function saveTimerState(state: PersistedTimerState | null): void {
+  if (state) {
+    localStorage.setItem(TIMER_STATE_KEY, JSON.stringify(state));
+  } else {
+    localStorage.removeItem(TIMER_STATE_KEY);
+  }
+}
+
+function loadTimerState(): { mode: TimerMode; timeLeft: number; running: boolean } {
+  try {
+    const raw = localStorage.getItem(TIMER_STATE_KEY);
+    if (!raw) return { mode: 'pomodoro', timeLeft: DURATIONS.pomodoro, running: false };
+    const state: PersistedTimerState = JSON.parse(raw);
+    const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
+    const timeLeft = Math.max(0, state.totalSeconds - elapsed);
+    // If timer already expired while away, don't resume it
+    if (timeLeft <= 0) {
+      localStorage.removeItem(TIMER_STATE_KEY);
+      return { mode: state.mode, timeLeft: DURATIONS[state.mode], running: false };
+    }
+    return { mode: state.mode, timeLeft, running: true };
+  } catch {
+    return { mode: 'pomodoro', timeLeft: DURATIONS.pomodoro, running: false };
+  }
 }
 
 function loadHistory(): HistoryEntry[] {
@@ -72,9 +105,10 @@ const TimerContext = createContext<TimerContextValue | null>(null);
 
 // ── Provider ───────────────────────────────────────────────────────
 export function TimerProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<TimerMode>('pomodoro');
-  const [timeLeft, setTimeLeft] = useState(DURATIONS.pomodoro);
-  const [running, setRunning] = useState(false);
+  const initial = loadTimerState();
+  const [mode, setMode] = useState<TimerMode>(initial.mode);
+  const [timeLeft, setTimeLeft] = useState(initial.timeLeft);
+  const [running, setRunning] = useState(initial.running);
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
 
   const startTimeRef = useRef<number | null>(null);
@@ -115,6 +149,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const totalAtStart = timeLeft;
     const currentMode = modeRef.current;
 
+    // Persist running state so page refresh can resume
+    saveTimerState({ mode: currentMode, startedAt: startTimeRef.current, totalSeconds: totalAtStart });
+
     intervalRef.current = setInterval(() => {
       if (startTimeRef.current === null) return;
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -125,6 +162,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       if (remaining <= 0) {
         stopInterval();
         setRunning(false);
+        saveTimerState(null);
         addHistoryEntry(currentMode, DURATIONS[currentMode]);
       }
     }, 250);
@@ -144,6 +182,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const stop = useCallback(() => {
     setRunning(false);
     stopInterval();
+    saveTimerState(null);
     addHistoryEntry(modeRef.current, elapsedRef.current);
     elapsedRef.current = 0;
   }, [stopInterval, addHistoryEntry]);
@@ -151,6 +190,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => {
     setRunning(false);
     stopInterval();
+    saveTimerState(null);
     setTimeLeft(DURATIONS[modeRef.current]);
     elapsedRef.current = 0;
   }, [stopInterval]);
@@ -161,6 +201,23 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     setTimeLeft(DURATIONS[newMode]);
     elapsedRef.current = 0;
   }, [running]);
+
+  // Listen for agent-initiated timer starts (e.g. from chat sidebar tool use)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const minutes = (e as CustomEvent).detail?.duration_minutes ?? 25;
+      const newMode: TimerMode = 'pomodoro';
+      const totalSeconds = minutes * 60;
+      setMode(newMode);
+      modeRef.current = newMode;
+      setTimeLeft(totalSeconds);
+      elapsedRef.current = 0;
+      saveTimerState({ mode: newMode, startedAt: Date.now(), totalSeconds });
+      setRunning(true);
+    };
+    window.addEventListener('basys:timer-start', handler);
+    return () => window.removeEventListener('basys:timer-start', handler);
+  }, []);
 
   return (
     <TimerContext.Provider value={{ mode, timeLeft, running, history, start, stop, reset, switchMode }}>

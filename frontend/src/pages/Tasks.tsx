@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
+import { parseTaskInput, formatParsedPreview } from '../utils/taskParser';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ interface TaskItem {
   due_date: string | null;
   priority: number;
   is_favorite: number;
+  repeat_after: number;
+  repeat_mode: number;
   project_id: string | null;
   project: { id: string; title: string; hex_color: string } | null;
   labels: LabelItem[];
@@ -54,23 +57,39 @@ function todayStr() {
   return new Date().toISOString().split('T')[0];
 }
 
+// Extract just the YYYY-MM-DD part from a due_date (handles both date-only and datetime strings)
+function datePart(due: string): string {
+  return due.slice(0, 10);
+}
+
+// Parse a due_date string correctly whether it has a time component or not
+function parseDue(due: string): Date {
+  // date-only strings like "2026-03-11" must be parsed as local time, not UTC
+  return due.includes('T') ? new Date(due) : new Date(due + 'T00:00:00');
+}
+
 function relativeDue(due: string): string {
-  const today = new Date(todayStr());
-  const d = new Date(due);
-  const diff = Math.floor((d.getTime() - today.getTime()) / 86400000);
-  if (diff < 0) return `${Math.abs(diff)}d overdue`;
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff <= 7) return `${diff}d`;
-  return due;
+  const today = new Date(todayStr() + 'T00:00:00');
+  const d = parseDue(due);
+  const todayDate = datePart(due) === todayStr();
+  const diff = Math.floor((new Date(datePart(due) + 'T00:00:00').getTime() - today.getTime()) / 86400000);
+  const timeStr = due.includes('T')
+    ? ' ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : '';
+  if (diff < 0) return `${Math.abs(diff)}d overdue${timeStr}`;
+  if (diff === 0) return `Today${timeStr}`;
+  if (diff === 1) return `Tomorrow${timeStr}`;
+  if (diff <= 7) return `${diff}d${timeStr}`;
+  if (todayDate) return `Today${timeStr}`;
+  return datePart(due) + timeStr;
 }
 
 function priorityColor(p: number): string {
-  if (p >= 4) return 'bg-red-500';
-  if (p === 3) return 'bg-orange-500';
-  if (p === 2) return 'bg-blue-500';
-  if (p === 1) return 'bg-gray-400';
-  return 'bg-transparent';
+  if (p >= 4) return '#ef4444'; // red-500
+  if (p === 3) return '#f97316'; // orange-500
+  if (p === 2) return '#3b82f6'; // blue-500
+  if (p === 1) return '#9ca3af'; // gray-400
+  return 'transparent';
 }
 
 function priorityLabel(p: number): string {
@@ -100,6 +119,107 @@ function LabelPill({ label, small }: { label: LabelItem; small?: boolean }) {
   );
 }
 
+// ── SyntaxHintModal ────────────────────────────────────────────────
+
+function SyntaxHintModal({ onClose }: { onClose: () => void }) {
+  const sections = [
+    {
+      title: 'Due date & time',
+      color: 'text-blue-600 dark:text-blue-400',
+      rows: [
+        ['@today', 'Today'],
+        ['@tomorrow / @tmr', 'Tomorrow'],
+        ['@monday / @fri', 'Next weekday occurrence'],
+        ['@next week / @next month', '+7 days / +1 month'],
+        ['@in 3 days / @3d', '3 days from now'],
+        ['@in 2 weeks / @2w', '2 weeks from now'],
+        ['@end of week / @eow', 'Next Friday'],
+        ['@end of month / @eom', 'Last day of month'],
+        ['@Jan 5 / @jan5 / @5 jan', 'Jan 5 (this or next year)'],
+        ['@Jan 5 2027', 'Jan 5, 2027'],
+        ['@3/15', 'March 15 (M/D)'],
+        ['@2026-03-15', 'ISO date'],
+        ['@3pm / @9:30 / @14:00', 'Today at that time'],
+        ['@tomorrow 3pm', 'Date + time'],
+        ['@monday at 9:30am', 'Weekday + time'],
+        ['@noon / @midnight', 'Today at noon / midnight'],
+      ],
+    },
+    {
+      title: 'Priority',
+      color: 'text-orange-600 dark:text-orange-400',
+      rows: [
+        ['!1 / !low', 'Low priority'],
+        ['!2 / !medium', 'Medium priority'],
+        ['!3 / !high', 'High priority'],
+        ['!4 / !urgent', 'Urgent'],
+      ],
+    },
+    {
+      title: 'Project',
+      color: 'text-green-600 dark:text-green-400',
+      rows: [
+        ['#Work', 'Assign to project "Work"'],
+        ['#"My Project"', 'Multi-word project name'],
+      ],
+    },
+    {
+      title: 'Labels',
+      color: 'text-purple-600 dark:text-purple-400',
+      rows: [
+        ['~bug', 'Add label "bug"'],
+        ['~"in progress"', 'Multi-word label'],
+        ['~bug ~urgent', 'Multiple labels'],
+      ],
+    },
+    {
+      title: 'Repeating',
+      color: 'text-teal-600 dark:text-teal-400',
+      rows: [
+        ['every day', 'Repeat daily'],
+        ['every 3 days', 'Every 3 days'],
+        ['every week', 'Repeat weekly'],
+        ['every 2 weeks', 'Every 2 weeks'],
+        ['every month', 'Repeat monthly'],
+        ['every year', 'Repeat yearly'],
+      ],
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Smart task syntax</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-5">
+          {sections.map(s => (
+            <div key={s.title}>
+              <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${s.color}`}>{s.title}</h3>
+              <table className="w-full text-sm">
+                <tbody>
+                  {s.rows.map(([syntax, desc]) => (
+                    <tr key={syntax} className="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
+                      <td className="py-1.5 pr-4 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap">{syntax}</td>
+                      <td className="py-1.5 text-gray-500 dark:text-gray-400">{desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+          <p className="text-xs text-gray-400 dark:text-gray-500 pt-1">Combine any tokens: <span className="font-mono">Buy milk @tomorrow 9am !2 #Errands ~shopping</span></p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── QuickAddBar (shared between overview + project detail) ─────────
 
 function QuickAddBar({ value, onChange, onSubmit, placeholder, inputRef }: {
@@ -109,8 +229,13 @@ function QuickAddBar({ value, onChange, onSubmit, placeholder, inputRef }: {
   placeholder?: string;
   inputRef?: React.Ref<HTMLInputElement>;
 }) {
+  const [showHint, setShowHint] = useState(false);
+  const parsed = value.trim() ? parseTaskInput(value) : null;
+  const preview = parsed ? formatParsedPreview(parsed) : [];
+
   return (
     <div className="px-3 py-3">
+      {showHint && <SyntaxHintModal onClose={() => setShowHint(false)} />}
       <form
         onSubmit={e => { e.preventDefault(); onSubmit(); }}
         className="flex gap-3"
@@ -124,9 +249,28 @@ function QuickAddBar({ value, onChange, onSubmit, placeholder, inputRef }: {
             type="text"
             value={value}
             onChange={e => onChange(e.target.value)}
-            placeholder={placeholder || 'Add a task...'}
+            placeholder={placeholder || 'Add a task... (@tomorrow, !2, #Project, ~label)'}
             className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
           />
+          {preview.length > 0 && (
+            <div className="flex items-center gap-1 shrink-0">
+              {preview.map((p, i) => (
+                <span key={i} className="px-1.5 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium">
+                  {p}
+                </span>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowHint(true)}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0"
+            title="Syntax help"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+            </svg>
+          </button>
         </div>
         {value.trim() && (
           <button
@@ -151,7 +295,7 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite }: {
   onToggleFavorite: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const isOverdue = task.due_date && !task.done && task.due_date < todayStr();
+  const isOverdue = task.due_date && !task.done && datePart(task.due_date) < todayStr();
 
   return (
     <div className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 group ${task.done ? 'opacity-60' : ''}`}>
@@ -164,7 +308,7 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite }: {
             : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
         }`}
       >
-        {task.done && (
+        {!!task.done && (
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
           </svg>
@@ -173,7 +317,7 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite }: {
 
       {/* Priority dot */}
       {task.priority > 0 && (
-        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${priorityColor(task.priority)}`} title={priorityLabel(task.priority)} />
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: priorityColor(task.priority) }} title={priorityLabel(task.priority)} />
       )}
 
       {/* Title + details */}
@@ -186,6 +330,9 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite }: {
             <span className={`text-xs ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
               {relativeDue(task.due_date)}
             </span>
+          )}
+          {task.repeat_after > 0 && (
+            <span className="text-xs text-teal-500 dark:text-teal-400" title="Repeating task">↻</span>
           )}
           {task.project && (
             <span
@@ -255,8 +402,15 @@ function TaskEditModal({ task, projects, labels, onSave, onClose }: {
 }) {
   const [title, setTitle] = useState(task?.title || '');
   const [description, setDescription] = useState(task?.description || '');
-  const [dueDate, setDueDate] = useState(task?.due_date || '');
+  // datetime-local input needs value in "YYYY-MM-DDTHH:MM" format
+  const toInputVal = (v: string) => {
+    if (!v) return '';
+    if (v.includes('T')) return v.slice(0, 16); // trim seconds
+    return v + 'T00:00'; // date-only → add midnight
+  };
+  const [dueDate, setDueDate] = useState(toInputVal(task?.due_date || ''));
   const [priority, setPriority] = useState(task?.priority || 0);
+  const [repeatAfter, setRepeatAfter] = useState(task?.repeat_after || 0);
   const [projectId, setProjectId] = useState(task?.project_id || '');
   const [selectedLabels, setSelectedLabels] = useState<string[]>(task?.labels.map(l => l.id) || []);
 
@@ -331,6 +485,8 @@ function TaskEditModal({ task, projects, labels, onSave, onClose }: {
       description: description || null,
       due_date: dueDate || null,
       priority,
+      repeat_after: repeatAfter,
+      repeat_mode: 0,
       project_id: projectId || null,
       labels: selectedLabels,
       links: selectedLinks.map(l => ({ target_type: l.target_type, target_id: l.target_id })),
@@ -372,9 +528,9 @@ function TaskEditModal({ task, projects, labels, onSave, onClose }: {
           {/* Due date + Priority row */}
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Due date</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Due date & time</label>
               <input
-                type="date"
+                type="datetime-local"
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
@@ -394,6 +550,26 @@ function TaskEditModal({ task, projects, labels, onSave, onClose }: {
                 <option value={4}>Urgent</option>
               </select>
             </div>
+          </div>
+
+          {/* Repeat */}
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Repeat</label>
+            <select
+              value={repeatAfter}
+              onChange={e => setRepeatAfter(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+            >
+              <option value={0}>No repeat</option>
+              <option value={3600}>Every hour</option>
+              <option value={86400}>Every day</option>
+              <option value={259200}>Every 3 days</option>
+              <option value={604800}>Every week</option>
+              <option value={1209600}>Every 2 weeks</option>
+              <option value={2592000}>Every month</option>
+              <option value={7776000}>Every 3 months</option>
+              <option value={31536000}>Every year</option>
+            </select>
           </div>
 
           {/* Project */}
@@ -757,7 +933,36 @@ export default function Tasks() {
   const handleQuickAdd = async () => {
     if (!quickAdd.trim()) return;
     try {
-      await api.createTask({ title: quickAdd.trim(), project_id: activeProject || undefined });
+      const parsed = parseTaskInput(quickAdd);
+
+      // Resolve project hint → project id (fuzzy match, case-insensitive)
+      let resolvedProjectId: string | undefined = activeProject || undefined;
+      if (parsed.projectHint) {
+        const hint = parsed.projectHint.toLowerCase();
+        const match = projects.find(p => p.title.toLowerCase().includes(hint));
+        if (match) resolvedProjectId = match.id;
+      }
+
+      const task = await api.createTask({
+        title: parsed.title,
+        project_id: resolvedProjectId,
+        due_date: parsed.due_date || undefined,
+        priority: parsed.priority ?? undefined,
+        repeat_after: parsed.repeat_after ?? undefined,
+        repeat_mode: parsed.repeat_after ? parsed.repeat_mode : undefined,
+      });
+
+      // Attach labels by hint
+      if (parsed.labelHints.length > 0) {
+        for (const hint of parsed.labelHints) {
+          const h = hint.toLowerCase();
+          const match = labels.find(l => l.title.toLowerCase().includes(h));
+          if (match) {
+            await api.addTaskLabel(task.id, match.id).catch(() => {});
+          }
+        }
+      }
+
       setQuickAdd('');
       loadTasks();
       if (activeProject) loadProjectDetail(activeProject);
@@ -856,11 +1061,12 @@ export default function Tasks() {
       ? tasks.filter(t => !t.done || (t.done && t.done_at && t.done_at.startsWith(today)))
       : tasks;
 
-    // Group tasks by due status
-    const overdue = visibleTasks.filter(t => t.due_date && t.due_date < today && !t.done);
-    const dueToday = visibleTasks.filter(t => t.due_date === today && !t.done);
-    const upcoming = visibleTasks.filter(t => t.due_date && t.due_date > today && !t.done);
-    const noDue = visibleTasks.filter(t => !t.due_date && !t.done);
+    // Group tasks by due status, sorted by priority descending within each group
+    const byPriority = (a: TaskItem, b: TaskItem) => (b.priority ?? 0) - (a.priority ?? 0);
+    const overdue = visibleTasks.filter(t => t.due_date && datePart(t.due_date) < today && !t.done).sort(byPriority);
+    const dueToday = visibleTasks.filter(t => t.due_date && datePart(t.due_date) === today && !t.done).sort(byPriority);
+    const upcoming = visibleTasks.filter(t => t.due_date && datePart(t.due_date) > today && !t.done).sort(byPriority);
+    const noDue = visibleTasks.filter(t => !t.due_date && !t.done).sort(byPriority);
     const doneToday = visibleTasks.filter(t => t.done && t.done_at && t.done_at.startsWith(today));
     const done = visibleTasks.filter(t => t.done);
 

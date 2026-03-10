@@ -140,7 +140,7 @@ router.get('/', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, bucket_id, labels, links } = req.body;
+    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, bucket_id, repeat_after, repeat_mode, labels, links } = req.body;
     if (!title?.trim()) return fail(res, 400, 'Title is required');
 
     if (project_id) {
@@ -152,11 +152,12 @@ router.post('/', (req: Request, res: Response) => {
     const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO tasks (id, user_id, project_id, title, description, due_date, start_date, end_date,
-        priority, hex_color, bucket_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        priority, hex_color, bucket_id, repeat_after, repeat_mode, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, userId, project_id || null, title.trim(), description || null,
       due_date || null, start_date || null, end_date || null,
-      priority || 0, hex_color || '', bucket_id || null, now, now);
+      priority || 0, hex_color || '', bucket_id || null,
+      repeat_after || 0, repeat_mode || 0, now, now);
 
     // Attach labels if provided
     if (labels && Array.isArray(labels)) {
@@ -212,7 +213,7 @@ router.put('/:id', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(id, userId) as any;
     if (!existing) return fail(res, 404, 'Task not found');
 
-    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, percent_done, position, bucket_id, labels, links } = req.body;
+    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, percent_done, position, bucket_id, repeat_after, repeat_mode, labels, links } = req.body;
 
     const now = new Date().toISOString();
     db.prepare(`
@@ -228,6 +229,8 @@ router.put('/:id', (req: Request, res: Response) => {
         percent_done = COALESCE(?, percent_done),
         position = COALESCE(?, position),
         bucket_id = ?,
+        repeat_after = COALESCE(?, repeat_after),
+        repeat_mode = COALESCE(?, repeat_mode),
         updated_at = ?
       WHERE id = ?
     `).run(
@@ -242,6 +245,8 @@ router.put('/:id', (req: Request, res: Response) => {
       percent_done !== undefined ? percent_done : null,
       position !== undefined ? position : null,
       bucket_id !== undefined ? bucket_id : existing.bucket_id,
+      repeat_after !== undefined ? repeat_after : null,
+      repeat_mode !== undefined ? repeat_mode : null,
       now, id
     );
 
@@ -299,6 +304,17 @@ router.patch('/:id/done', (req: Request, res: Response) => {
 
     const now = new Date().toISOString();
     const newDone = existing.done ? 0 : 1;
+
+    // If marking done and task has repeat_after, reschedule instead of completing
+    if (newDone && existing.repeat_after > 0) {
+      const baseDate = existing.due_date ? new Date(existing.due_date) : new Date();
+      const nextDate = new Date(baseDate.getTime() + existing.repeat_after * 1000);
+      const nextDue = nextDate.toISOString().slice(0, 19); // YYYY-MM-DDTHH:MM:SS
+      db.prepare('UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?').run(nextDue, now, id);
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+      return ok(res, task);
+    }
+
     db.prepare('UPDATE tasks SET done = ?, done_at = ?, updated_at = ? WHERE id = ?')
       .run(newDone, newDone ? now : null, now, id);
 
