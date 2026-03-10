@@ -1461,7 +1461,7 @@ export default function Tasks() {
           {/* Calendar — 2/5 */}
           {tab === 'overview' && (
             <div className="w-full lg:w-2/5">
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-[2.45rem]">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-[0.5rem]">
                 {/* Quick add event — above calendar */}
                 <form
                   onSubmit={e => { e.preventDefault(); handleAddEvent(); }}
