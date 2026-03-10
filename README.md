@@ -31,6 +31,8 @@ docker compose up --build -d
 
 Visit http://localhost:4000, register an account, and start tracking your goals, tasks, and habits.
 
+> **Note:** The main `basys` image is published to `ghcr.io/jacob-stokes/basys:latest` and pulled automatically. The `terminal` service is **built locally** from `./terminal` — this is intentional since it bundles the Claude Code CLI and requires your local `~/.claude` credentials anyway.
+
 The default `docker-compose.yml` runs two services:
 
 | Service | Port | Purpose |
