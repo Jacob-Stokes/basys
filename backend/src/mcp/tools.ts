@@ -645,15 +645,23 @@ export function createMcpServer(): McpServer {
   // ─── manage_task ──────────────────────────────────────────
 
   server.registerTool('manage_task', {
-    description: 'List, create, update, delete tasks, or toggle done/favorite. Supports filtering by project, label, priority, due date, and search. Create/update accepts labels (array of label IDs) and links (array of {target_type, target_id}).',
+    description: 'List, create, update, delete tasks, or toggle done/favorite. Supports filtering by project, sprint, label, priority, due date, and search. Create/update accepts labels (array of label IDs) and links (array of {target_type, target_id}).',
     inputSchema: {
       action: z.enum(['list', 'create', 'update', 'delete', 'toggle_done', 'toggle_favorite']).describe('Operation to perform'),
       taskId: z.string().optional().describe('Task ID (required for update/delete/toggle)'),
       title: z.string().optional().describe('Task title (required for create)'),
       description: z.string().optional(),
       project_id: z.string().optional().describe('Project ID to assign task to'),
+      sprint_id: z.string().optional().describe('Sprint ID to assign task to'),
+      bucket_id: z.string().optional().describe('Bucket/column ID within a sprint'),
       priority: z.number().optional().describe('Priority: 0=none, 1=low, 2=medium, 3=high, 4=urgent'),
       due_date: z.string().optional().describe('Due date (ISO format)'),
+      start_date: z.string().optional().describe('Start date (ISO format)'),
+      end_date: z.string().optional().describe('End date (ISO format)'),
+      assignee_name: z.string().optional().describe('Assignee display name'),
+      task_type: z.string().optional().describe('Task type (e.g. task, bug, feature, story)'),
+      hex_color: z.string().optional().describe('Color hex code for the task'),
+      percent_done: z.number().optional().describe('Completion percentage (0-100)'),
       labels: z.array(z.string()).optional().describe('Array of label IDs to assign'),
       links: z.array(z.object({
         target_type: z.enum(['goal', 'subgoal', 'habit', 'pomodoro']),
@@ -663,26 +671,40 @@ export function createMcpServer(): McpServer {
       filter_done: z.boolean().optional().describe('Filter by completion status'),
       filter_priority: z.number().optional().describe('Filter by priority level'),
       filter_project: z.string().optional().describe('Filter by project ID'),
+      filter_sprint: z.string().optional().describe('Filter by sprint ID'),
       filter_label: z.string().optional().describe('Filter by label ID'),
       filter_favorite: z.boolean().optional().describe('Filter favorites only'),
+      filter_project_type: z.string().optional().describe('Filter by project type (e.g. dev, personal)'),
+      filter_exclude_types: z.string().optional().describe('Comma-separated project types to exclude (e.g. "dev,work")'),
       search: z.string().optional().describe('Search tasks by title'),
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
 
     if (args.action === 'list') {
-      let sql = `SELECT t.*, p.title as project_title, p.hex_color as project_color
+      let sql = `SELECT t.*, p.title as project_title, p.hex_color as project_color, p.type as project_type
         FROM tasks t LEFT JOIN projects p ON t.project_id = p.id WHERE t.user_id = ?`;
       const params: any[] = [userId];
 
       if (args.filter_done !== undefined) { sql += ' AND t.done = ?'; params.push(args.filter_done ? 1 : 0); }
       if (args.filter_priority !== undefined) { sql += ' AND t.priority = ?'; params.push(args.filter_priority); }
       if (args.filter_project) { sql += ' AND t.project_id = ?'; params.push(args.filter_project); }
+      if (args.filter_sprint) { sql += ' AND t.sprint_id = ?'; params.push(args.filter_sprint); }
       if (args.filter_favorite) { sql += ' AND t.is_favorite = 1'; }
       if (args.search) { sql += ' AND t.title LIKE ?'; params.push(`%${args.search}%`); }
       if (args.filter_label) {
         sql += ' AND t.id IN (SELECT task_id FROM task_labels WHERE label_id = ?)';
         params.push(args.filter_label);
+      }
+      if (args.filter_project_type) {
+        sql += ' AND p.type = ?'; params.push(args.filter_project_type);
+      }
+      if (args.filter_exclude_types) {
+        const types = args.filter_exclude_types.split(',').map((t: string) => t.trim()).filter(Boolean);
+        if (types.length) {
+          sql += ` AND (p.type IS NULL OR p.type NOT IN (${types.map(() => '?').join(',')}))`;
+          params.push(...types);
+        }
       }
       sql += ' ORDER BY t.done ASC, t.priority DESC, t.due_date ASC NULLS LAST, t.created_at DESC';
 
@@ -700,8 +722,11 @@ export function createMcpServer(): McpServer {
     if (args.action === 'create') {
       if (!args.title) throw new Error('title is required');
       const id = uuidv4();
-      db.prepare('INSERT INTO tasks (id, user_id, title, description, project_id, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(id, userId, args.title, args.description || null, args.project_id || null, args.priority || 0, args.due_date || null);
+      db.prepare(`INSERT INTO tasks (id, user_id, title, description, project_id, sprint_id, bucket_id, priority, due_date, start_date, end_date, assignee_name, task_type, hex_color, percent_done)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, userId, args.title, args.description || null, args.project_id || null, args.sprint_id || null, args.bucket_id || null,
+          args.priority || 0, args.due_date || null, args.start_date || null, args.end_date || null,
+          args.assignee_name || null, args.task_type || null, args.hex_color || null, args.percent_done || 0);
       // Labels
       if (args.labels?.length) {
         const ins = db.prepare('INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)');
@@ -720,13 +745,22 @@ export function createMcpServer(): McpServer {
       if (!args.taskId) throw new Error('taskId is required for update');
       const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
       if (!existing) throw new Error('Task not found or access denied');
-      db.prepare(`UPDATE tasks SET title = ?, description = ?, project_id = ?, priority = ?, due_date = ?, updated_at = datetime('now') WHERE id = ?`)
+      db.prepare(`UPDATE tasks SET title = ?, description = ?, project_id = ?, sprint_id = ?, bucket_id = ?, priority = ?, due_date = ?,
+        start_date = ?, end_date = ?, assignee_name = ?, task_type = ?, hex_color = ?, percent_done = ?, updated_at = datetime('now') WHERE id = ?`)
         .run(
           args.title ?? existing.title,
           args.description ?? existing.description,
           args.project_id !== undefined ? (args.project_id || null) : existing.project_id,
+          args.sprint_id !== undefined ? (args.sprint_id || null) : existing.sprint_id,
+          args.bucket_id !== undefined ? (args.bucket_id || null) : existing.bucket_id,
           args.priority ?? existing.priority,
           args.due_date !== undefined ? (args.due_date || null) : existing.due_date,
+          args.start_date !== undefined ? (args.start_date || null) : existing.start_date,
+          args.end_date !== undefined ? (args.end_date || null) : existing.end_date,
+          args.assignee_name !== undefined ? (args.assignee_name || null) : existing.assignee_name,
+          args.task_type !== undefined ? (args.task_type || null) : existing.task_type,
+          args.hex_color !== undefined ? (args.hex_color || null) : existing.hex_color,
+          args.percent_done ?? existing.percent_done,
           args.taskId
         );
       // Replace labels if provided
@@ -756,6 +790,17 @@ export function createMcpServer(): McpServer {
       if (!args.taskId) throw new Error('taskId is required');
       const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
       if (!existing) throw new Error('Task not found or access denied');
+
+      // Handle repeating tasks
+      if (!existing.done && existing.repeat_after > 0 && existing.due_date) {
+        const dueDate = new Date(existing.due_date);
+        dueDate.setDate(dueDate.getDate() + existing.repeat_after);
+        db.prepare(`UPDATE tasks SET due_date = ?, updated_at = datetime('now') WHERE id = ?`)
+          .run(dueDate.toISOString().split('T')[0], args.taskId);
+        const rescheduled = db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId) as any;
+        return asTextContent({ ...rescheduled, rescheduled: true });
+      }
+
       const newDone = existing.done ? 0 : 1;
       const doneAt = newDone ? new Date().toISOString() : null;
       db.prepare('UPDATE tasks SET done = ?, done_at = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newDone, doneAt, args.taskId);
@@ -826,20 +871,25 @@ export function createMcpServer(): McpServer {
       title: z.string().optional().describe('Project title (required for create)'),
       description: z.string().optional(),
       hex_color: z.string().optional().describe('Color hex code (e.g. #3b82f6)'),
+      type: z.string().optional().describe('Project type (e.g. personal, dev, design, work, research, learning)'),
       parent_project_id: z.string().optional().describe('Parent project ID for nesting'),
       include_tasks: z.boolean().optional().describe('Include tasks in list/get response'),
+      include_archived: z.boolean().optional().describe('Include archived projects in list'),
+      filter_type: z.string().optional().describe('Filter projects by type'),
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
 
     if (args.action === 'list') {
-      const projects = db.prepare(`
-        SELECT p.*,
+      let sql = `SELECT p.*,
           (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND done = 0) as open_tasks,
           (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND done = 1) as done_tasks
-        FROM projects p WHERE p.user_id = ? AND p.archived = 0
-        ORDER BY p.position, p.created_at
-      `).all(userId) as any[];
+        FROM projects p WHERE p.user_id = ?`;
+      const params: any[] = [userId];
+      if (!args.include_archived) { sql += ' AND p.archived = 0'; }
+      if (args.filter_type) { sql += ' AND p.type = ?'; params.push(args.filter_type); }
+      sql += ' ORDER BY p.position, p.created_at';
+      const projects = db.prepare(sql).all(...params) as any[];
 
       if (args.include_tasks) {
         const taskStmt = db.prepare('SELECT * FROM tasks WHERE project_id = ? ORDER BY done ASC, priority DESC, created_at DESC');
@@ -851,8 +901,8 @@ export function createMcpServer(): McpServer {
     if (args.action === 'create') {
       if (!args.title) throw new Error('title is required');
       const id = uuidv4();
-      db.prepare('INSERT INTO projects (id, user_id, title, description, hex_color, parent_project_id) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(id, userId, args.title, args.description || null, args.hex_color || '', args.parent_project_id || null);
+      db.prepare('INSERT INTO projects (id, user_id, title, description, hex_color, type, parent_project_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(id, userId, args.title, args.description || null, args.hex_color || '', args.type || 'personal', args.parent_project_id || null);
       return asTextContent(db.prepare('SELECT * FROM projects WHERE id = ?').get(id));
     }
 
@@ -860,11 +910,12 @@ export function createMcpServer(): McpServer {
       if (!args.projectId) throw new Error('projectId is required for update');
       const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId) as any;
       if (!existing) throw new Error('Project not found or access denied');
-      db.prepare(`UPDATE projects SET title = ?, description = ?, hex_color = ?, parent_project_id = ?, updated_at = datetime('now') WHERE id = ?`)
+      db.prepare(`UPDATE projects SET title = ?, description = ?, hex_color = ?, type = ?, parent_project_id = ?, updated_at = datetime('now') WHERE id = ?`)
         .run(
           args.title ?? existing.title,
           args.description ?? existing.description,
           args.hex_color ?? existing.hex_color,
+          args.type ?? existing.type,
           args.parent_project_id !== undefined ? (args.parent_project_id || null) : existing.parent_project_id,
           args.projectId
         );
@@ -1130,10 +1181,10 @@ export function createMcpServer(): McpServer {
   // ═══════════════════════════════════════════════════════════════
 
   server.registerTool('search', {
-    description: 'Search across goals, sub-goals, habits, and tasks by title. Returns typed results from all domains.',
+    description: 'Search across goals, sub-goals, habits, tasks, projects, and notes by title/content. Returns typed results from all domains.',
     inputSchema: {
       query: z.string().describe('Search query (matched against titles)'),
-      domains: z.array(z.enum(['goals', 'subgoals', 'habits', 'tasks'])).optional()
+      domains: z.array(z.enum(['goals', 'subgoals', 'habits', 'tasks', 'projects', 'notes'])).optional()
         .describe('Limit search to specific domains (defaults to all)'),
       limit: z.number().optional().describe('Max results per domain (default 10)'),
     },
@@ -1141,7 +1192,7 @@ export function createMcpServer(): McpServer {
     const userId = getUserId(extra);
     const q = `%${args.query}%`;
     const limit = args.limit || 10;
-    const domains = args.domains || ['goals', 'subgoals', 'habits', 'tasks'];
+    const domains = args.domains || ['goals', 'subgoals', 'habits', 'tasks', 'projects', 'notes'];
     const results: any = {};
 
     if (domains.includes('goals')) {
@@ -1160,11 +1211,258 @@ export function createMcpServer(): McpServer {
         .all(userId, q, limit);
     }
     if (domains.includes('tasks')) {
-      results.tasks = db.prepare('SELECT id, title, done, priority, due_date, project_id FROM tasks WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ?')
+      results.tasks = db.prepare('SELECT id, title, done, priority, due_date, project_id, sprint_id FROM tasks WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ?')
+        .all(userId, q, limit);
+    }
+    if (domains.includes('projects')) {
+      results.projects = db.prepare('SELECT id, title, type, hex_color, archived, description FROM projects WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ?')
+        .all(userId, q, limit);
+    }
+    if (domains.includes('notes')) {
+      results.notes = db.prepare('SELECT id, content, created_at, updated_at FROM quick_notes WHERE user_id = ? AND content LIKE ? ORDER BY updated_at DESC LIMIT ?')
         .all(userId, q, limit);
     }
 
     return asTextContent(results);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // SPRINTS
+  // ═══════════════════════════════════════════════════════════════
+
+  server.registerTool('manage_sprint', {
+    description: 'List, create, get, update, delete sprints, or transition sprint status. Sprints belong to projects and contain tasks organized in columns.',
+    inputSchema: {
+      action: z.enum(['list', 'create', 'get', 'update', 'delete', 'transition_status']).describe('Operation to perform'),
+      sprintId: z.string().optional().describe('Sprint ID (required for get/update/delete/transition_status)'),
+      projectId: z.string().optional().describe('Project ID (required for list/create)'),
+      title: z.string().optional().describe('Sprint title (required for create)'),
+      description: z.string().optional().describe('Sprint description'),
+      start_date: z.string().optional().describe('Start date (ISO format)'),
+      end_date: z.string().optional().describe('End date (ISO format)'),
+      status: z.enum(['planned', 'active', 'completed']).optional().describe('Target status for transition_status action'),
+    },
+  }, async (args, extra) => {
+    const userId = getUserId(extra);
+    const now = new Date().toISOString();
+
+    // Helper to verify sprint ownership via project
+    const verifySprint = (sprintId: string) => {
+      const sprint = db.prepare(`
+        SELECT s.* FROM sprints s JOIN projects p ON s.project_id = p.id
+        WHERE s.id = ? AND p.user_id = ?
+      `).get(sprintId, userId) as any;
+      if (!sprint) throw new Error('Sprint not found or access denied');
+      return sprint;
+    };
+
+    if (args.action === 'list') {
+      if (!args.projectId) throw new Error('projectId is required for list');
+      const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
+      if (!project) throw new Error('Project not found or access denied');
+      const sprints = db.prepare(`
+        SELECT s.*,
+          COUNT(CASE WHEN t.done = 0 THEN 1 END) as open_tasks,
+          COUNT(CASE WHEN t.done = 1 THEN 1 END) as done_tasks
+        FROM sprints s LEFT JOIN tasks t ON t.sprint_id = s.id
+        WHERE s.project_id = ?
+        GROUP BY s.id
+        ORDER BY s.sprint_number DESC, s.created_at DESC
+      `).all(args.projectId);
+      return asTextContent(sprints);
+    }
+
+    if (args.action === 'create') {
+      if (!args.projectId) throw new Error('projectId is required for create');
+      if (!args.title) throw new Error('title is required for create');
+      const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
+      if (!project) throw new Error('Project not found or access denied');
+
+      const maxNum = db.prepare('SELECT MAX(sprint_number) as max FROM sprints WHERE project_id = ?').get(args.projectId) as any;
+      const sprintNumber = (maxNum?.max ?? 0) + 1;
+      const id = uuidv4();
+
+      db.prepare(`INSERT INTO sprints (id, project_id, title, description, sprint_number, status, start_date, end_date, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?)`)
+        .run(id, args.projectId, args.title.trim(), args.description || null, sprintNumber, args.start_date || null, args.end_date || null, now, now);
+
+      // Create default columns
+      const DEFAULT_COLUMNS = [
+        { title: 'To Do', position: 0, is_done_column: 0 },
+        { title: 'In Progress', position: 1, is_done_column: 0 },
+        { title: 'Review', position: 2, is_done_column: 0 },
+        { title: 'Done', position: 3, is_done_column: 1 },
+      ];
+      const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)');
+      for (const col of DEFAULT_COLUMNS) {
+        insertBucket.run(uuidv4(), args.projectId, id, col.title, col.position, col.is_done_column);
+      }
+
+      const sprint = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id);
+      const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(id);
+      return asTextContent({ ...sprint as any, columns });
+    }
+
+    if (args.action === 'get') {
+      if (!args.sprintId) throw new Error('sprintId is required for get');
+      const sprint = verifySprint(args.sprintId);
+      const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprintId);
+      const tasks = db.prepare(`
+        SELECT t.*, p.title as project_title, p.hex_color as project_color
+        FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+        WHERE t.sprint_id = ? ORDER BY t.position ASC, t.created_at DESC
+      `).all(args.sprintId);
+      const backlog = db.prepare(`
+        SELECT t.*, p.title as project_title, p.hex_color as project_color
+        FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+        WHERE t.project_id = ? AND t.sprint_id IS NULL ORDER BY t.position ASC, t.created_at DESC
+      `).all(sprint.project_id);
+      return asTextContent({ ...sprint, columns, tasks, backlog });
+    }
+
+    if (args.action === 'update') {
+      if (!args.sprintId) throw new Error('sprintId is required for update');
+      const existing = verifySprint(args.sprintId);
+      db.prepare(`UPDATE sprints SET title = COALESCE(?, title), description = ?, start_date = ?, end_date = ?, updated_at = ? WHERE id = ?`)
+        .run(
+          args.title?.trim() || null,
+          args.description !== undefined ? args.description : existing.description,
+          args.start_date !== undefined ? args.start_date : existing.start_date,
+          args.end_date !== undefined ? args.end_date : existing.end_date,
+          now, args.sprintId
+        );
+      return asTextContent(db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprintId));
+    }
+
+    if (args.action === 'delete') {
+      if (!args.sprintId) throw new Error('sprintId is required for delete');
+      verifySprint(args.sprintId);
+      db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(args.sprintId);
+      db.prepare('DELETE FROM buckets WHERE sprint_id = ?').run(args.sprintId);
+      db.prepare('DELETE FROM sprints WHERE id = ?').run(args.sprintId);
+      return asTextContent({ deleted: true, id: args.sprintId });
+    }
+
+    if (args.action === 'transition_status') {
+      if (!args.sprintId) throw new Error('sprintId is required');
+      if (!args.status) throw new Error('status is required');
+      const existing = verifySprint(args.sprintId);
+      const validTransitions: Record<string, string[]> = {
+        planned: ['active'],
+        active: ['completed'],
+        completed: ['active'],
+      };
+      if (!validTransitions[existing.status]?.includes(args.status)) {
+        throw new Error(`Cannot transition from '${existing.status}' to '${args.status}'`);
+      }
+      db.prepare('UPDATE sprints SET status = ?, updated_at = ? WHERE id = ?').run(args.status, now, args.sprintId);
+      return asTextContent(db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprintId));
+    }
+
+    throw new Error('Invalid action');
+  });
+
+  // ─── manage_sprint_column ──────────────────────────────────
+
+  server.registerTool('manage_sprint_column', {
+    description: 'List, create, update, or delete columns (buckets) within a sprint board.',
+    inputSchema: {
+      action: z.enum(['list', 'create', 'update', 'delete']).describe('Operation to perform'),
+      sprintId: z.string().describe('Sprint ID'),
+      columnId: z.string().optional().describe('Column ID (required for update/delete)'),
+      title: z.string().optional().describe('Column title (required for create)'),
+      position: z.number().optional().describe('Column position'),
+      is_done_column: z.boolean().optional().describe('Whether tasks in this column count as done'),
+    },
+  }, async (args, extra) => {
+    const userId = getUserId(extra);
+
+    // Verify sprint ownership
+    const sprint = db.prepare(`
+      SELECT s.* FROM sprints s JOIN projects p ON s.project_id = p.id
+      WHERE s.id = ? AND p.user_id = ?
+    `).get(args.sprintId, userId) as any;
+    if (!sprint) throw new Error('Sprint not found or access denied');
+
+    if (args.action === 'list') {
+      const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprintId);
+      return asTextContent(columns);
+    }
+
+    if (args.action === 'create') {
+      if (!args.title) throw new Error('title is required');
+      const maxPos = db.prepare('SELECT MAX(position) as max FROM buckets WHERE sprint_id = ?').get(args.sprintId) as any;
+      const position = args.position ?? ((maxPos?.max ?? 0) + 1);
+      const id = uuidv4();
+      db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, sprint.project_id, args.sprintId, args.title.trim(), position, args.is_done_column ? 1 : 0);
+      return asTextContent(db.prepare('SELECT * FROM buckets WHERE id = ?').get(id));
+    }
+
+    if (args.action === 'update') {
+      if (!args.columnId) throw new Error('columnId is required for update');
+      const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.columnId, args.sprintId);
+      if (!existing) throw new Error('Column not found');
+      db.prepare('UPDATE buckets SET title = COALESCE(?, title), position = COALESCE(?, position), is_done_column = COALESCE(?, is_done_column) WHERE id = ?')
+        .run(args.title?.trim() || null, args.position ?? null, args.is_done_column !== undefined ? (args.is_done_column ? 1 : 0) : null, args.columnId);
+      return asTextContent(db.prepare('SELECT * FROM buckets WHERE id = ?').get(args.columnId));
+    }
+
+    if (args.action === 'delete') {
+      if (!args.columnId) throw new Error('columnId is required for delete');
+      const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.columnId, args.sprintId);
+      if (!existing) throw new Error('Column not found');
+      db.prepare('UPDATE tasks SET bucket_id = NULL WHERE bucket_id = ?').run(args.columnId);
+      db.prepare('DELETE FROM buckets WHERE id = ?').run(args.columnId);
+      return asTextContent({ deleted: true, id: args.columnId });
+    }
+
+    throw new Error('Invalid action');
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // QUICK NOTES
+  // ═══════════════════════════════════════════════════════════════
+
+  server.registerTool('manage_note', {
+    description: 'List, create, update, or delete quick notes. Notes are simple markdown text entries for capturing ideas quickly.',
+    inputSchema: {
+      action: z.enum(['list', 'create', 'update', 'delete']).describe('Operation to perform'),
+      noteId: z.string().optional().describe('Note ID (required for update/delete)'),
+      content: z.string().optional().describe('Note content/text (required for create)'),
+    },
+  }, async (args, extra) => {
+    const userId = getUserId(extra);
+
+    if (args.action === 'list') {
+      const notes = db.prepare('SELECT * FROM quick_notes WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
+      return asTextContent(notes);
+    }
+
+    if (args.action === 'create') {
+      if (!args.content) throw new Error('content is required');
+      const id = uuidv4();
+      db.prepare('INSERT INTO quick_notes (id, user_id, content) VALUES (?, ?, ?)').run(id, userId, args.content.trim());
+      return asTextContent(db.prepare('SELECT * FROM quick_notes WHERE id = ?').get(id));
+    }
+
+    if (args.action === 'update') {
+      if (!args.noteId) throw new Error('noteId is required for update');
+      if (!args.content) throw new Error('content is required for update');
+      const result = db.prepare(`UPDATE quick_notes SET content = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
+        .run(args.content.trim(), args.noteId, userId);
+      if (result.changes === 0) throw new Error('Note not found or access denied');
+      return asTextContent(db.prepare('SELECT * FROM quick_notes WHERE id = ?').get(args.noteId));
+    }
+
+    if (args.action === 'delete') {
+      if (!args.noteId) throw new Error('noteId is required for delete');
+      const result = db.prepare('DELETE FROM quick_notes WHERE id = ? AND user_id = ?').run(args.noteId, userId);
+      if (result.changes === 0) throw new Error('Note not found or access denied');
+      return asTextContent({ deleted: true, id: args.noteId });
+    }
+
+    throw new Error('Invalid action');
   });
 
   // ── manage_event ──────────────────────────────────────────────
