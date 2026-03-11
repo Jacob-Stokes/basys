@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api, API_URL } from '../api/client';
 import { useDisplaySettings } from '../context/DisplaySettingsContext';
 import { useChatSidebar } from '../context/ChatSidebarContext';
+import { useLeftPanel } from '../context/LeftPanelContext';
 import LogoGrid from './LogoGrid';
 import QuickCreateMenu from './QuickCreateMenu';
 
@@ -13,6 +14,7 @@ export default function NavBar() {
   const navigate = useNavigate();
   const { settings: displaySettings } = useDisplaySettings();
   const { toggle: toggleChat, isOpen: chatOpen } = useChatSidebar();
+  const { toggle: toggleLeftPanel, isOpen: leftPanelOpen } = useLeftPanel();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [username, setUsername] = useState<string>('');
@@ -50,10 +52,25 @@ export default function NavBar() {
   return (
     <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
       <div className="container mx-auto px-4 sm:px-16 flex items-center justify-between h-14">
-        {/* Left: Logo + brand */}
-        <Link to="/" className="flex items-center shrink-0">
-          <LogoGrid theme={displaySettings.appTheme} size={28} />
-        </Link>
+        {/* Left: Logo + left panel toggle */}
+        <div className="flex items-center gap-1 shrink-0">
+          <Link to="/" className="flex items-center">
+            <LogoGrid theme={displaySettings.appTheme} size={28} />
+          </Link>
+          <button
+            onClick={toggleLeftPanel}
+            className={`hidden sm:flex p-1.5 rounded transition-colors ${
+              leftPanelOpen
+                ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+            title="Toggle panel"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+            </svg>
+          </button>
+        </div>
 
         {/* Center: nav links (desktop) */}
         <div className="hidden sm:flex items-center gap-1">
@@ -138,8 +155,21 @@ export default function NavBar() {
           )}
         </div>
 
-        {/* Mobile: quick create + chat toggle + burger */}
+        {/* Mobile: left panel toggle + quick create + chat toggle + burger */}
         <div className="flex items-center gap-1 sm:hidden">
+          <button
+            onClick={toggleLeftPanel}
+            className={`p-2 rounded transition-colors ${
+              leftPanelOpen
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+            title="Toggle panel"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+            </svg>
+          </button>
           <QuickCreateMenu compact />
           <button
             onClick={toggleChat}

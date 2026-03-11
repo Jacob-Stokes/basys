@@ -17,7 +17,9 @@ import NavBar from './components/NavBar';
 import TimerFooter from './components/TimerFooter';
 import ChatSidebar from './components/chat/ChatSidebar';
 import PixelMan from './components/chat/PixelMan';
+import LeftPanel from './components/LeftPanel';
 import { ChatSidebarProvider, useChatSidebarSafe } from './context/ChatSidebarContext';
+import { LeftPanelProvider, useLeftPanelSafe } from './context/LeftPanelContext';
 import { api } from './api/client';
 
 // Protected Route Component
@@ -57,9 +59,11 @@ function ProtectedRoute({ children }: { children?: React.ReactNode }) {
 function AuthenticatedLayout() {
   return (
     <ProtectedRoute>
-      <ChatSidebarProvider>
-        <MainContent />
-      </ChatSidebarProvider>
+      <LeftPanelProvider>
+        <ChatSidebarProvider>
+          <MainContent />
+        </ChatSidebarProvider>
+      </LeftPanelProvider>
     </ProtectedRoute>
   );
 }
@@ -68,11 +72,13 @@ function MainContent() {
   const sidebar = useChatSidebarSafe();
   const sidebarOpen = sidebar?.isOpen ?? false;
   const agentState = sidebar?.agentState ?? 'idle';
+  const leftPanel = useLeftPanelSafe();
+  const leftPanelOpen = leftPanel?.isOpen ?? false;
 
   return (
     <>
       <div
-        className={`transition-[margin] duration-200 ease-in-out ${sidebarOpen ? 'sm:mr-[400px]' : ''}`}
+        className={`transition-[margin] duration-200 ease-in-out ${sidebarOpen ? 'sm:mr-[400px]' : ''} ${leftPanelOpen ? 'sm:ml-[300px]' : ''}`}
       >
         <NavBar />
         <div className="pb-14">
@@ -80,6 +86,7 @@ function MainContent() {
         </div>
         <TimerFooter />
       </div>
+      <LeftPanel />
       <ChatSidebar />
       {sidebarOpen && (
         <div className="fixed top-0 right-0 w-[400px] h-14 hidden sm:flex items-end justify-center pb-0 z-40 pointer-events-none">
