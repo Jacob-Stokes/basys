@@ -1194,6 +1194,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   const [weatherData, setWeatherData] = useState<{ temp: number; code: number; description: string } | null>(null);
 
   // Calendar + Events state
+  const calendarCardRef = useRef<HTMLDivElement>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [newEventInput, setNewEventInput] = useState('');
@@ -1392,6 +1393,19 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   };
 
   useEffect(() => { loadAll(); }, []);
+
+  // Close calendar day-view when clicking outside the calendar card
+  useEffect(() => {
+    if (!selectedDate) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (calendarCardRef.current && !calendarCardRef.current.contains(e.target as Node)) {
+        setSelectedDate(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectedDate]);
+
   useEffect(() => { loadTasks(); }, [taskFilter, filterLabel]);
   useEffect(() => {
     if (activeProject) loadProjectDetail(activeProject);
@@ -1956,7 +1970,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
           {/* Calendar — 2/5 (always visible) */}
           <div className="w-full lg:w-2/5">
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-0">
+              <div ref={calendarCardRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-0">
                 <Calendar
                   taskDates={taskDates}
                   eventDateColors={eventDateColors}
