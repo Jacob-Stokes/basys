@@ -417,8 +417,8 @@ export default function Settings() {
         loadGcalCalendars();
       }
     } catch {
-      // Google Calendar not available — hide section gracefully
-      setGcalStatus(null);
+      // Google Calendar API unreachable — show as not configured
+      setGcalStatus({ configured: false, connected: false });
     }
   };
 
@@ -866,82 +866,95 @@ export default function Settings() {
           </div>
 
           {/* Connected Accounts — Google Calendar */}
-          {gcalStatus && gcalStatus.configured && (
-            <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Connected Accounts</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Connect external services to sync data with Basys.</p>
+          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Connected Accounts</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Connect external services to sync data with Basys.</p>
 
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {/* Google Calendar icon */}
-                    <svg className="w-8 h-8 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="4" width="18" height="18" rx="2" stroke="#4285f4" strokeWidth="2" />
-                      <path d="M3 9h18" stroke="#4285f4" strokeWidth="2" />
-                      <path d="M8 2v4M16 2v4" stroke="#4285f4" strokeWidth="2" strokeLinecap="round" />
-                      <rect x="7" y="12" width="3" height="3" rx="0.5" fill="#ea4335" />
-                      <rect x="14" y="12" width="3" height="3" rx="0.5" fill="#34a853" />
-                      <rect x="7" y="17" width="3" height="2" rx="0.5" fill="#fbbc05" />
-                      <rect x="14" y="17" width="3" height="2" rx="0.5" fill="#4285f4" />
-                    </svg>
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-gray-100">Google Calendar</p>
-                      {gcalStatus.connected
-                        ? <p className="text-sm text-green-600 dark:text-green-400">Connected as {gcalStatus.google_email}</p>
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {/* Google Calendar icon */}
+                  <svg className="w-8 h-8 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="4" width="18" height="18" rx="2" stroke="#4285f4" strokeWidth="2" />
+                    <path d="M3 9h18" stroke="#4285f4" strokeWidth="2" />
+                    <path d="M8 2v4M16 2v4" stroke="#4285f4" strokeWidth="2" strokeLinecap="round" />
+                    <rect x="7" y="12" width="3" height="3" rx="0.5" fill="#ea4335" />
+                    <rect x="14" y="12" width="3" height="3" rx="0.5" fill="#34a853" />
+                    <rect x="7" y="17" width="3" height="2" rx="0.5" fill="#fbbc05" />
+                    <rect x="14" y="17" width="3" height="2" rx="0.5" fill="#4285f4" />
+                  </svg>
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">Google Calendar</p>
+                    {gcalStatus?.connected
+                      ? <p className="text-sm text-green-600 dark:text-green-400">Connected as {gcalStatus.google_email}</p>
+                      : gcalStatus?.configured === false
+                        ? <p className="text-sm text-amber-600 dark:text-amber-400">Not configured</p>
                         : <p className="text-sm text-gray-500 dark:text-gray-400">Not connected</p>
-                      }
-                    </div>
+                    }
                   </div>
-                  {gcalStatus.connected ? (
-                    <button onClick={handleDisconnectGoogle} disabled={gcalLoading}
-                      className="px-4 py-2 text-sm border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50">
-                      {gcalLoading ? 'Disconnecting...' : 'Disconnect'}
-                    </button>
-                  ) : (
-                    <button onClick={handleConnectGoogle} disabled={gcalLoading}
-                      className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
-                      {gcalLoading ? 'Connecting...' : 'Connect'}
-                    </button>
-                  )}
                 </div>
-
-                {/* Calendar selection (when connected) */}
-                {gcalStatus.connected && gcalCalendars.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Calendars to sync</p>
-                    <div className="space-y-2">
-                      {gcalCalendars.map(cal => (
-                        <label key={cal.id} className="flex items-center gap-3 cursor-pointer py-1">
-                          <input type="checkbox" checked={cal.selected} onChange={() => handleToggleCalendar(cal.id)}
-                            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
-                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cal.backgroundColor }} />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">{cal.summary}</span>
-                          {cal.primary && <span className="text-xs text-gray-400">(primary)</span>}
-                        </label>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-3 mt-4">
-                      <button onClick={handleSyncNow} disabled={gcalSyncing}
-                        className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50">
-                        {gcalSyncing ? 'Syncing...' : 'Sync now'}
-                      </button>
-                      {gcalStatus.last_synced_at && (
-                        <span className="text-xs text-gray-400">
-                          Last synced: {new Date(gcalStatus.last_synced_at).toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {gcalNotice && (
-                  <p className={`text-sm mt-3 ${gcalNotice.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {gcalNotice.message}
-                  </p>
-                )}
+                {gcalStatus?.connected ? (
+                  <button onClick={handleDisconnectGoogle} disabled={gcalLoading}
+                    className="px-4 py-2 text-sm border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50">
+                    {gcalLoading ? 'Disconnecting...' : 'Disconnect'}
+                  </button>
+                ) : gcalStatus?.configured !== false ? (
+                  <button onClick={handleConnectGoogle} disabled={gcalLoading}
+                    className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    {gcalLoading ? 'Connecting...' : 'Connect'}
+                  </button>
+                ) : null}
               </div>
+
+              {/* Setup instructions when not configured */}
+              {gcalStatus?.configured === false && (
+                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">To enable Google Calendar sync, set these environment variables in <code className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">docker-compose.yml</code>:</p>
+                  <ul className="text-xs text-gray-500 dark:text-gray-400 space-y-1 font-mono ml-2">
+                    <li>GOOGLE_CLIENT_ID</li>
+                    <li>GOOGLE_CLIENT_SECRET</li>
+                    <li>GOOGLE_REDIRECT_URI</li>
+                  </ul>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Create OAuth 2.0 credentials at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Google Cloud Console</a> with the Calendar API enabled.</p>
+                </div>
+              )}
+
+              {/* Calendar selection (when connected) */}
+              {gcalStatus?.connected && gcalCalendars.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Calendars to sync</p>
+                  <div className="space-y-2">
+                    {gcalCalendars.map(cal => (
+                      <label key={cal.id} className="flex items-center gap-3 cursor-pointer py-1">
+                        <input type="checkbox" checked={cal.selected} onChange={() => handleToggleCalendar(cal.id)}
+                          className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cal.backgroundColor }} />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{cal.summary}</span>
+                        {cal.primary && <span className="text-xs text-gray-400">(primary)</span>}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 mt-4">
+                    <button onClick={handleSyncNow} disabled={gcalSyncing}
+                      className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50">
+                      {gcalSyncing ? 'Syncing...' : 'Sync now'}
+                    </button>
+                    {gcalStatus.last_synced_at && (
+                      <span className="text-xs text-gray-400">
+                        Last synced: {new Date(gcalStatus.last_synced_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {gcalNotice && (
+                <p className={`text-sm mt-3 ${gcalNotice.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {gcalNotice.message}
+                </p>
+              )}
             </div>
-          )}
+          </div>
           </>
         )}
 
