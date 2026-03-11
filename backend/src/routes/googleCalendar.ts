@@ -217,8 +217,30 @@ router.post('/push-event', async (req: Request, res: Response) => {
       event.start.date = start_date.slice(0, 10);
       event.end.date = end_date ? end_date.slice(0, 10) : start_date.slice(0, 10);
     } else {
-      event.start.dateTime = start_date;
-      event.end.dateTime = end_date || start_date;
+      // Google Calendar API requires RFC3339 with timezone offset
+      // If start_date lacks a timezone offset, append the server's local offset
+      let startDT = start_date;
+      let endDT = end_date;
+      const tzOffsetToString = (d: Date) => {
+        const off = d.getTimezoneOffset();
+        const sign = off <= 0 ? '+' : '-';
+        const h = String(Math.floor(Math.abs(off) / 60)).padStart(2, '0');
+        const m = String(Math.abs(off) % 60).padStart(2, '0');
+        return `${sign}${h}:${m}`;
+      };
+      if (!/[Zz]|[+-]\d{2}:\d{2}/.test(startDT)) {
+        startDT += tzOffsetToString(new Date(startDT));
+      }
+      if (!endDT) {
+        // Default end = start + 1 hour
+        const endDate = new Date(startDT);
+        endDate.setHours(endDate.getHours() + 1);
+        endDT = endDate.toISOString().replace('Z', tzOffsetToString(endDate));
+      } else if (!/[Zz]|[+-]\d{2}:\d{2}/.test(endDT)) {
+        endDT += tzOffsetToString(new Date(endDT));
+      }
+      event.start.dateTime = startDT;
+      event.end.dateTime = endDT;
     }
 
     const created = await createGoogleEvent(accessToken, calendar_id, event);
