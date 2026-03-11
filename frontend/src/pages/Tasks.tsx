@@ -1053,14 +1053,17 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     const allDay = !start.includes('T');
     try {
       await api.createEvent({ title, start_date: start, all_day: allDay });
-      // Also push to Google Calendar if connected
+      // Also push to Google Calendar if connected, then sync
       if (gcalConnected && selectedCalendarId) {
-        api.pushEventToGoogle({
-          calendar_id: selectedCalendarId,
-          title,
-          start_date: start,
-          all_day: allDay,
-        }).catch(() => {}); // fire-and-forget; sync will pick it up
+        try {
+          await api.pushEventToGoogle({
+            calendar_id: selectedCalendarId,
+            title,
+            start_date: start,
+            all_day: allDay,
+          });
+          await api.syncGoogleCalendar();
+        } catch { /* gcal push failed — local event still created */ }
       }
       setNewEventInput('');
       loadEvents();
