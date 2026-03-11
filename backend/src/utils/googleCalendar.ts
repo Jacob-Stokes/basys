@@ -300,6 +300,58 @@ export async function createGoogleEvent(
   return resp.json();
 }
 
+// ── Update Event on Google ────────────────────────────────────
+
+export async function updateGoogleEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  event: {
+    summary?: string;
+    description?: string;
+    start?: { dateTime?: string; date?: string; timeZone?: string };
+    end?: { dateTime?: string; date?: string; timeZone?: string };
+    location?: string;
+  }
+): Promise<any> {
+  const resp = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(event),
+    }
+  );
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`Failed to update Google Calendar event: ${err}`);
+  }
+  return resp.json();
+}
+
+// ── Delete Event on Google ────────────────────────────────────
+
+export async function deleteGoogleEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+): Promise<void> {
+  const resp = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  if (!resp.ok && resp.status !== 410) {
+    const err = await resp.text();
+    throw new Error(`Failed to delete Google Calendar event: ${err}`);
+  }
+}
+
 // ── Check if Google Calendar is configured ─────────────────────
 
 export function isGoogleCalendarConfigured(): boolean {

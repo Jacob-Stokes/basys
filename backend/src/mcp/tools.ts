@@ -1167,5 +1167,80 @@ export function createMcpServer(): McpServer {
     return asTextContent(results);
   });
 
+  // ── manage_event ──────────────────────────────────────────────
+  server.registerTool('manage_event', {
+    description: 'List, create, update, or delete calendar events. Events are stored locally and can optionally push to Google Calendar.',
+    inputSchema: {
+      action: z.enum(['list', 'create', 'update', 'delete']).describe('Operation to perform'),
+      eventId: z.string().optional().describe('Event ID (required for update/delete)'),
+      title: z.string().optional().describe('Event title (required for create)'),
+      description: z.string().optional().describe('Event description'),
+      start_date: z.string().optional().describe('Start date/time in ISO format (required for create)'),
+      end_date: z.string().optional().describe('End date/time in ISO format'),
+      all_day: z.boolean().optional().describe('Whether this is an all-day event'),
+      color: z.string().optional().describe('Color hex code (e.g. #3b82f6)'),
+      location: z.string().optional().describe('Event location'),
+      filter_start: z.string().optional().describe('Filter: events starting on or after this date'),
+      filter_end: z.string().optional().describe('Filter: events starting on or before this date'),
+    },
+  }, async (args, extra) => {
+    const userId = getUserId(extra);
+    const now = new Date().toISOString();
+
+    if (args.action === 'list') {
+      let query = 'SELECT * FROM events WHERE user_id = ?';
+      const params: any[] = [userId];
+      if (args.filter_start) { query += ' AND start_date >= ?'; params.push(args.filter_start); }
+      if (args.filter_end) { query += ' AND start_date <= ?'; params.push(args.filter_end); }
+      query += ' ORDER BY start_date ASC';
+      const events = db.prepare(query).all(...params);
+      return asTextContent(events);
+    }
+
+    if (args.action === 'create') {
+      if (!args.title) throw new Error('title is required for create');
+      if (!args.start_date) throw new Error('start_date is required for create');
+      const id = uuidv4();
+      db.prepare(`
+        INSERT INTO events (id, user_id, title, description, start_date, end_date, all_day, color, location, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, userId, args.title, args.description || null, args.start_date, args.end_date || null,
+        args.all_day ? 1 : 0, args.color || '#3b82f6', args.location || null, now, now);
+      const event = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+      return asTextContent(event);
+    }
+
+    if (args.action === 'update') {
+      if (!args.eventId) throw new Error('eventId is required for update');
+      const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.eventId, userId) as any;
+      if (!existing) throw new Error('Event not found');
+      db.prepare(`
+        UPDATE events SET title = ?, description = ?, start_date = ?, end_date = ?, all_day = ?, color = ?, location = ?, updated_at = ?
+        WHERE id = ? AND user_id = ?
+      `).run(
+        args.title ?? existing.title,
+        args.description !== undefined ? args.description : existing.description,
+        args.start_date ?? existing.start_date,
+        args.end_date !== undefined ? (args.end_date || null) : existing.end_date,
+        args.all_day !== undefined ? (args.all_day ? 1 : 0) : existing.all_day,
+        args.color ?? existing.color,
+        args.location !== undefined ? (args.location || null) : existing.location,
+        now, args.eventId, userId
+      );
+      const updated = db.prepare('SELECT * FROM events WHERE id = ?').get(args.eventId);
+      return asTextContent(updated);
+    }
+
+    if (args.action === 'delete') {
+      if (!args.eventId) throw new Error('eventId is required for delete');
+      const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.eventId, userId);
+      if (!existing) throw new Error('Event not found');
+      db.prepare('DELETE FROM events WHERE id = ? AND user_id = ?').run(args.eventId, userId);
+      return asTextContent({ deleted: true, id: args.eventId });
+    }
+
+    throw new Error(`Unknown action: ${args.action}`);
+  });
+
   return server;
 }

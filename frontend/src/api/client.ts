@@ -323,6 +323,10 @@ export const api = {
   },
   pushEventToGoogle: (data: any) =>
     apiRequest<any>('/api/google-calendar/push-event', { method: 'POST', body: JSON.stringify(data) }),
+  updateGoogleCalendarEvent: (googleEventId: string, data: any) =>
+    apiRequest<any>(`/api/google-calendar/events/${encodeURIComponent(googleEventId)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteGoogleCalendarEvent: (googleEventId: string, calendarId: string) =>
+    apiRequest<any>(`/api/google-calendar/events/${encodeURIComponent(googleEventId)}?calendar_id=${encodeURIComponent(calendarId)}`, { method: 'DELETE' }),
 
   getSharedGoal: async (token: string) => {
     const response = await fetch(`${API_URL}/api/shared/${token}/goal`);

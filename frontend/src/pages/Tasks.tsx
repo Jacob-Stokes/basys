@@ -43,6 +43,8 @@ interface EventItem {
   location: string | null;
   source?: 'local' | 'google';
   html_link?: string | null;
+  google_event_id?: string;
+  calendar_id?: string;
 }
 
 interface TaskItem {
@@ -465,6 +467,221 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite }: {
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── EventEditModal ─────────────────────────────────────────────────
+
+const EVENT_COLORS = ['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316'];
+
+function EventEditModal({ event, onSave, onDelete, onClose }: {
+  event: EventItem;
+  onSave: (data: { title: string; description: string | null; start_date: string; end_date: string | null; all_day: boolean; color: string; location: string | null }) => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const toInputVal = (v: string | null, allDay: boolean) => {
+    if (!v) return '';
+    if (allDay) return v.slice(0, 10);
+    if (v.includes('T')) return v.slice(0, 16);
+    return v;
+  };
+
+  const [title, setTitle] = useState(event.title);
+  const [description, setDescription] = useState(event.description || '');
+  const [allDay, setAllDay] = useState(!!event.all_day);
+  const [startDate, setStartDate] = useState(toInputVal(event.start_date, !!event.all_day));
+  const [endDate, setEndDate] = useState(toInputVal(event.end_date, !!event.all_day));
+  const [location, setLocation] = useState(event.location || '');
+  const [color, setColor] = useState(event.color || '#3b82f6');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    let start = startDate;
+    let end = endDate || null;
+    if (allDay) {
+      start = start.slice(0, 10);
+      if (end) end = end.slice(0, 10);
+    } else if (start && !start.includes('T')) {
+      start = start + 'T00:00:00';
+    }
+    onSave({
+      title: title.trim(),
+      description: description || null,
+      start_date: start,
+      end_date: end,
+      all_day: allDay,
+      color,
+      location: location || null,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Event</h3>
+          <div className="flex items-center gap-2">
+            {event.source === 'google' && (
+              <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">Google</span>
+            )}
+            {event.source === 'local' && (
+              <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-medium">Local</span>
+            )}
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Title */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Title</label>
+            <input
+              autoFocus
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Event title"
+              required
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+              placeholder="Event description"
+            />
+          </div>
+
+          {/* All day toggle */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="event-all-day"
+              checked={allDay}
+              onChange={e => {
+                setAllDay(e.target.checked);
+                if (e.target.checked) {
+                  setStartDate(startDate.slice(0, 10));
+                  setEndDate(endDate ? endDate.slice(0, 10) : '');
+                } else {
+                  if (startDate && !startDate.includes('T')) setStartDate(startDate + 'T09:00');
+                  if (endDate && !endDate.includes('T')) setEndDate(endDate + 'T10:00');
+                }
+              }}
+              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="event-all-day" className="text-sm text-gray-700 dark:text-gray-300">All day</label>
+          </div>
+
+          {/* Start & End date/time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Start</label>
+              <input
+                type={allDay ? 'date' : 'datetime-local'}
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">End</label>
+              <input
+                type={allDay ? 'date' : 'datetime-local'}
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Location */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Location</label>
+            <input
+              type="text"
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Event location"
+            />
+          </div>
+
+          {/* Color */}
+          {event.source !== 'google' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Color</label>
+              <div className="flex items-center gap-2">
+                {EVENT_COLORS.map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className={`w-6 h-6 rounded-full border-2 transition-all ${color === c ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent hover:scale-105'}`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Google Calendar link */}
+          {event.source === 'google' && event.html_link && (
+            <a
+              href={event.html_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              View in Google Calendar
+            </a>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div>
+              {!confirmDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="text-sm text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                >
+                  Delete
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-red-500">Confirm?</span>
+                  <button type="button" onClick={onDelete} className="text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400">Yes, delete</button>
+                  <button type="button" onClick={() => setConfirmDelete(false)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!title.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -977,6 +1194,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   const [gcalCalendars, setGcalCalendars] = useState<Array<{ id: string; summary: string; backgroundColor: string; primary: boolean; selected: boolean }>>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const [calSyncing, setCalSyncing] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
 
   const taskDates = useMemo(() => {
     const set = new Set<string>();
@@ -1067,6 +1285,56 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
         } catch { /* gcal push failed — local event still created */ }
       }
       setNewEventInput('');
+      loadEvents();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleSaveEvent = async (data: {
+    title: string; description: string | null; start_date: string; end_date: string | null;
+    all_day: boolean; color: string; location: string | null;
+  }) => {
+    if (!editingEvent) return;
+    try {
+      if (editingEvent.source === 'google' && editingEvent.google_event_id && editingEvent.calendar_id) {
+        await api.updateGoogleCalendarEvent(editingEvent.google_event_id, {
+          calendar_id: editingEvent.calendar_id,
+          title: data.title,
+          description: data.description,
+          start_date: data.start_date,
+          end_date: data.end_date,
+          all_day: data.all_day,
+          location: data.location,
+        });
+        await api.syncGoogleCalendar();
+      } else {
+        await api.updateEvent(editingEvent.id, {
+          title: data.title,
+          description: data.description,
+          start_date: data.start_date,
+          end_date: data.end_date,
+          all_day: data.all_day,
+          color: data.color,
+          location: data.location,
+        });
+      }
+      setEditingEvent(null);
+      loadEvents();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!editingEvent) return;
+    try {
+      if (editingEvent.source === 'google' && editingEvent.google_event_id && editingEvent.calendar_id) {
+        await api.deleteGoogleCalendarEvent(editingEvent.google_event_id, editingEvent.calendar_id);
+      } else {
+        await api.deleteEvent(editingEvent.id);
+      }
+      setEditingEvent(null);
       loadEvents();
     } catch (err) {
       setError((err as Error).message);
@@ -1822,17 +2090,16 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                               </p>
                               <ul className="space-y-0.5">
                                 {g.events.map(e => (
-                                  <li key={e.id} className="flex items-center gap-2 pl-1">
+                                  <li
+                                    key={e.id}
+                                    className="flex items-center gap-2 pl-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 rounded px-1 py-0.5 -mx-1 transition-colors"
+                                    onClick={() => setEditingEvent(e)}
+                                  >
                                     <span
                                       className="w-0.5 h-4 rounded-full flex-shrink-0"
                                       style={{ backgroundColor: e.color }}
                                     />
-                                    {e.source === 'google' && e.html_link ? (
-                                      <a href={e.html_link} target="_blank" rel="noopener noreferrer"
-                                        className="text-sm text-gray-700 dark:text-gray-300 truncate hover:underline">{e.title}</a>
-                                    ) : (
-                                      <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{e.title}</span>
-                                    )}
+                                    <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{e.title}</span>
                                     {e.source === 'google' && (
                                       <span className="text-[9px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded flex-shrink-0" title="Google Calendar">G</span>
                                     )}
@@ -1902,6 +2169,15 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
           confirmLabel="Delete"
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {editingEvent && (
+        <EventEditModal
+          event={editingEvent}
+          onSave={handleSaveEvent}
+          onDelete={handleDeleteEvent}
+          onClose={() => setEditingEvent(null)}
         />
       )}
     </div>
