@@ -489,6 +489,9 @@ function EventEditModal({ event, onSave, onDelete, onClose }: {
     return v;
   };
 
+  // Holiday/observance events from Google are read-only
+  const isReadOnly = !!(event.source === 'google' && event.calendar_id && event.calendar_id.includes('#holiday@group'));
+
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description || '');
   const [allDay, setAllDay] = useState(!!event.all_day);
@@ -524,7 +527,7 @@ function EventEditModal({ event, onSave, onDelete, onClose }: {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Event</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{isReadOnly ? 'Event Details' : 'Edit Event'}</h3>
           <div className="flex items-center gap-2">
             {event.source === 'google' && (
               <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">Google</span>
@@ -543,7 +546,8 @@ function EventEditModal({ event, onSave, onDelete, onClose }: {
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              readOnly={isReadOnly}
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isReadOnly ? 'opacity-70 cursor-default' : ''}`}
               placeholder="Event title"
               required
             />
@@ -652,7 +656,9 @@ function EventEditModal({ event, onSave, onDelete, onClose }: {
           {/* Actions */}
           <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
             <div>
-              {!confirmDelete ? (
+              {isReadOnly ? (
+                <span className="text-xs text-gray-400 dark:text-gray-500 italic">Read-only observance</span>
+              ) : !confirmDelete ? (
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
@@ -670,15 +676,17 @@ function EventEditModal({ event, onSave, onDelete, onClose }: {
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                Cancel
+                {isReadOnly ? 'Close' : 'Cancel'}
               </button>
-              <button
-                type="submit"
-                disabled={!title.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
-              >
-                Save
-              </button>
+              {!isReadOnly && (
+                <button
+                  type="submit"
+                  disabled={!title.trim()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+                >
+                  Save
+                </button>
+              )}
             </div>
           </div>
         </form>
@@ -1948,18 +1956,6 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
           {/* Calendar — 2/5 (always visible) */}
           <div className="w-full lg:w-2/5">
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-0">
-                <div className="flex justify-end -mb-1">
-                  <button
-                    onClick={handleCalendarRefresh}
-                    disabled={calSyncing}
-                    title="Refresh calendar"
-                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-                  >
-                    <svg className={`w-3.5 h-3.5 ${calSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
-                </div>
                 <Calendar
                   taskDates={taskDates}
                   eventDateColors={eventDateColors}
@@ -2013,11 +2009,8 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                   );
                 })()}
 
-                {/* Add event input */}
-                <form
-                  onSubmit={e => { e.preventDefault(); handleAddEvent(); }}
-                  className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
-                >
+                {/* Add event input + refresh */}
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   {gcalConnected && gcalCalendars.length > 0 && (
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">Calendar:</span>
@@ -2034,24 +2027,41 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                       </select>
                     </div>
                   )}
-                  <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-shadow">
-                    <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                    <input
-                      type="text"
-                      value={newEventInput}
-                      onChange={e => setNewEventInput(e.target.value)}
-                      placeholder="Add event... (@fri 2pm)"
-                      className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
-                    />
-                    {newEventInput.trim() && (
-                      <button type="submit" className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors">
-                        Add
-                      </button>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <form
+                      onSubmit={e => { e.preventDefault(); handleAddEvent(); }}
+                      className="flex-1"
+                    >
+                      <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-shadow">
+                        <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        <input
+                          type="text"
+                          value={newEventInput}
+                          onChange={e => setNewEventInput(e.target.value)}
+                          placeholder="Add event... (@fri 2pm)"
+                          className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
+                        />
+                        {newEventInput.trim() && (
+                          <button type="submit" className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors">
+                            Add
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                    <button
+                      onClick={handleCalendarRefresh}
+                      disabled={calSyncing}
+                      title="Refresh calendar"
+                      className="p-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 flex-shrink-0"
+                    >
+                      <svg className={`w-4 h-4 ${calSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
                   </div>
-                </form>
+                </div>
 
                 {/* Upcoming events list */}
                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
