@@ -34,8 +34,15 @@ async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T
 export const api = {
   // Auth
   getMe: () => apiRequest<any>('/api/auth/me'),
-  updateProfile: (data: { display_name?: string | null }) =>
-    apiRequest<any>('/api/auth/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  updateProfile: (data: {
+    display_name?: string | null;
+    weather_latitude?: number | null;
+    weather_longitude?: number | null;
+    weather_location_name?: string | null;
+    timezone?: string | null;
+    use_browser_time?: boolean;
+    temperature_unit?: string;
+  }) => apiRequest<any>('/api/auth/me', { method: 'PATCH', body: JSON.stringify(data) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     apiRequest<any>('/api/auth/password', {
       method: 'PUT',

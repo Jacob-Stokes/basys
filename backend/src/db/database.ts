@@ -527,6 +527,22 @@ export function initDatabase() {
     console.log('Migration check (display_name):', err);
   }
 
+  // Migration: Add weather/timezone/temperature settings to users table
+  try {
+    const userCols = db.prepare("PRAGMA table_info(users)").all() as any[];
+    if (!userCols.some((col: any) => col.name === 'weather_latitude')) {
+      db.exec(`ALTER TABLE users ADD COLUMN weather_latitude REAL DEFAULT NULL`);
+      db.exec(`ALTER TABLE users ADD COLUMN weather_longitude REAL DEFAULT NULL`);
+      db.exec(`ALTER TABLE users ADD COLUMN weather_location_name TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE users ADD COLUMN use_browser_time INTEGER DEFAULT 1`);
+      db.exec(`ALTER TABLE users ADD COLUMN temperature_unit TEXT DEFAULT 'celsius'`);
+      console.log('Added weather/timezone/temperature columns to users table');
+    }
+  } catch (err) {
+    console.log('Migration check (weather/timezone):', err);
+  }
+
   // Seed sample events for existing users (only if they have zero events)
   try {
     const users = db.prepare('SELECT id FROM users').all() as any[];

@@ -64,6 +64,19 @@ export default function Settings() {
   const [displayNameNotice, setDisplayNameNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [savingDisplayName, setSavingDisplayName] = useState(false);
 
+  // Location & time state
+  const [locationSearch, setLocationSearch] = useState('');
+  const [locationResults, setLocationResults] = useState<{ name: string; country: string; latitude: number; longitude: number }[]>([]);
+  const [locationSearching, setLocationSearching] = useState(false);
+  const [weatherLatitude, setWeatherLatitude] = useState<number | null>(null);
+  const [weatherLongitude, setWeatherLongitude] = useState<number | null>(null);
+  const [weatherLocationName, setWeatherLocationName] = useState('');
+  const [timezoneInput, setTimezoneInput] = useState('');
+  const [useBrowserTime, setUseBrowserTime] = useState(true);
+  const [temperatureUnit, setTemperatureUnit] = useState('celsius');
+  const [locationNotice, setLocationNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [savingLocation, setSavingLocation] = useState(false);
+
   // Admin state
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; display_name: string | null; is_admin: boolean } | null>(null);
   const [adminUsers, setAdminUsers] = useState<{ id: string; username: string; email: string | null; is_admin: number; created_at: string }[]>([]);
@@ -288,6 +301,12 @@ export default function Settings() {
       if (data.success) {
         setCurrentUser(data.data);
         setDisplayNameInput(data.data.display_name ?? '');
+        setWeatherLatitude(data.data.weather_latitude ?? null);
+        setWeatherLongitude(data.data.weather_longitude ?? null);
+        setWeatherLocationName(data.data.weather_location_name ?? '');
+        setTimezoneInput(data.data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+        setUseBrowserTime(data.data.use_browser_time !== false);
+        setTemperatureUnit(data.data.temperature_unit ?? 'celsius');
       }
     } catch {}
   };
@@ -304,6 +323,57 @@ export default function Settings() {
       setDisplayNameNotice({ type: 'error', message: 'Failed to save name.' });
     } finally {
       setSavingDisplayName(false);
+    }
+  };
+
+  const handleLocationSearch = async () => {
+    if (!locationSearch.trim()) return;
+    setLocationSearching(true);
+    setLocationResults([]);
+    try {
+      const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationSearch.trim())}&count=5`);
+      const data = await resp.json();
+      setLocationResults(
+        (data.results || []).map((r: any) => ({
+          name: r.name,
+          country: r.country || '',
+          latitude: r.latitude,
+          longitude: r.longitude,
+        }))
+      );
+    } catch {
+      setLocationResults([]);
+    } finally {
+      setLocationSearching(false);
+    }
+  };
+
+  const handleSelectLocation = (loc: { name: string; country: string; latitude: number; longitude: number }) => {
+    setWeatherLatitude(loc.latitude);
+    setWeatherLongitude(loc.longitude);
+    setWeatherLocationName(`${loc.name}, ${loc.country}`);
+    setLocationResults([]);
+    setLocationSearch('');
+  };
+
+  const handleSaveLocationSettings = async () => {
+    setSavingLocation(true);
+    setLocationNotice(null);
+    try {
+      await api.updateProfile({
+        weather_latitude: weatherLatitude,
+        weather_longitude: weatherLongitude,
+        weather_location_name: weatherLocationName || null,
+        timezone: timezoneInput || null,
+        use_browser_time: useBrowserTime,
+        temperature_unit: temperatureUnit,
+      });
+      setLocationNotice({ type: 'success', message: 'Settings saved!' });
+      setTimeout(() => setLocationNotice(null), 2500);
+    } catch {
+      setLocationNotice({ type: 'error', message: 'Failed to save settings.' });
+    } finally {
+      setSavingLocation(false);
     }
   };
 
@@ -1044,6 +1114,127 @@ curl -X POST "$API_URL/api/guestbook" \\
                     {displayNameNotice.message}
                   </span>
                 )}
+              </div>
+            </section>
+
+            {/* Location & Time */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">Location & Time</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                Set your location for weather display and timezone for the clock.
+              </p>
+              <div className="space-y-4">
+                {/* Location search */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">Location</label>
+                  {weatherLocationName && (
+                    <p className="text-sm text-blue-600 dark:text-blue-400 mb-2">Current: {weatherLocationName}</p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={locationSearch}
+                      onChange={(e) => setLocationSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleLocationSearch())}
+                      placeholder="Search city..."
+                      className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-56 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={handleLocationSearch}
+                      disabled={locationSearching}
+                      className="px-3 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 transition-colors"
+                    >
+                      {locationSearching ? 'Searching…' : 'Search'}
+                    </button>
+                  </div>
+                  {locationResults.length > 0 && (
+                    <ul className="mt-2 border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden divide-y divide-gray-100 dark:divide-gray-700">
+                      {locationResults.map((loc, i) => (
+                        <li key={i}>
+                          <button
+                            onClick={() => handleSelectLocation(loc)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                          >
+                            <span className="font-medium">{loc.name}</span>
+                            <span className="text-gray-400 dark:text-gray-500 ml-2">{loc.country}</span>
+                            <span className="text-gray-400 dark:text-gray-500 ml-2 text-xs">{loc.latitude.toFixed(2)}, {loc.longitude.toFixed(2)}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Timezone */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">Timezone</label>
+                  <input
+                    type="text"
+                    list="timezone-list"
+                    value={timezoneInput}
+                    onChange={(e) => setTimezoneInput(e.target.value)}
+                    placeholder="e.g. Europe/London"
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <datalist id="timezone-list">
+                    {(() => {
+                      try {
+                        return (Intl as any).supportedValuesOf('timeZone').map((tz: string) => (
+                          <option key={tz} value={tz} />
+                        ));
+                      } catch { return null; }
+                    })()}
+                  </datalist>
+                </div>
+
+                {/* Use browser time */}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useBrowserTime}
+                    onChange={(e) => setUseBrowserTime(e.target.checked)}
+                    className="w-5 h-5 rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Use browser time (ignore timezone above)
+                  </span>
+                </label>
+
+                {/* Temperature unit */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">Temperature unit</label>
+                  <div className="flex gap-2">
+                    {(['celsius', 'fahrenheit'] as const).map(u => (
+                      <button
+                        key={u}
+                        onClick={() => setTemperatureUnit(u)}
+                        className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                          temperatureUnit === u
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                            : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-blue-300'
+                        }`}
+                      >
+                        {u === 'celsius' ? '°C' : '°F'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Save button */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleSaveLocationSettings}
+                    disabled={savingLocation}
+                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {savingLocation ? 'Saving…' : 'Save'}
+                  </button>
+                  {locationNotice && (
+                    <span className={`text-sm ${locationNotice.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {locationNotice.message}
+                    </span>
+                  )}
+                </div>
               </div>
             </section>
 

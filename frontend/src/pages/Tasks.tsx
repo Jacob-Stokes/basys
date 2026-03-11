@@ -63,6 +63,71 @@ interface TaskItem {
 type ActiveTab = 'overview' | 'projects' | 'labels';
 type TaskFilter = 'home' | 'all' | 'open' | 'done' | 'favorites';
 
+// ── Weather helpers ────────────────────────────────────────────────
+
+function getWeatherIcon(code: number): JSX.Element {
+  // Clear
+  if (code === 0) return (
+    <svg className="w-5 h-5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </svg>
+  );
+  // Partly cloudy
+  if (code <= 3) return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+      <circle cx="9" cy="8" r="3" fill="#facc15" />
+      <path d="M8 14a4 4 0 014-4h2a4 4 0 110 8H12a4 4 0 01-4-4z" fill="#9ca3af" />
+    </svg>
+  );
+  // Fog
+  if (code <= 48) return (
+    <svg className="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M4 12h16M4 8h12M6 16h14" strokeLinecap="round" />
+    </svg>
+  );
+  // Drizzle
+  if (code <= 57) return (
+    <svg className="w-5 h-5 text-blue-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M8 4a5 5 0 019.5 2H19a3 3 0 010 6H6a4 4 0 010-8z" fill="#d1d5db" stroke="none" />
+      <path d="M10 15v2M14 15v2" strokeLinecap="round" />
+    </svg>
+  );
+  // Rain
+  if (code <= 67 || (code >= 80 && code <= 82)) return (
+    <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M8 4a5 5 0 019.5 2H19a3 3 0 010 6H6a4 4 0 010-8z" fill="#9ca3af" stroke="none" />
+      <path d="M8 16v3M12 15v3M16 16v3" strokeLinecap="round" />
+    </svg>
+  );
+  // Snow
+  if (code <= 77 || (code >= 85 && code <= 86)) return (
+    <svg className="w-5 h-5 text-blue-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M8 4a5 5 0 019.5 2H19a3 3 0 010 6H6a4 4 0 010-8z" fill="#d1d5db" stroke="none" />
+      <circle cx="9" cy="17" r="1" fill="currentColor" /><circle cx="15" cy="17" r="1" fill="currentColor" /><circle cx="12" cy="20" r="1" fill="currentColor" />
+    </svg>
+  );
+  // Thunderstorm
+  return (
+    <svg className="w-5 h-5 text-yellow-500" viewBox="0 0 24 24" fill="none">
+      <path d="M8 4a5 5 0 019.5 2H19a3 3 0 010 6H6a4 4 0 010-8z" fill="#6b7280" />
+      <path d="M13 13l-2 5h3l-2 5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function getWeatherDescription(code: number): string {
+  if (code === 0) return 'Clear sky';
+  if (code <= 3) return 'Partly cloudy';
+  if (code <= 48) return 'Fog';
+  if (code <= 57) return 'Drizzle';
+  if (code <= 67) return 'Rain';
+  if (code <= 77) return 'Snow';
+  if (code <= 82) return 'Rain showers';
+  if (code <= 86) return 'Snow showers';
+  return 'Thunderstorm';
+}
+
 // ── Helpers ────────────────────────────────────────────────────────
 
 function todayStr() {
@@ -885,7 +950,20 @@ export default function Tasks() {
   const [filterLabel, setFilterLabel] = useState<string | null>(null);
 
   // User profile
-  const [currentUser, setCurrentUser] = useState<{ username: string; display_name: string | null } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{
+    username: string;
+    display_name: string | null;
+    weather_latitude: number | null;
+    weather_longitude: number | null;
+    weather_location_name: string | null;
+    timezone: string | null;
+    use_browser_time: boolean;
+    temperature_unit: string;
+  } | null>(null);
+
+  // Weather + time
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [weatherData, setWeatherData] = useState<{ temp: number; code: number; description: string } | null>(null);
 
   // Calendar + Events state
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -995,6 +1073,65 @@ export default function Tasks() {
   useEffect(() => {
     if (activeProject) loadProjectDetail(activeProject);
   }, [activeProject]);
+
+  // Live clock — tick every second
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Weather fetch — on load + every 30 min
+  const fetchWeather = async (lat: number, lon: number, unit: string) => {
+    try {
+      const resp = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&temperature_unit=${unit === 'fahrenheit' ? 'fahrenheit' : 'celsius'}`
+      );
+      const data = await resp.json();
+      if (data.current) {
+        setWeatherData({
+          temp: Math.round(data.current.temperature_2m),
+          code: data.current.weather_code,
+          description: getWeatherDescription(data.current.weather_code),
+        });
+      }
+    } catch (err) {
+      console.warn('Weather fetch failed:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser?.weather_latitude != null && currentUser?.weather_longitude != null) {
+      fetchWeather(currentUser.weather_latitude, currentUser.weather_longitude, currentUser.temperature_unit);
+      const interval = setInterval(
+        () => fetchWeather(currentUser.weather_latitude!, currentUser.weather_longitude!, currentUser.temperature_unit),
+        30 * 60 * 1000
+      );
+      return () => clearInterval(interval);
+    }
+  }, [currentUser?.weather_latitude, currentUser?.weather_longitude, currentUser?.temperature_unit]);
+
+  // ── Time helpers ────────────────────────────────────────────────
+
+  const getUserTimezone = () => {
+    return currentUser?.use_browser_time === false && currentUser?.timezone
+      ? currentUser.timezone
+      : undefined; // undefined = browser default
+  };
+
+  const formatTime = () => {
+    return currentTime.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: getUserTimezone(),
+    });
+  };
+
+  const getHourInTz = () => {
+    return parseInt(
+      new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: getUserTimezone() })
+        .format(currentTime)
+    );
+  };
 
   // ── Handlers ───────────────────────────────────────────────────
 
@@ -1168,49 +1305,6 @@ export default function Tasks() {
           onSubmit={handleQuickAdd}
           inputRef={quickAddRef}
         />
-
-        {/* Filter row: Home left, pills right */}
-        <div className="px-3 py-2 mt-[0.4rem] flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
-          {/* Home icon */}
-          <button
-            onClick={() => { setTaskFilter('home'); setFilterLabel(null); }}
-            className={`p-1.5 rounded-lg transition-colors ${
-              taskFilter === 'home' && !filterLabel
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-            title="Home"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
-            </svg>
-          </button>
-
-          {/* Filter pills — right-aligned */}
-          <div className="flex gap-1.5 items-center">
-            {(['all', 'open', 'done', 'favorites'] as TaskFilter[]).map(f => (
-              <button
-                key={f}
-                onClick={() => { setTaskFilter(f); setFilterLabel(null); }}
-                className={`px-2.5 py-1 text-xs rounded-full border transition-colors capitalize ${
-                  taskFilter === f && !filterLabel
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-            {filterLabel && (
-              <button
-                onClick={() => setFilterLabel(null)}
-                className="px-2.5 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 flex items-center gap-1"
-              >
-                {labels.find(l => l.id === filterLabel)?.title} ×
-              </button>
-            )}
-          </div>
-        </div>
 
         {/* Task list */}
         <div className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -1427,26 +1521,26 @@ export default function Tasks() {
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               {(() => {
-                const h = new Date().getHours();
+                const h = getHourInTz();
                 const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
                 const name = currentUser?.display_name || currentUser?.username || '';
                 return name ? `${greeting}, ${name}` : greeting;
               })()}
             </h1>
-            <div className="flex gap-1.5">
-              {(['overview', 'projects', 'labels'] as ActiveTab[]).map(t => (
-                <button
-                  key={t}
-                  onClick={() => { setTab(t); setActiveProject(null); setActiveProjectData(null); setFilterLabel(null); }}
-                  className={`px-3 py-1.5 text-sm rounded border transition-colors capitalize ${
-                    tab === t
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
+            {/* Time + Weather */}
+            <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
+              {weatherData && (
+                <div className="flex items-center gap-1.5" title={weatherData.description}>
+                  {getWeatherIcon(weatherData.code)}
+                  <span className="text-sm font-medium">{weatherData.temp}°{currentUser?.temperature_unit === 'fahrenheit' ? 'F' : 'C'}</span>
+                  {currentUser?.weather_location_name && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">
+                      {currentUser.weather_location_name}
+                    </span>
+                  )}
+                </div>
+              )}
+              <span className="text-sm font-medium tabular-nums">{formatTime()}</span>
             </div>
           </div>
         </div>
@@ -1458,6 +1552,73 @@ export default function Tasks() {
           {/* Tasks — 3/5 */}
           <div className="w-full lg:w-3/5">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+              {/* Filter row: Home + Projects/Labels left, pills right */}
+              <div className="px-3 py-2 mt-[0.4rem] flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+                {/* Left: Home icon + Projects + Labels */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => { setTab('overview'); setTaskFilter('home'); setFilterLabel(null); setActiveProject(null); setActiveProjectData(null); }}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      tab === 'overview' && taskFilter === 'home' && !filterLabel
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                    title="Home"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => { setTab('projects'); setActiveProject(null); setActiveProjectData(null); setFilterLabel(null); }}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                      tab === 'projects'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                    }`}
+                  >
+                    Projects
+                  </button>
+                  <button
+                    onClick={() => { setTab('labels'); setFilterLabel(null); }}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                      tab === 'labels'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                    }`}
+                  >
+                    Labels
+                  </button>
+                </div>
+
+                {/* Right: Filter pills (only in overview) */}
+                {tab === 'overview' && (
+                  <div className="flex gap-1.5 items-center">
+                    {(['all', 'open', 'done', 'favorites'] as TaskFilter[]).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => { setTaskFilter(f); setFilterLabel(null); }}
+                        className={`px-2.5 py-1 text-xs rounded-full border transition-colors capitalize ${
+                          taskFilter === f && !filterLabel
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                    {filterLabel && (
+                      <button
+                        onClick={() => setFilterLabel(null)}
+                        className="px-2.5 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 flex items-center gap-1"
+                      >
+                        {labels.find(l => l.id === filterLabel)?.title} ×
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {loading ? (
                 <div className="py-12 text-center text-gray-400">Loading...</div>
               ) : (
@@ -1470,9 +1631,8 @@ export default function Tasks() {
             </div>
           </div>
 
-          {/* Calendar — 2/5 */}
-          {tab === 'overview' && (
-            <div className="w-full lg:w-2/5">
+          {/* Calendar — 2/5 (always visible) */}
+          <div className="w-full lg:w-2/5">
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-[0.5rem]">
                 {/* Quick add event — above calendar */}
                 <form
@@ -1615,11 +1775,10 @@ export default function Tasks() {
                   })()}
                 </div>
               </div>
-            </div>
-          )}
+          </div>
         </div>
 
-        {/* + New Task FAB for overview */}
+        {/* + New Task FAB */}
         {tab === 'overview' && !editingTask && (
           <button
             onClick={() => setEditingTask('new')}

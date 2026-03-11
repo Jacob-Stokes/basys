@@ -80,20 +80,60 @@ router.post('/logout', (req, res) => {
   });
 });
 
-// Get current user
-router.get('/me', requireAuth, (req, res) => {
-  ok(res, req.user);
+// Get current user (full profile including weather/timezone settings)
+router.get('/me', requireAuth, (req: Request, res: Response) => {
+  try {
+    const user = db.prepare(`
+      SELECT id, username, email, display_name, is_admin, allow_query_param_auth,
+             weather_latitude, weather_longitude, weather_location_name,
+             timezone, use_browser_time, temperature_unit
+      FROM users WHERE id = ?
+    `).get(req.user!.id) as any;
+    ok(res, {
+      ...user,
+      is_admin: !!user.is_admin,
+      use_browser_time: user.use_browser_time !== 0,
+    });
+  } catch (error) {
+    serverError(res, error);
+  }
 });
 
-// Update current user profile (display name etc.)
+// Update current user profile
 router.patch('/me', requireAuth, (req: Request, res: Response) => {
   try {
-    const { display_name } = req.body;
     const userId = req.user!.id;
-    db.prepare(`UPDATE users SET display_name = ?, updated_at = datetime('now') WHERE id = ?`)
-      .run(display_name ?? null, userId);
-    const updated = db.prepare('SELECT id, username, email, display_name, is_admin, allow_query_param_auth FROM users WHERE id = ?').get(userId);
-    ok(res, updated);
+    const allowedFields: Record<string, (v: any) => any> = {
+      display_name: v => v ?? null,
+      weather_latitude: v => v ?? null,
+      weather_longitude: v => v ?? null,
+      weather_location_name: v => v ?? null,
+      timezone: v => v ?? null,
+      use_browser_time: v => v ? 1 : 0,
+      temperature_unit: v => v ?? 'celsius',
+    };
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    for (const [field, transform] of Object.entries(allowedFields)) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(transform(req.body[field]));
+      }
+    }
+
+    if (updates.length > 0) {
+      updates.push("updated_at = datetime('now')");
+      db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values, userId);
+    }
+
+    const updated = db.prepare(`
+      SELECT id, username, email, display_name, is_admin, allow_query_param_auth,
+             weather_latitude, weather_longitude, weather_location_name,
+             timezone, use_browser_time, temperature_unit
+      FROM users WHERE id = ?
+    `).get(userId) as any;
+    ok(res, { ...updated, is_admin: !!updated.is_admin, use_browser_time: updated.use_browser_time !== 0 });
   } catch (error) {
     serverError(res, error);
   }
