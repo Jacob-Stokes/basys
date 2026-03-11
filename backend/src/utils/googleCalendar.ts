@@ -188,9 +188,17 @@ export async function syncGoogleEvents(userId: string): Promise<number> {
   const calendars = await listCalendars(accessToken);
   const calColorMap = new Map(calendars.map(c => [c.id, c.backgroundColor]));
 
+  // Date strings for the sync window (used to scope deletions)
+  const timeMinDate = timeMin.slice(0, 10);
+  const timeMaxDate = timeMax.slice(0, 10);
+
   for (const calId of selectedCalendars) {
     try {
       const events = await fetchCalendarEvents(accessToken, calId, timeMin, timeMax);
+
+      // Track all event IDs returned by Google for this calendar
+      const returnedIds: string[] = events.map((e: any) => e.id);
+
       for (const event of events) {
         if (event.status === 'cancelled') continue;
         const isAllDay = !!event.start?.date;
@@ -215,6 +223,31 @@ export async function syncGoogleEvents(userId: string): Promise<number> {
         );
         totalSynced++;
       }
+
+      // Delete cached events that Google no longer returns for this calendar
+      // (covers deleted events and cancelled events within the sync window)
+      if (returnedIds.length > 0) {
+        const placeholders = returnedIds.map(() => '?').join(',');
+        db.prepare(
+          `DELETE FROM google_calendar_events
+           WHERE user_id = ? AND calendar_id = ?
+             AND google_event_id NOT IN (${placeholders})
+             AND start_date >= ? AND start_date <= ?`
+        ).run(userId, calId, ...returnedIds, timeMinDate, timeMaxDate);
+      } else {
+        // Google returned nothing — delete all cached events in the sync window for this calendar
+        db.prepare(
+          `DELETE FROM google_calendar_events
+           WHERE user_id = ? AND calendar_id = ?
+             AND start_date >= ? AND start_date <= ?`
+        ).run(userId, calId, timeMinDate, timeMaxDate);
+      }
+
+      // Also delete any cancelled events that slipped through previously
+      db.prepare(
+        `DELETE FROM google_calendar_events WHERE user_id = ? AND calendar_id = ? AND status = 'cancelled'`
+      ).run(userId, calId);
+
     } catch (err) {
       console.error(`Failed to sync calendar ${calId}:`, err);
     }
