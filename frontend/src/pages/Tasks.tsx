@@ -1977,7 +1977,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                       {!hasContent && <p className="text-xs text-gray-400 dark:text-gray-500 italic">Nothing scheduled</p>}
                       <ul className="space-y-1">
                         {dayEvents.map(e => (
-                          <li key={e.id} className="flex items-center gap-2 text-sm px-2 py-1 -mx-2 rounded">
+                          <li key={e.id} className="flex items-center gap-2 text-sm px-2 py-1 -mx-2 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors" onClick={() => setEditingEvent(e)}>
                             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: e.color }} />
                             <span className="text-gray-700 dark:text-gray-300 truncate">{e.title}</span>
                             {!e.all_day && e.start_date.includes('T') && (
