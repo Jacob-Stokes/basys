@@ -42,6 +42,7 @@ export const api = {
     timezone?: string | null;
     use_browser_time?: boolean;
     temperature_unit?: string;
+    todo_hidden_project_types?: string;
   }) => apiRequest<any>('/api/auth/me', { method: 'PATCH', body: JSON.stringify(data) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     apiRequest<any>('/api/auth/password', {
@@ -192,7 +193,7 @@ export const api = {
     apiRequest<{ loggedDates: string[]; stats: any }>(`/api/habits/${habitId}/calendar?year=${year}&month=${month}`),
 
   // Tasks
-  getTasks: (params?: { project_id?: string; done?: string; priority?: string; label?: string; due_before?: string; due_after?: string; search?: string; favorite?: string }) => {
+  getTasks: (params?: { project_id?: string; done?: string; priority?: string; label?: string; due_before?: string; due_after?: string; search?: string; favorite?: string; exclude_types?: string }) => {
     const query = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([k, v]) => { if (v !== undefined) query.append(k, v); });
@@ -223,7 +224,14 @@ export const api = {
     apiRequest<any>(`/api/tasks/${taskId}/comments/${commentId}`, { method: 'DELETE' }),
 
   // Projects
-  getProjects: () => apiRequest<any[]>('/api/projects'),
+  getProjects: (params?: { exclude_types?: string }) => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined) query.append(k, v); });
+    }
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<any[]>(`/api/projects${qs}`);
+  },
   createProject: (data: any) =>
     apiRequest<any>('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
   getProject: (id: string) => apiRequest<any>(`/api/projects/${id}`),
@@ -368,6 +376,15 @@ export const api = {
     apiRequest<any>(`/api/gmail/messages/${encodeURIComponent(gmailMessageId)}/unread`, { method: 'POST' }),
   syncGmail: () =>
     apiRequest<{ synced: number }>('/api/gmail/sync', { method: 'POST' }),
+
+  // Quick notes
+  getNotes: () => apiRequest<any[]>('/api/notes'),
+  createNote: (content: string) =>
+    apiRequest<any>('/api/notes', { method: 'POST', body: JSON.stringify({ content }) }),
+  updateNote: (id: string, content: string) =>
+    apiRequest<any>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify({ content }) }),
+  deleteNote: (id: string) =>
+    apiRequest<any>(`/api/notes/${id}`, { method: 'DELETE' }),
 
   getSharedGoal: async (token: string) => {
     const response = await fetch(`${API_URL}/api/shared/${token}/goal`);

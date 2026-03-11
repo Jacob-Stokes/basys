@@ -13,7 +13,7 @@ const GROUPS: ShortcutGroup[] = [
     title: 'Navigation',
     shortcuts: [
       { keys: `${MOD_LABEL}1`, description: 'Todo' },
-      { keys: `${MOD_LABEL}2`, description: 'Projects' },
+      { keys: `${MOD_LABEL}2`, description: 'Sprints' },
       { keys: `${MOD_LABEL}3`, description: 'Pomo' },
       { keys: `${MOD_LABEL}4`, description: 'Goals' },
       { keys: `${MOD_LABEL}5`, description: 'Habits' },

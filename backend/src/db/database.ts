@@ -501,6 +501,19 @@ CREATE TABLE IF NOT EXISTS gmail_messages (
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_user ON gmail_messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_date ON gmail_messages(date);
 CREATE INDEX IF NOT EXISTS idx_gmail_messages_unread ON gmail_messages(user_id, is_unread);
+
+-- Quick notes (side panel scratch pad)
+CREATE TABLE IF NOT EXISTS quick_notes (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_quick_notes_user ON quick_notes(user_id);
+CREATE INDEX IF NOT EXISTS idx_quick_notes_updated ON quick_notes(user_id, updated_at DESC);
 `;
 
 // Initialize schema
@@ -698,6 +711,17 @@ export function initDatabase() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_buckets_sprint ON buckets(sprint_id)`);
   } catch (err) {
     console.log('Migration check (buckets sprint):', err);
+  }
+
+  // Migration: Add todo_hidden_project_types to users
+  try {
+    const userCols = db.prepare("PRAGMA table_info(users)").all() as any[];
+    if (!userCols.some((col: any) => col.name === 'todo_hidden_project_types')) {
+      db.exec(`ALTER TABLE users ADD COLUMN todo_hidden_project_types TEXT DEFAULT 'dev'`);
+      console.log('Added todo_hidden_project_types to users table');
+    }
+  } catch (err) {
+    console.log('Migration check (todo_hidden_project_types):', err);
   }
 
   console.log('Database initialized at:', DB_PATH);

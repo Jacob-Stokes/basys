@@ -11,6 +11,9 @@ export default defineConfig({
     },
     allowedHosts: process.env.VITE_ALLOWED_HOSTS
       ? process.env.VITE_ALLOWED_HOSTS.split(',').map((host) => host.trim()).filter(Boolean)
-      : []
+      : [],
+    proxy: process.env.VITE_PROXY_TARGET ? {
+      '/api': { target: process.env.VITE_PROXY_TARGET, changeOrigin: true, ws: true }
+    } : undefined
   }
 })

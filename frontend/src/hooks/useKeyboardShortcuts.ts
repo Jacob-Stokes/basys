@@ -47,7 +47,7 @@ export function useKeyboardShortcuts() {
       switch (code) {
         // ── Navigation: ⌥1–8 ────────────────────────────
         case 'Digit1': navigate('/');          break;
-        case 'Digit2': navigate('/projects');  break;
+        case 'Digit2': navigate('/sprints');   break;
         case 'Digit3': navigate('/timer');     break;
         case 'Digit4': navigate('/goals');     break;
         case 'Digit5': navigate('/habits');    break;

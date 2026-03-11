@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
 import { parseTaskInput, formatParsedPreview } from '../utils/taskParser';
@@ -67,7 +66,7 @@ interface TaskItem {
   links: TaskLinkItem[];
 }
 
-type ActiveTab = 'overview' | 'projects' | 'labels' | 'email';
+type ActiveTab = 'overview' | 'labels' | 'email';
 type TaskFilter = 'home' | 'all' | 'open' | 'done' | 'favorites';
 
 interface GmailMessageItem {
@@ -1215,14 +1214,20 @@ function LabelEditModal({ label, onSave, onClose }: {
 
 // ── ProjectEditModal ───────────────────────────────────────────────
 
+const PROJECT_TYPES = ['personal', 'dev', 'design', 'work', 'research', 'learning'];
+
 function ProjectEditModal({ project, onSave, onClose }: {
   project: ProjectItem | null;
-  onSave: (data: { title: string; description: string | null; hex_color: string }) => void;
+  onSave: (data: { title: string; description: string | null; hex_color: string; type: string }) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(project?.title || '');
   const [description, setDescription] = useState(project?.description || '');
   const [hexColor, setHexColor] = useState(project?.hex_color || '');
+  const [projectType, setProjectType] = useState(project?.type || 'personal');
+  const [customType, setCustomType] = useState('');
+
+  const effectiveType = projectType === '_custom' ? customType.trim().toLowerCase() : projectType;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -1230,7 +1235,7 @@ function ProjectEditModal({ project, onSave, onClose }: {
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
           {project ? 'Edit Project' : 'New Project'}
         </h3>
-        <form onSubmit={(e) => { e.preventDefault(); if (title.trim()) onSave({ title: title.trim(), description: description || null, hex_color: hexColor }); }} className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (title.trim()) onSave({ title: title.trim(), description: description || null, hex_color: hexColor, type: effectiveType || 'personal' }); }} className="space-y-4">
           <input
             type="text"
             value={title}
@@ -1239,6 +1244,37 @@ function ProjectEditModal({ project, onSave, onClose }: {
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
             autoFocus
           />
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {PROJECT_TYPES.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setProjectType(t)}
+                  className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${projectType === t ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400'}`}
+                >
+                  {t}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setProjectType('_custom')}
+                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${projectType === '_custom' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400'}`}
+              >
+                other...
+              </button>
+            </div>
+            {projectType === '_custom' && (
+              <input
+                type="text"
+                value={customType}
+                onChange={e => setCustomType(e.target.value)}
+                placeholder="Custom type..."
+                className="mt-2 w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs"
+              />
+            )}
+          </div>
           <div>
             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Color</label>
             <div className="flex gap-2 flex-wrap">
@@ -1283,7 +1319,6 @@ function ProjectEditModal({ project, onSave, onClose }: {
 // ── Main Component ─────────────────────────────────────────────────
 
 export default function Tasks({ initialTab = 'overview' }: { initialTab?: ActiveTab } = {}) {
-  const navigate = useNavigate();
   const [tab, setTab] = useState<ActiveTab>(initialTab);
   const [error, setError] = useState<string | null>(null);
 
@@ -1302,17 +1337,13 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
   // Project state
   const [activeProject, setActiveProject] = useState<string | null>(null);
-  const [activeProjectData, setActiveProjectData] = useState<any>(null);
   const [editingProject, setEditingProject] = useState<ProjectItem | null | 'new'>(null);
-
-  // Sprint state (for dev project detail)
-  const [sprints, setSprints] = useState<any[]>([]);
-  const [sprintsLoading, setSprintsLoading] = useState(false);
-  const [newSprintTitle, setNewSprintTitle] = useState('');
 
   // Label state
   const [editingLabel, setEditingLabel] = useState<LabelItem | null | 'new'>(null);
   const [filterLabel, setFilterLabel] = useState<string | null>(null);
+
+  const hiddenTypesRef = useRef<string>('dev');
 
   // User profile
   const [currentUser, setCurrentUser] = useState<{
@@ -1324,6 +1355,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     timezone: string | null;
     use_browser_time: boolean;
     temperature_unit: string;
+    todo_hidden_project_types: string;
   } | null>(null);
 
   // Weather + time
@@ -1377,6 +1409,10 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
       else if (taskFilter === 'done') params.done = '1';
       else if (taskFilter === 'favorites') params.favorite = '1';
       if (filterLabel) params.label = filterLabel;
+      // Hide tasks from hidden project types (e.g. dev projects)
+      if (hiddenTypesRef.current) {
+        params.exclude_types = hiddenTypesRef.current;
+      }
       const data = await api.getTasks(params);
       setTasks(data);
     } catch (err) {
@@ -1386,7 +1422,12 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
   const loadProjects = async () => {
     try {
-      const data = await api.getProjects();
+      const params: any = {};
+      // Hide projects of hidden types from TODO page
+      if (hiddenTypesRef.current) {
+        params.exclude_types = hiddenTypesRef.current;
+      }
+      const data = await api.getProjects(params);
       setProjects(data);
     } catch (err) {
       setError((err as Error).message);
@@ -1583,31 +1624,19 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
   const loadAll = async () => {
     setLoading(true);
+    // Load user profile first (needed for todo_hidden_project_types filter)
+    try {
+      const user = await api.getMe();
+      setCurrentUser(user);
+      hiddenTypesRef.current = user.todo_hidden_project_types || 'dev';
+    } catch {}
     await Promise.all([loadTasks(), loadProjects(), loadLabels(), loadEvents(),
-      api.getMe().then(u => setCurrentUser(u)).catch(() => {}),
       loadGcalState(),
       loadGmailState(),
     ]);
     setLoading(false);
   };
 
-  const loadProjectDetail = async (projectId: string) => {
-    try {
-      const data = await api.getProject(projectId);
-      setActiveProjectData(data);
-      // Load sprints if non-personal project
-      if (data.type && data.type !== 'personal') {
-        setSprintsLoading(true);
-        try {
-          const s = await api.getSprints(projectId);
-          setSprints(s);
-        } catch { setSprints([]); }
-        setSprintsLoading(false);
-      }
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
 
   useEffect(() => { loadAll(); }, []);
 
@@ -1624,9 +1653,6 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   }, [selectedDate]);
 
   useEffect(() => { loadTasks(); }, [taskFilter, filterLabel]);
-  useEffect(() => {
-    if (activeProject) loadProjectDetail(activeProject);
-  }, [activeProject]);
 
   // Live clock — tick every second
   useEffect(() => {
@@ -1724,7 +1750,6 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
       setQuickAdd('');
       loadTasks();
-      if (activeProject) loadProjectDetail(activeProject);
       loadProjects();
     } catch (err) {
       setError((err as Error).message);
@@ -1735,7 +1760,6 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     try {
       await api.toggleTask(id);
       loadTasks();
-      if (activeProject) loadProjectDetail(activeProject);
       loadProjects();
     } catch (err) {
       setError((err as Error).message);
@@ -1760,14 +1784,13 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
       }
       setEditingTask(null);
       loadTasks();
-      if (activeProject) loadProjectDetail(activeProject);
       loadProjects();
     } catch (err) {
       setError((err as Error).message);
     }
   };
 
-  const handleSaveProject = async (data: { title: string; description: string | null; hex_color: string }) => {
+  const handleSaveProject = async (data: { title: string; description: string | null; hex_color: string; type?: string }) => {
     try {
       if (editingProject && editingProject !== 'new') {
         await api.updateProject(editingProject.id, data);
@@ -1804,7 +1827,6 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
       else if (deleteTarget.type === 'label') await api.deleteLabel(deleteTarget.id);
       setDeleteTarget(null);
       loadAll();
-      if (activeProject) loadProjectDetail(activeProject);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -1905,299 +1927,6 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
   // ── Render Projects Tab ────────────────────────────────────────
 
-  const handleCreateSprint = async () => {
-    if (!newSprintTitle.trim() || !activeProject) return;
-    try {
-      await api.createSprint(activeProject, { title: newSprintTitle.trim() });
-      setNewSprintTitle('');
-      const s = await api.getSprints(activeProject);
-      setSprints(s);
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
-
-  const handleDeleteSprint = async (sprintId: string) => {
-    try {
-      await api.deleteSprint(sprintId);
-      if (activeProject) {
-        const s = await api.getSprints(activeProject);
-        setSprints(s);
-      }
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
-
-  const handleSprintStatusChange = async (sprintId: string, status: string) => {
-    try {
-      await api.updateSprintStatus(sprintId, status);
-      if (activeProject) {
-        const s = await api.getSprints(activeProject);
-        setSprints(s);
-      }
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
-
-  const renderProjectDetailHeader = (p: any) => (
-    <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
-      <button onClick={() => { setActiveProject(null); setActiveProjectData(null); setSprints([]); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
-          {p.hex_color && <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.hex_color }} />}
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100">{p.title}</h3>
-          {p.type && p.type !== 'personal' && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase">
-              {p.type}
-            </span>
-          )}
-        </div>
-        {p.description && <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>}
-      </div>
-      <button
-        onClick={() => setEditingProject(projects.find(pr => pr.id === activeProject) || null)}
-        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-      >
-        Edit
-      </button>
-    </div>
-  );
-
-  const renderSprintProjectDetail = () => {
-    if (!activeProjectData) return <div className="p-8 text-center text-gray-400">Loading...</div>;
-    const p = activeProjectData;
-    const statusColors: Record<string, string> = {
-      planned: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
-      active: 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300',
-      completed: 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300',
-    };
-    const backlogTasks = (p.tasks || []).filter((t: any) => !t.sprint_id);
-
-    return (
-      <div>
-        {renderProjectDetailHeader(p)}
-
-        {/* New sprint input */}
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newSprintTitle}
-              onChange={e => setNewSprintTitle(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleCreateSprint()}
-              placeholder="New sprint name..."
-              className="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400"
-            />
-            <button
-              onClick={handleCreateSprint}
-              disabled={!newSprintTitle.trim()}
-              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-            >
-              + Sprint
-            </button>
-          </div>
-        </div>
-
-        {/* Sprint list */}
-        <div className="p-4">
-          {sprintsLoading ? (
-            <div className="py-8 text-center text-gray-400 text-sm">Loading sprints...</div>
-          ) : sprints.length === 0 ? (
-            <div className="py-8 text-center text-gray-400 dark:text-gray-500 text-sm">
-              No sprints yet. Create one above to get started.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {sprints.map(s => (
-                <div
-                  key={s.id}
-                  className={`border rounded-lg p-4 cursor-pointer transition-shadow hover:shadow-md ${
-                    s.status === 'active'
-                      ? 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10'
-                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                  }`}
-                  onClick={() => navigate(`/sprints/${s.id}`)}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900 dark:text-gray-100">{s.title}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase ${statusColors[s.status] || statusColors.planned}`}>
-                        {s.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                      {s.status === 'planned' && (
-                        <button onClick={() => handleSprintStatusChange(s.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400">
-                          Start
-                        </button>
-                      )}
-                      {s.status === 'active' && (
-                        <button onClick={() => handleSprintStatusChange(s.id, 'completed')} className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400">
-                          Complete
-                        </button>
-                      )}
-                      {s.status === 'completed' && (
-                        <button onClick={() => handleSprintStatusChange(s.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400">
-                          Reopen
-                        </button>
-                      )}
-                      <button onClick={() => handleDeleteSprint(s.id)} className="text-xs text-red-400 hover:text-red-600">
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500">
-                    Sprint {s.sprint_number} · {s.open_tasks || 0} open · {s.done_tasks || 0} done
-                    {s.start_date && ` · ${new Date(s.start_date).toLocaleDateString()}`}
-                    {s.end_date && ` – ${new Date(s.end_date).toLocaleDateString()}`}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Backlog section */}
-        <div className="border-t border-gray-200 dark:border-gray-700">
-          <div className="px-4 py-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Backlog ({backlogTasks.length})</span>
-          </div>
-          <QuickAddBar
-            value={quickAdd}
-            onChange={setQuickAdd}
-            onSubmit={handleQuickAdd}
-            placeholder="Add a task to backlog..."
-          />
-          {backlogTasks.length > 0 ? (
-            <div>
-              {(backlogTasks as TaskItem[]).map(t => (
-                <TaskRow
-                  key={t.id}
-                  task={t}
-                  onToggle={() => handleToggleTask(t.id)}
-                  onEdit={() => setEditingTask(t)}
-                  onDelete={() => setDeleteTarget({ type: 'task', id: t.id, title: t.title })}
-                  onToggleFavorite={() => handleToggleFavorite(t.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="py-6 text-center text-gray-400 dark:text-gray-500 text-sm">
-              No backlog tasks.
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderProjectDetail = () => {
-    if (!activeProjectData) return <div className="p-8 text-center text-gray-400">Loading...</div>;
-    const p = activeProjectData;
-
-    // Non-personal projects get sprint view
-    if (p.type && p.type !== 'personal') {
-      return renderSprintProjectDetail();
-    }
-
-    return (
-      <div>
-        {renderProjectDetailHeader(p)}
-
-        {/* Quick add for project */}
-        <QuickAddBar
-          value={quickAdd}
-          onChange={setQuickAdd}
-          onSubmit={handleQuickAdd}
-          placeholder="Add a task to this project..."
-        />
-
-        {/* Tasks in project */}
-        {(p.tasks || []).length > 0 ? (
-          <div>
-            {(p.tasks as TaskItem[]).map(t => (
-              <TaskRow
-                key={t.id}
-                task={t}
-                onToggle={() => handleToggleTask(t.id)}
-                onEdit={() => setEditingTask(t)}
-                onDelete={() => setDeleteTarget({ type: 'task', id: t.id, title: t.title })}
-                onToggleFavorite={() => handleToggleFavorite(t.id)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="py-12 text-center text-gray-400 dark:text-gray-500 text-sm">
-            No tasks in this project yet.
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderSprints = () => {
-    if (activeProject) return renderProjectDetail();
-
-    return (
-      <div className="p-4">
-        <div className="flex justify-between items-center mb-4">
-          <span className="text-sm text-gray-500 dark:text-gray-400">{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
-          <button
-            onClick={() => setEditingProject('new')}
-            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            + New Project
-          </button>
-        </div>
-        <div className="grid gap-3">
-          {projects.map(p => (
-            <div
-              key={p.id}
-              onClick={() => setActiveProject(p.id)}
-              className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer bg-white dark:bg-gray-800"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  {p.hex_color && <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.hex_color }} />}
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{p.title}</span>
-                  {p.type && p.type !== 'personal' && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase">
-                      {p.type}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => api.toggleProjectFavorite(p.id).then(loadProjects)} className={`text-sm ${p.is_favorite ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600'}`}>
-                    ★
-                  </button>
-                  <button onClick={() => setEditingProject(p)} className="text-xs text-gray-400 hover:text-gray-600">
-                    Edit
-                  </button>
-                  <button onClick={() => setDeleteTarget({ type: 'project', id: p.id, title: p.title })} className="text-xs text-red-400 hover:text-red-600">
-                    Delete
-                  </button>
-                </div>
-              </div>
-              <div className="text-xs text-gray-400 dark:text-gray-500">
-                {p.open_tasks} open · {p.done_tasks} done
-              </div>
-            </div>
-          ))}
-          {projects.length === 0 && (
-            <div className="py-12 text-center text-gray-400 dark:text-gray-500 text-sm">
-              No projects yet. Create one to organize your tasks!
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // ── Render Labels Tab ──────────────────────────────────────────
 
@@ -2375,7 +2104,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                 {/* Left: Home icon + Projects + Labels */}
                 <div className="flex items-center gap-1.5">
                   <button
-                    onClick={() => { setTab('overview'); setTaskFilter('home'); setFilterLabel(null); setActiveProject(null); setActiveProjectData(null); }}
+                    onClick={() => { setTab('overview'); setTaskFilter('home'); setFilterLabel(null); setActiveProject(null); }}
                     className={`p-1.5 rounded-lg transition-colors ${
                       tab === 'overview' && taskFilter === 'home' && !filterLabel
                         ? 'bg-blue-600 text-white'
@@ -2386,16 +2115,6 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
                     </svg>
-                  </button>
-                  <button
-                    onClick={() => { setTab('projects'); setActiveProject(null); setActiveProjectData(null); setFilterLabel(null); }}
-                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                      tab === 'projects'
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
-                    }`}
-                  >
-                    Projects
                   </button>
                   <button
                     onClick={() => { setTab('labels'); setFilterLabel(null); }}
@@ -2457,7 +2176,6 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
               ) : (
                 <>
                   {tab === 'overview' && renderOverview()}
-                  {tab === 'projects' && renderSprints()}
                   {tab === 'labels' && renderLabels()}
                   {tab === 'email' && renderEmail()}
                 </>

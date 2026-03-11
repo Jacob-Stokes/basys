@@ -28,6 +28,7 @@ router.get('/projects/:projectId/sprints', (req: Request, res: Response) => {
       FROM sprints s
       LEFT JOIN tasks t ON t.sprint_id = s.id
       WHERE s.project_id = ?
+      GROUP BY s.id
       ORDER BY s.sprint_number DESC, s.created_at DESC
     `).all(projectId);
 

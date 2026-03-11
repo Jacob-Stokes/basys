@@ -77,6 +77,12 @@ export default function Settings() {
   const [locationNotice, setLocationNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [savingLocation, setSavingLocation] = useState(false);
 
+  // TODO filter state
+  const [todoHiddenTypes, setTodoHiddenTypes] = useState<string[]>(['dev']);
+  const [allProjectTypes, setAllProjectTypes] = useState<string[]>([]);
+  const [savingTodoFilter, setSavingTodoFilter] = useState(false);
+  const [todoFilterNotice, setTodoFilterNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // Google Calendar state
   const [gcalStatus, setGcalStatus] = useState<{
     configured: boolean;
@@ -105,7 +111,7 @@ export default function Settings() {
   const [gmailNotice, setGmailNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Admin state
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; display_name: string | null; is_admin: boolean } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; display_name: string | null; is_admin: boolean; todo_hidden_project_types?: string } | null>(null);
   const [adminUsers, setAdminUsers] = useState<{ id: string; username: string; email: string | null; is_admin: number; created_at: string }[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
@@ -207,6 +213,13 @@ export default function Settings() {
     }
     if (activeTab === 'admin' && adminUsers.length === 0 && !adminLoading && currentUser?.is_admin) {
       loadAdminUsers();
+    }
+    if (activeTab === 'display' && allProjectTypes.length === 0) {
+      // Fetch all projects (unfiltered) to get all known types
+      api.getProjects().then(projects => {
+        const types = Array.from(new Set(projects.map((p: any) => p.type || 'personal').filter(Boolean))) as string[];
+        setAllProjectTypes(types.sort());
+      }).catch(() => {});
     }
   }, [activeTab]);
 
@@ -350,6 +363,8 @@ export default function Settings() {
         setTimezoneInput(data.data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
         setUseBrowserTime(data.data.use_browser_time !== false);
         setTemperatureUnit(data.data.temperature_unit ?? 'celsius');
+        const hidden = data.data.todo_hidden_project_types || 'dev';
+        setTodoHiddenTypes(hidden.split(',').map((t: string) => t.trim()).filter(Boolean));
       }
     } catch {}
   };
@@ -417,6 +432,22 @@ export default function Settings() {
       setLocationNotice({ type: 'error', message: 'Failed to save settings.' });
     } finally {
       setSavingLocation(false);
+    }
+  };
+
+  const handleSaveTodoFilter = async () => {
+    setSavingTodoFilter(true);
+    setTodoFilterNotice(null);
+    try {
+      await api.updateProfile({
+        todo_hidden_project_types: todoHiddenTypes.join(','),
+      });
+      setTodoFilterNotice({ type: 'success', message: 'TODO filters saved!' });
+      setTimeout(() => setTodoFilterNotice(null), 2500);
+    } catch {
+      setTodoFilterNotice({ type: 'error', message: 'Failed to save filters.' });
+    } finally {
+      setSavingTodoFilter(false);
     }
   };
 
@@ -1667,6 +1698,57 @@ curl -X POST "$API_URL/api/guestbook" \\
                   {t('settings.showHeaderBranding')}
                 </span>
               </label>
+            </section>
+
+            {/* TODO Page Filters */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">TODO Page Filters</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Choose which project types are visible on the TODO page. Hidden types will still appear in the Sprints page.
+              </p>
+              {allProjectTypes.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No project types found. Create projects with different types first.</p>
+              ) : (
+                <div className="space-y-2 mb-4">
+                  {allProjectTypes.map(type => {
+                    const isHidden = todoHiddenTypes.includes(type);
+                    return (
+                      <label key={type} className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!isHidden}
+                          onChange={() => {
+                            if (isHidden) {
+                              setTodoHiddenTypes(prev => prev.filter(t => t !== type));
+                            } else {
+                              setTodoHiddenTypes(prev => [...prev, type]);
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300 capitalize">{type}</span>
+                        {isHidden && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">hidden</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSaveTodoFilter}
+                  disabled={savingTodoFilter}
+                  className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {savingTodoFilter ? 'Saving…' : 'Save Filters'}
+                </button>
+                {todoFilterNotice && (
+                  <span className={`text-sm ${todoFilterNotice.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                    {todoFilterNotice.message}
+                  </span>
+                )}
+              </div>
             </section>
             </>}
 

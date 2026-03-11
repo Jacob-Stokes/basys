@@ -9,16 +9,31 @@ const router = Router();
 router.get('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
+    const { exclude_types } = req.query;
+
+    let extraWhere = '';
+    const params: any[] = [userId];
+
+    // Filter out projects by type (comma-separated list)
+    if (exclude_types && typeof exclude_types === 'string') {
+      const types = exclude_types.split(',').map(t => t.trim()).filter(Boolean);
+      if (types.length > 0) {
+        const placeholders = types.map(() => '?').join(',');
+        extraWhere = ` AND (p.type IS NULL OR p.type NOT IN (${placeholders}))`;
+        params.push(...types);
+      }
+    }
+
     const rows = db.prepare(`
       SELECT p.*,
         COUNT(CASE WHEN t.done = 0 THEN 1 END) as open_tasks,
         COUNT(CASE WHEN t.done = 1 THEN 1 END) as done_tasks
       FROM projects p
       LEFT JOIN tasks t ON t.project_id = p.id
-      WHERE p.user_id = ?
+      WHERE p.user_id = ?${extraWhere}
       GROUP BY p.id
       ORDER BY p.is_favorite DESC, p.position ASC, p.created_at DESC
-    `).all(userId);
+    `).all(...params);
 
     ok(res, rows);
   } catch (error) {

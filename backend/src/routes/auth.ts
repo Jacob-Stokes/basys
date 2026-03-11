@@ -86,13 +86,14 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
     const user = db.prepare(`
       SELECT id, username, email, display_name, is_admin, allow_query_param_auth,
              weather_latitude, weather_longitude, weather_location_name,
-             timezone, use_browser_time, temperature_unit
+             timezone, use_browser_time, temperature_unit, todo_hidden_project_types
       FROM users WHERE id = ?
     `).get(req.user!.id) as any;
     ok(res, {
       ...user,
       is_admin: !!user.is_admin,
       use_browser_time: user.use_browser_time !== 0,
+      todo_hidden_project_types: user.todo_hidden_project_types || 'dev',
     });
   } catch (error) {
     serverError(res, error);
@@ -111,6 +112,7 @@ router.patch('/me', requireAuth, (req: Request, res: Response) => {
       timezone: v => v ?? null,
       use_browser_time: v => v ? 1 : 0,
       temperature_unit: v => v ?? 'celsius',
+      todo_hidden_project_types: v => v ?? 'dev',
     };
 
     const updates: string[] = [];
@@ -130,10 +132,10 @@ router.patch('/me', requireAuth, (req: Request, res: Response) => {
     const updated = db.prepare(`
       SELECT id, username, email, display_name, is_admin, allow_query_param_auth,
              weather_latitude, weather_longitude, weather_location_name,
-             timezone, use_browser_time, temperature_unit
+             timezone, use_browser_time, temperature_unit, todo_hidden_project_types
       FROM users WHERE id = ?
     `).get(userId) as any;
-    ok(res, { ...updated, is_admin: !!updated.is_admin, use_browser_time: updated.use_browser_time !== 0 });
+    ok(res, { ...updated, is_admin: !!updated.is_admin, use_browser_time: updated.use_browser_time !== 0, todo_hidden_project_types: updated.todo_hidden_project_types || 'dev' });
   } catch (error) {
     serverError(res, error);
   }

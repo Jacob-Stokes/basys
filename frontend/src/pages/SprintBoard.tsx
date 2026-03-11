@@ -528,7 +528,7 @@ export default function SprintBoard() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -596,7 +596,7 @@ export default function SprintBoard() {
 
       {/* Board content */}
       {viewMode === 'kanban' ? (
-        <div className="flex gap-4 p-4 overflow-x-auto" style={{ minHeight: 'calc(100vh - 170px)' }}>
+        <div className="flex gap-4 px-6 py-4 overflow-x-auto" style={{ minHeight: 'calc(100vh - 170px)' }}>
           {columns.map(col => (
             <KanbanColumn
               key={col.id}
@@ -657,7 +657,7 @@ export default function SprintBoard() {
         </div>
       ) : (
         /* List view */
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto px-6 py-4">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg m-4 overflow-hidden">
             {columns.map(col => (
               <ListSection

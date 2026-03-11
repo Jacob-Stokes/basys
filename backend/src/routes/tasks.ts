@@ -76,7 +76,7 @@ const TASK_SELECT = `
 router.get('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const { project_id, done, priority, label, due_before, due_after, search, favorite, linked_to, project_type, sprint_id, exclude_dev } = req.query;
+    const { project_id, done, priority, label, due_before, due_after, search, favorite, linked_to, project_type, sprint_id, exclude_dev, exclude_types } = req.query;
 
     let sql = TASK_SELECT;
     const conditions: string[] = ['t.user_id = ?'];
@@ -98,6 +98,15 @@ router.get('/', (req: Request, res: Response) => {
     // Exclude tasks belonging to non-personal projects (for homepage)
     if (exclude_dev === 'true' || exclude_dev === '1') {
       conditions.push("(p.type IS NULL OR p.type = 'personal' OR t.project_id IS NULL)");
+    }
+    // Exclude tasks belonging to projects of specific types (comma-separated)
+    if (exclude_types && typeof exclude_types === 'string') {
+      const types = exclude_types.split(',').map(t => t.trim()).filter(Boolean);
+      if (types.length > 0) {
+        const placeholders = types.map(() => '?').join(',');
+        conditions.push(`(t.project_id IS NULL OR p.type IS NULL OR p.type NOT IN (${placeholders}))`);
+        params.push(...types);
+      }
     }
     if (done !== undefined) {
       conditions.push('t.done = ?');
