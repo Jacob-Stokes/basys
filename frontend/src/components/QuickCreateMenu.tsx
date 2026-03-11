@@ -32,6 +32,13 @@ export default function QuickCreateMenu({ compact }: QuickCreateMenuProps) {
     }
   }, [creating]);
 
+  // Open via keyboard shortcut (⌥N)
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener('basys:quick-create', handler);
+    return () => window.removeEventListener('basys:quick-create', handler);
+  }, []);
+
   // Close on outside click
   useEffect(() => {
     if (!open && !creating) return;
