@@ -1996,7 +1996,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                             <span className="text-gray-700 dark:text-gray-300 truncate">{e.title}</span>
                             {!e.all_day && e.start_date.includes('T') && (
                               <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 ml-auto">
-                                {e.start_date.slice(11, 16)}
+                                {e.start_date.slice(11, 16)}{e.end_date?.includes('T') ? ` – ${e.end_date.slice(11, 16)}` : ''}
                               </span>
                             )}
                             {!!e.all_day && (
@@ -2132,7 +2132,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                                       {e.all_day
                                         ? 'all day'
                                         : e.start_date.includes('T')
-                                          ? e.start_date.slice(11, 16)
+                                          ? `${e.start_date.slice(11, 16)}${e.end_date?.includes('T') ? ` – ${e.end_date.slice(11, 16)}` : ''}`
                                           : ''}
                                     </span>
                                   </li>
