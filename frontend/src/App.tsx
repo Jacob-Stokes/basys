@@ -102,6 +102,7 @@ function App() {
         <Route element={<AuthenticatedLayout />}>
           <Route path="/" element={<Tasks />} />
           <Route path="/tasks" element={<Navigate to="/" replace />} />
+          <Route path="/projects" element={<Tasks initialTab="projects" />} />
           <Route path="/timer" element={<Timer />} />
           <Route path="/goals" element={<Home />} />
           <Route path="/habits" element={<Habits />} />

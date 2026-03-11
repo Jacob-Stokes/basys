@@ -923,8 +923,8 @@ function ProjectEditModal({ project, onSave, onClose }: {
 
 // ── Main Component ─────────────────────────────────────────────────
 
-export default function Tasks() {
-  const [tab, setTab] = useState<ActiveTab>('overview');
+export default function Tasks({ initialTab = 'overview' }: { initialTab?: ActiveTab } = {}) {
+  const [tab, setTab] = useState<ActiveTab>(initialTab);
   const [error, setError] = useState<string | null>(null);
 
   // Data

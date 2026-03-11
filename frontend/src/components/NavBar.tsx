@@ -35,7 +35,7 @@ export default function NavBar() {
   };
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
+    if (path === '/') return location.pathname === '/' || location.pathname === '/tasks';
     if (path === '/goals') return location.pathname === '/goals' || location.pathname.startsWith('/goal/');
     return location.pathname === path;
   };
@@ -59,6 +59,9 @@ export default function NavBar() {
         <div className="hidden sm:flex items-center gap-1">
           <Link to="/" className={linkClass('/')}>
             Todo
+          </Link>
+          <Link to="/projects" className={linkClass('/projects')}>
+            Projects
           </Link>
           <Link to="/timer" className={linkClass('/timer')}>
             Pomo
@@ -182,6 +185,13 @@ export default function NavBar() {
                   className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
                 >
                   Todo
+                </Link>
+                <Link
+                  to="/projects"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                >
+                  Projects
                 </Link>
                 <Link
                   to="/timer"
