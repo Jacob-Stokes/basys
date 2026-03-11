@@ -972,6 +972,11 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   const [events, setEvents] = useState<EventItem[]>([]);
   const [newEventInput, setNewEventInput] = useState('');
 
+  // Google Calendar state
+  const [gcalConnected, setGcalConnected] = useState(false);
+  const [gcalCalendars, setGcalCalendars] = useState<Array<{ id: string; summary: string; backgroundColor: string; primary: boolean; selected: boolean }>>([]);
+  const [selectedCalendarId, setSelectedCalendarId] = useState('');
+
   const taskDates = useMemo(() => {
     const set = new Set<string>();
     tasks.forEach(t => {
@@ -1048,6 +1053,15 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     const allDay = !start.includes('T');
     try {
       await api.createEvent({ title, start_date: start, all_day: allDay });
+      // Also push to Google Calendar if connected
+      if (gcalConnected && selectedCalendarId) {
+        api.pushEventToGoogle({
+          calendar_id: selectedCalendarId,
+          title,
+          start_date: start,
+          all_day: allDay,
+        }).catch(() => {}); // fire-and-forget; sync will pick it up
+      }
       setNewEventInput('');
       loadEvents();
     } catch (err) {
@@ -1055,10 +1069,25 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     }
   };
 
+  const loadGcalState = async () => {
+    try {
+      const status = await api.getGoogleCalendarStatus();
+      if (status.connected) {
+        setGcalConnected(true);
+        const cals = await api.getGoogleCalendars();
+        const selected = cals.filter((c: any) => c.selected);
+        setGcalCalendars(selected);
+        const primary = selected.find((c: any) => c.primary) || selected[0];
+        if (primary) setSelectedCalendarId(primary.id);
+      }
+    } catch { /* ignore — gcal not available */ }
+  };
+
   const loadAll = async () => {
     setLoading(true);
     await Promise.all([loadTasks(), loadProjects(), loadLabels(), loadEvents(),
-      api.getMe().then(u => setCurrentUser(u)).catch(() => {})
+      api.getMe().then(u => setCurrentUser(u)).catch(() => {}),
+      loadGcalState(),
     ]);
     setLoading(false);
   };
@@ -1696,6 +1725,22 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                   onSubmit={e => { e.preventDefault(); handleAddEvent(); }}
                   className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700"
                 >
+                  {gcalConnected && gcalCalendars.length > 0 && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">Calendar:</span>
+                      <select
+                        value={selectedCalendarId}
+                        onChange={e => setSelectedCalendarId(e.target.value)}
+                        className="text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        {gcalCalendars.map(cal => (
+                          <option key={cal.id} value={cal.id}>
+                            {cal.summary}{cal.primary ? ' (primary)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-shadow">
                     <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
