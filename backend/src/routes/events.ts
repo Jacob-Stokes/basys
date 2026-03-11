@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db/database';
 import { v4 as uuid } from 'uuid';
 import { ok, fail } from '../utils/response';
+import { syncGoogleEvents } from '../utils/googleCalendar';
 
 const router = Router();
 
@@ -9,6 +10,21 @@ const router = Router();
 router.get('/', (req: Request, res: Response) => {
   const userId = (req as any).user.id;
   const { start, end } = req.query;
+
+  // Opportunistic Google Calendar sync: fire-and-forget if stale (>5 min)
+  try {
+    const gcalToken = db.prepare(
+      'SELECT last_synced_at FROM google_calendar_tokens WHERE user_id = ? AND sync_enabled = 1'
+    ).get(userId) as any;
+    if (gcalToken) {
+      const lastSync = gcalToken.last_synced_at ? new Date(gcalToken.last_synced_at).getTime() : 0;
+      if (Date.now() - lastSync > 5 * 60 * 1000) {
+        syncGoogleEvents(userId).catch(err =>
+          console.error('Background Google Calendar sync failed:', err)
+        );
+      }
+    }
+  } catch { /* non-critical */ }
 
   let query = 'SELECT * FROM events WHERE user_id = ?';
   const params: any[] = [userId];

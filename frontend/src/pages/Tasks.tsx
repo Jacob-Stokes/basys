@@ -41,6 +41,8 @@ interface EventItem {
   all_day: number;
   color: string;
   location: string | null;
+  source?: 'local' | 'google';
+  html_link?: string | null;
 }
 
 interface TaskItem {
@@ -1023,8 +1025,13 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
   const loadEvents = async () => {
     try {
-      const data = await api.getEvents();
-      setEvents(data);
+      const [local, google] = await Promise.all([
+        api.getEvents(),
+        api.getGoogleCalendarEvents().catch(() => []),
+      ]);
+      const localWithSource = local.map((e: any) => ({ ...e, source: 'local' as const }));
+      const googleWithSource = google.map((e: any) => ({ ...e, source: 'google' as const }));
+      setEvents([...localWithSource, ...googleWithSource]);
     } catch (err) {
       // events are non-critical — don't block the page
       console.warn('Failed to load events:', err);
@@ -1709,7 +1716,15 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                                       className="w-0.5 h-4 rounded-full flex-shrink-0"
                                       style={{ backgroundColor: e.color }}
                                     />
-                                    <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{e.title}</span>
+                                    {e.source === 'google' && e.html_link ? (
+                                      <a href={e.html_link} target="_blank" rel="noopener noreferrer"
+                                        className="text-sm text-gray-700 dark:text-gray-300 truncate hover:underline">{e.title}</a>
+                                    ) : (
+                                      <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{e.title}</span>
+                                    )}
+                                    {e.source === 'google' && (
+                                      <span className="text-[9px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded flex-shrink-0" title="Google Calendar">G</span>
+                                    )}
                                     <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0 ml-auto whitespace-nowrap">
                                       {e.all_day
                                         ? 'all day'

@@ -408,6 +408,50 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_date);
 CREATE INDEX IF NOT EXISTS idx_events_user_start ON events(user_id, start_date);
+
+-- Google Calendar integration tokens
+CREATE TABLE IF NOT EXISTS google_calendar_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,
+  access_token_encrypted TEXT NOT NULL,
+  refresh_token_encrypted TEXT NOT NULL,
+  token_expiry TEXT NOT NULL,
+  google_email TEXT,
+  selected_calendars TEXT DEFAULT '[]',
+  sync_enabled INTEGER DEFAULT 1,
+  last_synced_at TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_gcal_tokens_user ON google_calendar_tokens(user_id);
+
+-- Cached Google Calendar events
+CREATE TABLE IF NOT EXISTS google_calendar_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  google_event_id TEXT NOT NULL,
+  calendar_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  start_date TEXT NOT NULL,
+  end_date TEXT,
+  all_day INTEGER DEFAULT 0,
+  location TEXT,
+  color TEXT DEFAULT '#4285f4',
+  html_link TEXT,
+  status TEXT DEFAULT 'confirmed',
+  last_synced_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, google_event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gcal_events_user ON google_calendar_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_gcal_events_start ON google_calendar_events(start_date);
+CREATE INDEX IF NOT EXISTS idx_gcal_events_user_start ON google_calendar_events(user_id, start_date);
 `;
 
 // Initialize schema
@@ -807,4 +851,37 @@ export interface ChatMemory {
   content: string;
   category: string;
   created_at: string;
+}
+
+export interface GoogleCalendarToken {
+  id: string;
+  user_id: string;
+  access_token_encrypted: string;
+  refresh_token_encrypted: string;
+  token_expiry: string;
+  google_email: string | null;
+  selected_calendars: string;
+  sync_enabled: number;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GoogleCalendarEvent {
+  id: string;
+  user_id: string;
+  google_event_id: string;
+  calendar_id: string;
+  title: string;
+  description: string | null;
+  start_date: string;
+  end_date: string | null;
+  all_day: number;
+  location: string | null;
+  color: string;
+  html_link: string | null;
+  status: string;
+  last_synced_at: string;
+  created_at: string;
+  updated_at: string;
 }

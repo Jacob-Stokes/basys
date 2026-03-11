@@ -77,6 +77,22 @@ export default function Settings() {
   const [locationNotice, setLocationNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [savingLocation, setSavingLocation] = useState(false);
 
+  // Google Calendar state
+  const [gcalStatus, setGcalStatus] = useState<{
+    configured: boolean;
+    connected: boolean;
+    google_email?: string | null;
+    selected_calendars?: string[];
+    last_synced_at?: string | null;
+    sync_enabled?: boolean;
+  } | null>(null);
+  const [gcalCalendars, setGcalCalendars] = useState<Array<{
+    id: string; summary: string; backgroundColor: string; primary: boolean; selected: boolean;
+  }>>([]);
+  const [gcalLoading, setGcalLoading] = useState(false);
+  const [gcalSyncing, setGcalSyncing] = useState(false);
+  const [gcalNotice, setGcalNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // Admin state
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; display_name: string | null; is_admin: boolean } | null>(null);
   const [adminUsers, setAdminUsers] = useState<{ id: string; username: string; email: string | null; is_admin: number; created_at: string }[]>([]);
@@ -153,6 +169,20 @@ export default function Settings() {
     loadKeys();
     loadSettings();
     loadCurrentUser();
+    loadGcalStatus();
+
+    // Check for Google Calendar OAuth return
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('gcal') === 'connected') {
+      setActiveTab('account');
+      setGcalNotice({ type: 'success', message: 'Google Calendar connected successfully!' });
+      loadGcalStatus();
+      window.history.replaceState({}, '', '/settings');
+    } else if (params.get('gcal') === 'error') {
+      setActiveTab('account');
+      setGcalNotice({ type: 'error', message: `Connection failed: ${params.get('reason') || 'unknown error'}` });
+      window.history.replaceState({}, '', '/settings');
+    }
   }, []);
 
   useEffect(() => {
@@ -374,6 +404,84 @@ export default function Settings() {
       setLocationNotice({ type: 'error', message: 'Failed to save settings.' });
     } finally {
       setSavingLocation(false);
+    }
+  };
+
+  // ── Google Calendar handlers ────────────────────────────────
+
+  const loadGcalStatus = async () => {
+    try {
+      const data = await api.getGoogleCalendarStatus();
+      setGcalStatus(data);
+      if (data.connected) {
+        loadGcalCalendars();
+      }
+    } catch {
+      // Google Calendar not available — hide section gracefully
+      setGcalStatus(null);
+    }
+  };
+
+  const loadGcalCalendars = async () => {
+    try {
+      const data = await api.getGoogleCalendars();
+      setGcalCalendars(data);
+    } catch {
+      // Non-critical
+    }
+  };
+
+  const handleConnectGoogle = async () => {
+    try {
+      setGcalLoading(true);
+      const { url } = await api.getGoogleCalendarAuthUrl();
+      window.location.href = url;
+    } catch (err) {
+      setGcalNotice({ type: 'error', message: (err as Error).message });
+      setGcalLoading(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    try {
+      setGcalLoading(true);
+      await api.disconnectGoogleCalendar();
+      setGcalStatus({ configured: true, connected: false });
+      setGcalCalendars([]);
+      setGcalNotice({ type: 'success', message: 'Google Calendar disconnected.' });
+      setTimeout(() => setGcalNotice(null), 2500);
+    } catch (err) {
+      setGcalNotice({ type: 'error', message: (err as Error).message });
+    } finally {
+      setGcalLoading(false);
+    }
+  };
+
+  const handleToggleCalendar = async (calId: string) => {
+    const current = gcalCalendars.map(c =>
+      c.id === calId ? { ...c, selected: !c.selected } : c
+    );
+    setGcalCalendars(current);
+    const selected = current.filter(c => c.selected).map(c => c.id);
+    try {
+      await api.updateGoogleCalendarSelection(selected);
+    } catch {
+      // Revert on failure
+      loadGcalCalendars();
+    }
+  };
+
+  const handleSyncNow = async () => {
+    try {
+      setGcalSyncing(true);
+      const result = await api.syncGoogleCalendar();
+      setGcalNotice({ type: 'success', message: `Synced ${result.synced} events.` });
+      setTimeout(() => setGcalNotice(null), 2500);
+      loadGcalStatus();
+    } catch (err) {
+      setGcalNotice({ type: 'error', message: (err as Error).message });
+    } finally {
+      setGcalSyncing(false);
     }
   };
 
@@ -721,6 +829,7 @@ export default function Settings() {
         )}
 
         {activeTab === 'account' && (
+          <>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
             <h2 className="text-2xl font-semibold mb-2">{t('account.changePassword')}</h2>
             <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">{t('account.changePasswordDesc')}</p>
@@ -755,6 +864,85 @@ export default function Settings() {
               </button>
             </form>
           </div>
+
+          {/* Connected Accounts — Google Calendar */}
+          {gcalStatus && gcalStatus.configured && (
+            <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Connected Accounts</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Connect external services to sync data with Basys.</p>
+
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {/* Google Calendar icon */}
+                    <svg className="w-8 h-8 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="4" width="18" height="18" rx="2" stroke="#4285f4" strokeWidth="2" />
+                      <path d="M3 9h18" stroke="#4285f4" strokeWidth="2" />
+                      <path d="M8 2v4M16 2v4" stroke="#4285f4" strokeWidth="2" strokeLinecap="round" />
+                      <rect x="7" y="12" width="3" height="3" rx="0.5" fill="#ea4335" />
+                      <rect x="14" y="12" width="3" height="3" rx="0.5" fill="#34a853" />
+                      <rect x="7" y="17" width="3" height="2" rx="0.5" fill="#fbbc05" />
+                      <rect x="14" y="17" width="3" height="2" rx="0.5" fill="#4285f4" />
+                    </svg>
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-gray-100">Google Calendar</p>
+                      {gcalStatus.connected
+                        ? <p className="text-sm text-green-600 dark:text-green-400">Connected as {gcalStatus.google_email}</p>
+                        : <p className="text-sm text-gray-500 dark:text-gray-400">Not connected</p>
+                      }
+                    </div>
+                  </div>
+                  {gcalStatus.connected ? (
+                    <button onClick={handleDisconnectGoogle} disabled={gcalLoading}
+                      className="px-4 py-2 text-sm border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50">
+                      {gcalLoading ? 'Disconnecting...' : 'Disconnect'}
+                    </button>
+                  ) : (
+                    <button onClick={handleConnectGoogle} disabled={gcalLoading}
+                      className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
+                      {gcalLoading ? 'Connecting...' : 'Connect'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Calendar selection (when connected) */}
+                {gcalStatus.connected && gcalCalendars.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Calendars to sync</p>
+                    <div className="space-y-2">
+                      {gcalCalendars.map(cal => (
+                        <label key={cal.id} className="flex items-center gap-3 cursor-pointer py-1">
+                          <input type="checkbox" checked={cal.selected} onChange={() => handleToggleCalendar(cal.id)}
+                            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cal.backgroundColor }} />
+                          <span className="text-sm text-gray-700 dark:text-gray-300">{cal.summary}</span>
+                          {cal.primary && <span className="text-xs text-gray-400">(primary)</span>}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3 mt-4">
+                      <button onClick={handleSyncNow} disabled={gcalSyncing}
+                        className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50">
+                        {gcalSyncing ? 'Syncing...' : 'Sync now'}
+                      </button>
+                      {gcalStatus.last_synced_at && (
+                        <span className="text-xs text-gray-400">
+                          Last synced: {new Date(gcalStatus.last_synced_at).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {gcalNotice && (
+                  <p className={`text-sm mt-3 ${gcalNotice.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {gcalNotice.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+          </>
         )}
 
         {activeTab === 'api' && (

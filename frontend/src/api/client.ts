@@ -297,6 +297,33 @@ export const api = {
   deleteEvent: (id: string) =>
     apiRequest<any>(`/api/events/${id}`, { method: 'DELETE' }),
 
+  // Google Calendar
+  getGoogleCalendarStatus: () =>
+    apiRequest<any>('/api/google-calendar/status'),
+  getGoogleCalendarAuthUrl: () =>
+    apiRequest<{ url: string }>('/api/google-calendar/auth-url'),
+  disconnectGoogleCalendar: () =>
+    apiRequest<any>('/api/google-calendar/disconnect', { method: 'DELETE' }),
+  getGoogleCalendars: () =>
+    apiRequest<any[]>('/api/google-calendar/calendars'),
+  updateGoogleCalendarSelection: (selectedCalendars: string[]) =>
+    apiRequest<any>('/api/google-calendar/calendars', {
+      method: 'PUT',
+      body: JSON.stringify({ selected_calendars: selectedCalendars }),
+    }),
+  syncGoogleCalendar: () =>
+    apiRequest<{ synced: number }>('/api/google-calendar/sync', { method: 'POST' }),
+  getGoogleCalendarEvents: (params?: { start?: string; end?: string }) => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined) query.append(k, v); });
+    }
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<any[]>(`/api/google-calendar/events${qs}`);
+  },
+  pushEventToGoogle: (data: any) =>
+    apiRequest<any>('/api/google-calendar/push-event', { method: 'POST', body: JSON.stringify(data) }),
+
   getSharedGoal: async (token: string) => {
     const response = await fetch(`${API_URL}/api/shared/${token}/goal`);
     const parsed = await response.json();
