@@ -884,6 +884,9 @@ export default function Tasks() {
   const [editingLabel, setEditingLabel] = useState<LabelItem | null | 'new'>(null);
   const [filterLabel, setFilterLabel] = useState<string | null>(null);
 
+  // User profile
+  const [currentUser, setCurrentUser] = useState<{ username: string; display_name: string | null } | null>(null);
+
   // Calendar + Events state
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -972,7 +975,9 @@ export default function Tasks() {
 
   const loadAll = async () => {
     setLoading(true);
-    await Promise.all([loadTasks(), loadProjects(), loadLabels(), loadEvents()]);
+    await Promise.all([loadTasks(), loadProjects(), loadLabels(), loadEvents(),
+      api.getMe().then(u => setCurrentUser(u)).catch(() => {})
+    ]);
     setLoading(false);
   };
 
@@ -1420,7 +1425,14 @@ export default function Tasks() {
         {/* Header card */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Todo</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {(() => {
+                const h = new Date().getHours();
+                const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+                const name = currentUser?.display_name || currentUser?.username || '';
+                return name ? `${greeting}, ${name}` : greeting;
+              })()}
+            </h1>
             <div className="flex gap-1.5">
               {(['overview', 'projects', 'labels'] as ActiveTab[]).map(t => (
                 <button

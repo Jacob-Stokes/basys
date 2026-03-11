@@ -59,8 +59,13 @@ export default function Settings() {
   const [editingEtiquetteContent, setEditingEtiquetteContent] = useState('');
   const [confirmResetEtiquette, setConfirmResetEtiquette] = useState(false);
 
+  // Profile state
+  const [displayNameInput, setDisplayNameInput] = useState('');
+  const [displayNameNotice, setDisplayNameNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [savingDisplayName, setSavingDisplayName] = useState(false);
+
   // Admin state
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; is_admin: boolean } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; display_name: string | null; is_admin: boolean } | null>(null);
   const [adminUsers, setAdminUsers] = useState<{ id: string; username: string; email: string | null; is_admin: number; created_at: string }[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
@@ -282,8 +287,24 @@ export default function Settings() {
       const data = await response.json();
       if (data.success) {
         setCurrentUser(data.data);
+        setDisplayNameInput(data.data.display_name ?? '');
       }
     } catch {}
+  };
+
+  const handleSaveDisplayName = async () => {
+    setSavingDisplayName(true);
+    setDisplayNameNotice(null);
+    try {
+      const result = await api.updateProfile({ display_name: displayNameInput.trim() || null });
+      setCurrentUser(prev => prev ? { ...prev, display_name: result.display_name } : prev);
+      setDisplayNameNotice({ type: 'success', message: 'Name saved!' });
+      setTimeout(() => setDisplayNameNotice(null), 2500);
+    } catch {
+      setDisplayNameNotice({ type: 'error', message: 'Failed to save name.' });
+    } finally {
+      setSavingDisplayName(false);
+    }
   };
 
   const loadAdminUsers = async () => {
@@ -996,6 +1017,36 @@ curl -X POST "$API_URL/api/guestbook" \\
 
             {/* General sub-tab */}
             {displaySubTab === 'general' && <>
+            {/* Display Name */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">Display Name</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                Your name as it appears in greetings. Leave blank to use your username.
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={displayNameInput}
+                  onChange={(e) => setDisplayNameInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveDisplayName()}
+                  placeholder={currentUser?.username ?? 'Your name'}
+                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-56 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleSaveDisplayName}
+                  disabled={savingDisplayName}
+                  className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {savingDisplayName ? 'Saving…' : 'Save'}
+                </button>
+                {displayNameNotice && (
+                  <span className={`text-sm ${displayNameNotice.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {displayNameNotice.message}
+                  </span>
+                )}
+              </div>
+            </section>
+
             {/* Language */}
             <section>
               <h3 className="text-lg font-semibold mb-2">{t('settings.language')}</h3>

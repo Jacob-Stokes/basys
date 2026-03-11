@@ -516,6 +516,17 @@ export function initDatabase() {
     console.log('Migration check (agent_etiquette seed):', err);
   }
 
+  // Migration: Add display_name to users table
+  try {
+    const userCols = db.prepare("PRAGMA table_info(users)").all() as any[];
+    if (!userCols.some((col: any) => col.name === 'display_name')) {
+      db.exec(`ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT NULL`);
+      console.log('Added display_name column to users table');
+    }
+  } catch (err) {
+    console.log('Migration check (display_name):', err);
+  }
+
   // Seed sample events for existing users (only if they have zero events)
   try {
     const users = db.prepare('SELECT id FROM users').all() as any[];

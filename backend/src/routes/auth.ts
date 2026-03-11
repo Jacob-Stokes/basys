@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/database';
@@ -83,6 +83,20 @@ router.post('/logout', (req, res) => {
 // Get current user
 router.get('/me', requireAuth, (req, res) => {
   ok(res, req.user);
+});
+
+// Update current user profile (display name etc.)
+router.patch('/me', requireAuth, (req: Request, res: Response) => {
+  try {
+    const { display_name } = req.body;
+    const userId = req.user!.id;
+    db.prepare(`UPDATE users SET display_name = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(display_name ?? null, userId);
+    const updated = db.prepare('SELECT id, username, email, display_name, is_admin, allow_query_param_auth FROM users WHERE id = ?').get(userId);
+    ok(res, updated);
+  } catch (error) {
+    serverError(res, error);
+  }
 });
 
 // Generate API key

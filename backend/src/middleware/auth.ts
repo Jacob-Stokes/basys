@@ -8,6 +8,7 @@ declare module 'express-serve-static-core' {
     user?: {
       id: string;
       username: string;
+      display_name: string | null;
       is_admin: boolean;
     };
   }
@@ -57,7 +58,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
     const keyId = apiKey.substring(0, 36);
 
     const apiKeyRecord = db.prepare(`
-      SELECT ak.*, u.id as user_id, u.username, u.is_admin
+      SELECT ak.*, u.id as user_id, u.username, u.display_name, u.is_admin
       FROM api_keys ak
       JOIN users u ON ak.user_id = u.id
       WHERE ak.id = ?
@@ -70,6 +71,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
       req.user = {
         id: apiKeyRecord.user_id,
         username: apiKeyRecord.username,
+        display_name: apiKeyRecord.display_name ?? null,
         is_admin: !!apiKeyRecord.is_admin
       };
       return next();
@@ -78,12 +80,13 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
 
   // Check session
   if (req.session && (req.session as any).userId) {
-    const user = db.prepare('SELECT id, username, is_admin FROM users WHERE id = ?').get((req.session as any).userId) as any;
+    const user = db.prepare('SELECT id, username, display_name, is_admin FROM users WHERE id = ?').get((req.session as any).userId) as any;
 
     if (user) {
       req.user = {
         id: user.id,
         username: user.username,
+        display_name: user.display_name ?? null,
         is_admin: !!user.is_admin
       };
       return next();
@@ -103,7 +106,7 @@ export const optionalAuth = (req: Request, res: Response, next: NextFunction) =>
   if (apiKey) {
     const keyId = apiKey.substring(0, 36);
     const apiKeyRecord = db.prepare(`
-      SELECT ak.*, u.id as user_id, u.username, u.is_admin
+      SELECT ak.*, u.id as user_id, u.username, u.display_name, u.is_admin
       FROM api_keys ak
       JOIN users u ON ak.user_id = u.id
       WHERE ak.id = ?
@@ -114,15 +117,17 @@ export const optionalAuth = (req: Request, res: Response, next: NextFunction) =>
       req.user = {
         id: apiKeyRecord.user_id,
         username: apiKeyRecord.username,
+        display_name: apiKeyRecord.display_name ?? null,
         is_admin: !!apiKeyRecord.is_admin
       };
     }
   } else if (req.session && (req.session as any).userId) {
-    const user = db.prepare('SELECT id, username, is_admin FROM users WHERE id = ?').get((req.session as any).userId) as any;
+    const user = db.prepare('SELECT id, username, display_name, is_admin FROM users WHERE id = ?').get((req.session as any).userId) as any;
     if (user) {
       req.user = {
         id: user.id,
         username: user.username,
+        display_name: user.display_name ?? null,
         is_admin: !!user.is_admin
       };
     }
