@@ -976,6 +976,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   const [gcalConnected, setGcalConnected] = useState(false);
   const [gcalCalendars, setGcalCalendars] = useState<Array<{ id: string; summary: string; backgroundColor: string; primary: boolean; selected: boolean }>>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
+  const [calSyncing, setCalSyncing] = useState(false);
 
   const taskDates = useMemo(() => {
     const set = new Set<string>();
@@ -1084,6 +1085,15 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
         if (primary) setSelectedCalendarId(primary.id);
       }
     } catch { /* ignore — gcal not available */ }
+  };
+
+  const handleCalendarRefresh = async () => {
+    setCalSyncing(true);
+    try {
+      if (gcalConnected) await api.syncGoogleCalendar();
+      await loadEvents();
+    } catch { /* ignore */ }
+    setCalSyncing(false);
   };
 
   const loadAll = async () => {
@@ -1670,6 +1680,18 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
           {/* Calendar — 2/5 (always visible) */}
           <div className="w-full lg:w-2/5">
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-0">
+                <div className="flex justify-end -mb-1">
+                  <button
+                    onClick={handleCalendarRefresh}
+                    disabled={calSyncing}
+                    title="Refresh calendar"
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                  >
+                    <svg className={`w-3.5 h-3.5 ${calSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                </div>
                 <Calendar
                   taskDates={taskDates}
                   eventDateColors={eventDateColors}
