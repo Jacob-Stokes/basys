@@ -45,6 +45,7 @@ interface EventItem {
   html_link?: string | null;
   google_event_id?: string;
   calendar_id?: string;
+  origin?: 'basys' | 'google';
 }
 
 interface TaskItem {
@@ -1262,7 +1263,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
         api.getEvents(),
         api.getGoogleCalendarEvents().catch(() => []),
       ]);
-      const localWithSource = local.map((e: any) => ({ ...e, source: 'local' as const }));
+      const localWithSource = local.map((e: any) => ({ ...e, source: 'local' as const, origin: 'basys' as const }));
       const googleWithSource = google.map((e: any) => ({ ...e, source: 'google' as const }));
       setEvents([...localWithSource, ...googleWithSource]);
     } catch (err) {

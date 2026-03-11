@@ -247,10 +247,17 @@ router.post('/push-event', async (req: Request, res: Response) => {
 
     const created = await createGoogleEvent(accessToken, calendar_id, event);
 
-    // Trigger a sync to cache the new event locally
-    syncGoogleEvents(userId).catch(err =>
-      console.error('Post-create sync failed:', err)
-    );
+    // Sync to cache the new event locally, then mark origin as 'basys'
+    try {
+      await syncGoogleEvents(userId);
+      if (created.id) {
+        db.prepare(
+          "UPDATE google_calendar_events SET origin = 'basys' WHERE user_id = ? AND google_event_id = ?"
+        ).run(userId, created.id);
+      }
+    } catch (err) {
+      console.error('Post-create sync failed:', err);
+    }
 
     ok(res, created);
   } catch (error: any) {

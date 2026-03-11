@@ -442,6 +442,7 @@ CREATE TABLE IF NOT EXISTS google_calendar_events (
   color TEXT DEFAULT '#4285f4',
   html_link TEXT,
   status TEXT DEFAULT 'confirmed',
+  origin TEXT DEFAULT 'google',
   last_synced_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
@@ -585,6 +586,17 @@ export function initDatabase() {
     }
   } catch (err) {
     console.log('Migration check (weather/timezone):', err);
+  }
+
+  // Add origin column to google_calendar_events
+  try {
+    const cols = db.prepare("PRAGMA table_info(google_calendar_events)").all() as any[];
+    if (!cols.find((c: any) => c.name === 'origin')) {
+      db.exec(`ALTER TABLE google_calendar_events ADD COLUMN origin TEXT DEFAULT 'google'`);
+      console.log('Added origin column to google_calendar_events table');
+    }
+  } catch (err) {
+    console.log('Migration check (gcal origin):', err);
   }
 
   // Seed sample events for existing users (only if they have zero events)
