@@ -10,6 +10,8 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',
 ];
 
 // ── OAuth Helpers ──────────────────────────────────────────────
@@ -32,6 +34,7 @@ export async function exchangeCodeForTokens(code: string): Promise<{
   refresh_token: string;
   expires_in: number;
   token_type: string;
+  scope?: string;
 }> {
   const resp = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',

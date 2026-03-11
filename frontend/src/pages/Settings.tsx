@@ -93,6 +93,17 @@ export default function Settings() {
   const [gcalSyncing, setGcalSyncing] = useState(false);
   const [gcalNotice, setGcalNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Gmail state
+  const [gmailStatus, setGmailStatus] = useState<{
+    connected: boolean;
+    gmail_enabled: boolean;
+    has_gmail_scopes: boolean;
+    google_email?: string;
+    gmail_last_synced_at?: string | null;
+  } | null>(null);
+  const [gmailSyncing, setGmailSyncing] = useState(false);
+  const [gmailNotice, setGmailNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // Admin state
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; display_name: string | null; is_admin: boolean } | null>(null);
   const [adminUsers, setAdminUsers] = useState<{ id: string; username: string; email: string | null; is_admin: number; created_at: string }[]>([]);
@@ -170,6 +181,7 @@ export default function Settings() {
     loadSettings();
     loadCurrentUser();
     loadGcalStatus();
+    loadGmailStatus();
 
     // Check for Google Calendar OAuth return
     const params = new URLSearchParams(window.location.search);
@@ -177,6 +189,7 @@ export default function Settings() {
       setActiveTab('account');
       setGcalNotice({ type: 'success', message: 'Google Calendar connected successfully!' });
       loadGcalStatus();
+      loadGmailStatus();
       window.history.replaceState({}, '', '/settings');
     } else if (params.get('gcal') === 'error') {
       setActiveTab('account');
@@ -419,6 +432,28 @@ export default function Settings() {
     } catch {
       // Google Calendar API unreachable — show as not configured
       setGcalStatus({ configured: false, connected: false });
+    }
+  };
+
+  const loadGmailStatus = async () => {
+    try {
+      const data = await api.getGmailStatus();
+      setGmailStatus(data);
+    } catch {
+      setGmailStatus(null);
+    }
+  };
+
+  const handleGmailSync = async () => {
+    try {
+      setGmailSyncing(true);
+      const data = await api.syncGmail();
+      setGmailNotice({ type: 'success', message: `Synced ${data.synced} messages.` });
+      loadGmailStatus();
+    } catch (err) {
+      setGmailNotice({ type: 'error', message: (err as Error).message });
+    } finally {
+      setGmailSyncing(false);
     }
   };
 
@@ -951,6 +986,77 @@ export default function Settings() {
               {gcalNotice && (
                 <p className={`text-sm mt-3 ${gcalNotice.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                   {gcalNotice.message}
+                </p>
+              )}
+            </div>
+
+            {/* Gmail */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 mt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {/* Gmail icon */}
+                  <svg className="w-8 h-8 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                    <rect x="2" y="4" width="20" height="16" rx="2" fill="#f2f2f2" stroke="#e0e0e0" strokeWidth="0.5" />
+                    <path d="M2 6l10 7 10-7" stroke="#ea4335" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2 6v12" stroke="#4285f4" strokeWidth="2" />
+                    <path d="M22 6v12" stroke="#34a853" strokeWidth="2" />
+                    <path d="M2 18l7-5" stroke="#fbbc05" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M22 18l-7-5" stroke="#34a853" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">Gmail</p>
+                    {gmailStatus?.gmail_enabled
+                      ? <p className="text-sm text-green-600 dark:text-green-400">Connected — inbox sync enabled</p>
+                      : gmailStatus?.connected && !gmailStatus.has_gmail_scopes
+                        ? <p className="text-sm text-amber-600 dark:text-amber-400">Gmail scopes not granted</p>
+                        : gcalStatus?.connected
+                          ? <p className="text-sm text-gray-500 dark:text-gray-400">Reconnect to enable Gmail</p>
+                          : <p className="text-sm text-gray-500 dark:text-gray-400">Connect Google first</p>
+                    }
+                  </div>
+                </div>
+                {gcalStatus?.connected && !gmailStatus?.has_gmail_scopes && (
+                  <button onClick={handleConnectGoogle} disabled={gcalLoading}
+                    className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    Reconnect
+                  </button>
+                )}
+              </div>
+
+              {gmailStatus?.gmail_enabled && (
+                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                  <div className="flex items-center gap-3">
+                    <button onClick={handleGmailSync} disabled={gmailSyncing}
+                      className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50">
+                      {gmailSyncing ? 'Syncing...' : 'Sync inbox'}
+                    </button>
+                    {gmailStatus.gmail_last_synced_at && (
+                      <span className="text-xs text-gray-400">
+                        Last synced: {new Date(gmailStatus.gmail_last_synced_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                    Syncs the 50 most recent inbox messages. View them in the Email tab on the Tasks page.
+                  </p>
+                </div>
+              )}
+
+              {!gcalStatus?.connected && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+                  Gmail integration requires a Google account connection. Connect Google Calendar above to get started.
+                </p>
+              )}
+
+              {gcalStatus?.connected && !gmailStatus?.has_gmail_scopes && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+                  Click "Reconnect" to grant Gmail permissions. You'll be prompted to approve additional scopes.
+                </p>
+              )}
+
+              {gmailNotice && (
+                <p className={`text-sm mt-3 ${gmailNotice.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {gmailNotice.message}
                 </p>
               )}
             </div>

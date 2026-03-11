@@ -23,6 +23,7 @@ import adminRouter from './routes/admin';
 import chatRouter from './routes/chat';
 import eventsRouter from './routes/events';
 import googleCalendarRouter, { googleCalendarCallbackRouter } from './routes/googleCalendar';
+import gmailRouter from './routes/gmail';
 import { setupMcpRoutes } from './mcp/server';
 
 const app = express();
@@ -157,6 +158,7 @@ app.use('/api/chat', requireAuth, chatRouter);
 app.use('/api/events', requireAuth, eventsRouter);
 app.use('/api/google-calendar/callback', googleCalendarCallbackRouter);
 app.use('/api/google-calendar', requireAuth, googleCalendarRouter);
+app.use('/api/gmail', requireAuth, gmailRouter);
 
 // Remote MCP endpoint with OAuth (must be before static files/SPA fallback)
 setupMcpRoutes(app);

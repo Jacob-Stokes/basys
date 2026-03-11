@@ -404,17 +404,23 @@ googleCalendarCallbackRouter.get('/', async (req: Request, res: Response) => {
     const primaryCal = calendars.find(c => c.primary);
     const selectedCalendars = primaryCal ? [primaryCal.id] : [];
 
+    // Parse granted scopes
+    const grantedScopes: string[] = tokens.scope ? tokens.scope.split(' ') : [];
+    const hasGmail = grantedScopes.some(s => s.includes('gmail'));
+
     // Upsert token record
     db.prepare(`
       INSERT INTO google_calendar_tokens
-        (id, user_id, access_token_encrypted, refresh_token_encrypted, token_expiry, google_email, selected_calendars, sync_enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+        (id, user_id, access_token_encrypted, refresh_token_encrypted, token_expiry, google_email, selected_calendars, sync_enabled, granted_scopes, gmail_sync_enabled, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(user_id) DO UPDATE SET
         access_token_encrypted = excluded.access_token_encrypted,
         refresh_token_encrypted = excluded.refresh_token_encrypted,
         token_expiry = excluded.token_expiry,
         google_email = excluded.google_email,
         selected_calendars = excluded.selected_calendars,
+        granted_scopes = excluded.granted_scopes,
+        gmail_sync_enabled = excluded.gmail_sync_enabled,
         updated_at = datetime('now')
     `).run(
       uuid(),
@@ -424,12 +430,23 @@ googleCalendarCallbackRouter.get('/', async (req: Request, res: Response) => {
       tokenExpiry,
       googleEmail,
       JSON.stringify(selectedCalendars),
+      JSON.stringify(grantedScopes),
+      hasGmail ? 1 : 0,
     );
 
-    // Fire initial sync in background
+    // Fire initial syncs in background
     syncGoogleEvents(userId).catch(err =>
       console.error('Initial Google Calendar sync failed:', err)
     );
+
+    if (hasGmail) {
+      // Lazy import to avoid circular deps
+      import('../utils/gmail').then(({ syncGmailMessages }) =>
+        syncGmailMessages(userId).catch(err =>
+          console.error('Initial Gmail sync failed:', err)
+        )
+      );
+    }
 
     res.redirect('/settings?gcal=connected');
   } catch (error) {

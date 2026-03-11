@@ -328,6 +328,25 @@ export const api = {
   deleteGoogleCalendarEvent: (googleEventId: string, calendarId: string) =>
     apiRequest<any>(`/api/google-calendar/events/${encodeURIComponent(googleEventId)}?calendar_id=${encodeURIComponent(calendarId)}`, { method: 'DELETE' }),
 
+  // Gmail
+  getGmailStatus: () =>
+    apiRequest<any>('/api/gmail/status'),
+  getGmailMessages: (params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.append('limit', String(params.limit));
+    if (params?.offset) query.append('offset', String(params.offset));
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<{ messages: any[]; unread_count: number }>(`/api/gmail/messages${qs}`);
+  },
+  getGmailMessage: (gmailMessageId: string) =>
+    apiRequest<any>(`/api/gmail/messages/${encodeURIComponent(gmailMessageId)}`),
+  markGmailRead: (gmailMessageId: string) =>
+    apiRequest<any>(`/api/gmail/messages/${encodeURIComponent(gmailMessageId)}/read`, { method: 'POST' }),
+  markGmailUnread: (gmailMessageId: string) =>
+    apiRequest<any>(`/api/gmail/messages/${encodeURIComponent(gmailMessageId)}/unread`, { method: 'POST' }),
+  syncGmail: () =>
+    apiRequest<{ synced: number }>('/api/gmail/sync', { method: 'POST' }),
+
   getSharedGoal: async (token: string) => {
     const response = await fetch(`${API_URL}/api/shared/${token}/goal`);
     const parsed = await response.json();

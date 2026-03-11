@@ -65,8 +65,49 @@ interface TaskItem {
   links: TaskLinkItem[];
 }
 
-type ActiveTab = 'overview' | 'projects' | 'labels';
+type ActiveTab = 'overview' | 'projects' | 'labels' | 'email';
 type TaskFilter = 'home' | 'all' | 'open' | 'done' | 'favorites';
+
+interface GmailMessageItem {
+  gmail_message_id: string;
+  thread_id: string;
+  from_address: string;
+  from_name: string;
+  to_address: string;
+  subject: string;
+  snippet: string;
+  body_html?: string;
+  body_text?: string;
+  date: string;
+  label_ids: string[];
+  is_unread: boolean;
+  has_attachments: boolean;
+}
+
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed\b[^>]*>/gi, '')
+    .replace(/<link\b[^>]*>/gi, '');
+}
+
+function formatEmailDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (msgDay.getTime() === today.getTime()) {
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  const diffDays = Math.floor((today.getTime() - msgDay.getTime()) / 86400000);
+  if (diffDays < 7 && diffDays > 0) {
+    return d.toLocaleDateString(undefined, { weekday: 'short' });
+  }
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 // ── Weather helpers ────────────────────────────────────────────────
 
@@ -696,6 +737,94 @@ function EventEditModal({ event, onSave, onDelete, onClose }: {
   );
 }
 
+// ── EmailReadModal ─────────────────────────────────────────────────
+
+function EmailReadModal({ message, onMarkRead, onMarkUnread, onClose }: {
+  message: GmailMessageItem;
+  onMarkRead: () => void;
+  onMarkUnread: () => void;
+  onClose: () => void;
+}) {
+  const [body, setBody] = useState<{ html?: string; text?: string } | null>(
+    message.body_html || message.body_text
+      ? { html: message.body_html, text: message.body_text }
+      : null
+  );
+  const [loadingBody, setLoadingBody] = useState(!body);
+
+  useEffect(() => {
+    if (!body) {
+      api.getGmailMessage(message.gmail_message_id).then((full: any) => {
+        setBody({ html: full.body_html, text: full.body_text });
+        setLoadingBody(false);
+      }).catch(() => setLoadingBody(false));
+    }
+  }, [message.gmail_message_id]);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+              {message.subject || '(no subject)'}
+            </h3>
+            {message.is_unread && (
+              <span className="flex-shrink-0 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
+                Unread
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ml-4 flex-shrink-0">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Metadata */}
+        <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-700 space-y-1 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600 dark:text-gray-400 min-w-0">
+              <span className="font-medium text-gray-900 dark:text-gray-100">{message.from_name || message.from_address}</span>
+              {message.from_name && <span className="text-gray-400 ml-1">&lt;{message.from_address}&gt;</span>}
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); message.is_unread ? onMarkRead() : onMarkUnread(); }}
+              className={`flex-shrink-0 ml-3 px-3 py-1 text-xs rounded-full border transition-colors ${
+                message.is_unread
+                  ? 'border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/20'
+                  : 'border-gray-300 text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'
+              }`}
+            >
+              {message.is_unread ? 'Mark as read' : 'Mark as unread'}
+            </button>
+          </div>
+          <div className="text-xs text-gray-400">To: {message.to_address}</div>
+          <div className="text-xs text-gray-400">{new Date(message.date).toLocaleString()}</div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {loadingBody ? (
+            <div className="text-center text-gray-400 py-8">Loading email...</div>
+          ) : body?.html ? (
+            <div
+              className="prose dark:prose-invert max-w-none text-sm [&_img]:max-w-full [&_a]:text-blue-500"
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(body.html) }}
+            />
+          ) : body?.text ? (
+            <pre className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 font-sans">{body.text}</pre>
+          ) : (
+            <div className="text-center text-gray-400 py-8">No content available</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── TaskEditModal ──────────────────────────────────────────────────
 
 function TaskEditModal({ task, projects, labels, onSave, onClose }: {
@@ -1206,6 +1335,13 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   const [calSyncing, setCalSyncing] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
 
+  // Gmail state
+  const [gmailEnabled, setGmailEnabled] = useState(false);
+  const [gmailMessages, setGmailMessages] = useState<GmailMessageItem[]>([]);
+  const [gmailUnreadCount, setGmailUnreadCount] = useState(0);
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [readingEmail, setReadingEmail] = useState<GmailMessageItem | null>(null);
+
   const taskDates = useMemo(() => {
     const set = new Set<string>();
     tasks.forEach(t => {
@@ -1374,11 +1510,75 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     setCalSyncing(false);
   };
 
+  // Gmail loading
+  const loadGmailState = async () => {
+    try {
+      const status = await api.getGmailStatus();
+      if (status.gmail_enabled) {
+        setGmailEnabled(true);
+        loadGmailMessages();
+      }
+    } catch { /* ignore */ }
+  };
+
+  const loadGmailMessages = async () => {
+    try {
+      const data = await api.getGmailMessages({ limit: 50 });
+      setGmailMessages(data.messages);
+      setGmailUnreadCount(data.unread_count);
+    } catch { /* ignore */ }
+  };
+
+  const handleGmailSync = async () => {
+    setGmailLoading(true);
+    try {
+      await api.syncGmail();
+      await loadGmailMessages();
+    } catch { /* ignore */ }
+    setGmailLoading(false);
+  };
+
+  const handleOpenEmail = (msg: GmailMessageItem) => {
+    setReadingEmail(msg);
+    // NOTE: we do NOT mark as read here — that's an explicit user action
+  };
+
+  const handleMarkRead = async (gmailMessageId: string) => {
+    try {
+      await api.markGmailRead(gmailMessageId);
+      setGmailMessages(prev => prev.map(m =>
+        m.gmail_message_id === gmailMessageId ? { ...m, is_unread: false } : m
+      ));
+      setGmailUnreadCount(prev => Math.max(0, prev - 1));
+      if (readingEmail?.gmail_message_id === gmailMessageId) {
+        setReadingEmail(prev => prev ? { ...prev, is_unread: false } : null);
+      }
+    } catch (err) {
+      console.error('Failed to mark as read:', err);
+    }
+  };
+
+  const handleMarkUnread = async (gmailMessageId: string) => {
+    try {
+      await api.markGmailUnread(gmailMessageId);
+      setGmailMessages(prev => prev.map(m =>
+        m.gmail_message_id === gmailMessageId ? { ...m, is_unread: true } : m
+      ));
+      setGmailUnreadCount(prev => prev + 1);
+      if (readingEmail?.gmail_message_id === gmailMessageId) {
+        setReadingEmail(prev => prev ? { ...prev, is_unread: true } : null);
+      }
+    } catch (err) {
+      console.error('Failed to mark as unread:', err);
+    }
+  };
+
   const loadAll = async () => {
     setLoading(true);
     await Promise.all([loadTasks(), loadProjects(), loadLabels(), loadEvents(),
       api.getMe().then(u => setCurrentUser(u)).catch(() => {}),
       loadGcalState(),
+      loadGmailState(),
     ]);
     setLoading(false);
   };
@@ -1801,6 +2001,87 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
   // ── Render Labels Tab ──────────────────────────────────────────
 
+  const renderEmail = () => {
+    if (!gmailEnabled) {
+      return (
+        <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+          <svg className="w-10 h-10 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+          </svg>
+          <p className="mb-1 font-medium text-gray-700 dark:text-gray-300">Gmail not connected</p>
+          <p className="text-sm">Connect your Google account with Gmail permissions in <a href="/settings" className="text-blue-500 hover:underline">Settings</a>.</p>
+        </div>
+      );
+    }
+
+    if (gmailLoading && gmailMessages.length === 0) {
+      return <div className="py-12 text-center text-gray-400">Loading emails...</div>;
+    }
+
+    return (
+      <div>
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {gmailUnreadCount} unread
+          </span>
+          <button
+            onClick={handleGmailSync}
+            disabled={gmailLoading}
+            className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 flex items-center gap-1"
+          >
+            <svg className={`w-3.5 h-3.5 ${gmailLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+            </svg>
+            {gmailLoading ? 'Syncing...' : 'Refresh'}
+          </button>
+        </div>
+
+        {/* Message list */}
+        {gmailMessages.length === 0 ? (
+          <div className="py-12 text-center text-gray-400 dark:text-gray-500">
+            <p className="text-sm">No emails in inbox</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            {gmailMessages.map(msg => (
+              <div
+                key={msg.gmail_message_id}
+                onClick={() => handleOpenEmail(msg)}
+                className={`px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors ${
+                  msg.is_unread ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  {msg.is_unread && (
+                    <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
+                  )}
+                  <span className={`text-sm truncate ${msg.is_unread ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>
+                    {msg.from_name || msg.from_address}
+                  </span>
+                  {msg.has_attachments && (
+                    <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                    </svg>
+                  )}
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto flex-shrink-0 whitespace-nowrap">
+                    {formatEmailDate(msg.date)}
+                  </span>
+                </div>
+                <p className={`text-sm truncate ${msg.is_unread ? 'font-medium text-gray-800 dark:text-gray-200' : 'text-gray-600 dark:text-gray-400'}`}>
+                  {msg.subject || '(no subject)'}
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                  {msg.snippet}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderLabels = () => (
     <div className="p-4">
       <div className="flex justify-between items-center mb-4">
@@ -1926,6 +2207,21 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                   >
                     Labels
                   </button>
+                  <button
+                    onClick={() => { setTab('email'); }}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors relative ${
+                      tab === 'email'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                    }`}
+                  >
+                    Email
+                    {gmailUnreadCount > 0 && tab !== 'email' && (
+                      <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
+                        {gmailUnreadCount > 9 ? '9+' : gmailUnreadCount}
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 {/* Right: Filter pills (only in overview) */}
@@ -1963,6 +2259,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                   {tab === 'overview' && renderOverview()}
                   {tab === 'projects' && renderProjects()}
                   {tab === 'labels' && renderLabels()}
+                  {tab === 'email' && renderEmail()}
                 </>
               )}
             </div>
@@ -2203,6 +2500,15 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onClose={() => setEditingEvent(null)}
+        />
+      )}
+
+      {readingEmail && (
+        <EmailReadModal
+          message={readingEmail}
+          onMarkRead={() => handleMarkRead(readingEmail.gmail_message_id)}
+          onMarkUnread={() => handleMarkUnread(readingEmail.gmail_message_id)}
+          onClose={() => setReadingEmail(null)}
         />
       )}
     </div>

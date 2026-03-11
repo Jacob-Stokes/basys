@@ -453,6 +453,33 @@ CREATE TABLE IF NOT EXISTS google_calendar_events (
 CREATE INDEX IF NOT EXISTS idx_gcal_events_user ON google_calendar_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_gcal_events_start ON google_calendar_events(start_date);
 CREATE INDEX IF NOT EXISTS idx_gcal_events_user_start ON google_calendar_events(user_id, start_date);
+
+-- Cached Gmail messages
+CREATE TABLE IF NOT EXISTS gmail_messages (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  gmail_message_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  from_address TEXT,
+  from_name TEXT,
+  to_address TEXT,
+  subject TEXT,
+  snippet TEXT,
+  body_html TEXT,
+  body_text TEXT,
+  date TEXT NOT NULL,
+  label_ids TEXT DEFAULT '[]',
+  is_unread INTEGER DEFAULT 1,
+  has_attachments INTEGER DEFAULT 0,
+  last_synced_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, gmail_message_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_user ON gmail_messages(user_id);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_date ON gmail_messages(date);
+CREATE INDEX IF NOT EXISTS idx_gmail_messages_unread ON gmail_messages(user_id, is_unread);
 `;
 
 // Initialize schema
@@ -610,6 +637,19 @@ export function initDatabase() {
     }
   } catch (err) {
     console.log('Migration check (seed events):', err);
+  }
+
+  // Add Gmail columns to google_calendar_tokens
+  try {
+    const cols = db.prepare("PRAGMA table_info(google_calendar_tokens)").all() as any[];
+    if (!cols.find((c: any) => c.name === 'granted_scopes')) {
+      db.exec(`ALTER TABLE google_calendar_tokens ADD COLUMN granted_scopes TEXT DEFAULT '[]'`);
+      db.exec(`ALTER TABLE google_calendar_tokens ADD COLUMN gmail_sync_enabled INTEGER DEFAULT 0`);
+      db.exec(`ALTER TABLE google_calendar_tokens ADD COLUMN gmail_last_synced_at TEXT`);
+      console.log('Added Gmail columns to google_calendar_tokens table');
+    }
+  } catch (err) {
+    console.log('Migration check (gmail columns):', err);
   }
 
   console.log('Database initialized at:', DB_PATH);
