@@ -77,8 +77,8 @@ export default function NavBar() {
           <Link to="/" className={linkClass('/')}>
             Todo
           </Link>
-          <Link to="/projects" className={linkClass('/projects')}>
-            Projects
+          <Link to="/sprints" className={linkClass('/sprints')}>
+            Sprints
           </Link>
           <Link to="/timer" className={linkClass('/timer')}>
             Pomo
@@ -226,11 +226,11 @@ export default function NavBar() {
                   Todo
                 </Link>
                 <Link
-                  to="/projects"
+                  to="/sprints"
                   onClick={() => setMobileMenuOpen(false)}
                   className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
                 >
-                  Projects
+                  Sprints
                 </Link>
                 <Link
                   to="/timer"

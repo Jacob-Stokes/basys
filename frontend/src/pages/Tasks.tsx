@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
 import { parseTaskInput, formatParsedPreview } from '../utils/taskParser';
@@ -30,6 +31,7 @@ interface ProjectItem {
   archived: number;
   open_tasks: number;
   done_tasks: number;
+  type?: string;
 }
 
 interface EventItem {
@@ -1281,6 +1283,7 @@ function ProjectEditModal({ project, onSave, onClose }: {
 // ── Main Component ─────────────────────────────────────────────────
 
 export default function Tasks({ initialTab = 'overview' }: { initialTab?: ActiveTab } = {}) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<ActiveTab>(initialTab);
   const [error, setError] = useState<string | null>(null);
 
@@ -1301,6 +1304,11 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [activeProjectData, setActiveProjectData] = useState<any>(null);
   const [editingProject, setEditingProject] = useState<ProjectItem | null | 'new'>(null);
+
+  // Sprint state (for dev project detail)
+  const [sprints, setSprints] = useState<any[]>([]);
+  const [sprintsLoading, setSprintsLoading] = useState(false);
+  const [newSprintTitle, setNewSprintTitle] = useState('');
 
   // Label state
   const [editingLabel, setEditingLabel] = useState<LabelItem | null | 'new'>(null);
@@ -1587,6 +1595,15 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     try {
       const data = await api.getProject(projectId);
       setActiveProjectData(data);
+      // Load sprints if non-personal project
+      if (data.type && data.type !== 'personal') {
+        setSprintsLoading(true);
+        try {
+          const s = await api.getSprints(projectId);
+          setSprints(s);
+        } catch { setSprints([]); }
+        setSprintsLoading(false);
+      }
     } catch (err) {
       setError((err as Error).message);
     }
@@ -1888,32 +1905,210 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
   // ── Render Projects Tab ────────────────────────────────────────
 
+  const handleCreateSprint = async () => {
+    if (!newSprintTitle.trim() || !activeProject) return;
+    try {
+      await api.createSprint(activeProject, { title: newSprintTitle.trim() });
+      setNewSprintTitle('');
+      const s = await api.getSprints(activeProject);
+      setSprints(s);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleDeleteSprint = async (sprintId: string) => {
+    try {
+      await api.deleteSprint(sprintId);
+      if (activeProject) {
+        const s = await api.getSprints(activeProject);
+        setSprints(s);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleSprintStatusChange = async (sprintId: string, status: string) => {
+    try {
+      await api.updateSprintStatus(sprintId, status);
+      if (activeProject) {
+        const s = await api.getSprints(activeProject);
+        setSprints(s);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const renderProjectDetailHeader = (p: any) => (
+    <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
+      <button onClick={() => { setActiveProject(null); setActiveProjectData(null); setSprints([]); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          {p.hex_color && <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.hex_color }} />}
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100">{p.title}</h3>
+          {p.type && p.type !== 'personal' && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase">
+              {p.type}
+            </span>
+          )}
+        </div>
+        {p.description && <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>}
+      </div>
+      <button
+        onClick={() => setEditingProject(projects.find(pr => pr.id === activeProject) || null)}
+        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+      >
+        Edit
+      </button>
+    </div>
+  );
+
+  const renderSprintProjectDetail = () => {
+    if (!activeProjectData) return <div className="p-8 text-center text-gray-400">Loading...</div>;
+    const p = activeProjectData;
+    const statusColors: Record<string, string> = {
+      planned: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+      active: 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300',
+      completed: 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300',
+    };
+    const backlogTasks = (p.tasks || []).filter((t: any) => !t.sprint_id);
+
+    return (
+      <div>
+        {renderProjectDetailHeader(p)}
+
+        {/* New sprint input */}
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newSprintTitle}
+              onChange={e => setNewSprintTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreateSprint()}
+              placeholder="New sprint name..."
+              className="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400"
+            />
+            <button
+              onClick={handleCreateSprint}
+              disabled={!newSprintTitle.trim()}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              + Sprint
+            </button>
+          </div>
+        </div>
+
+        {/* Sprint list */}
+        <div className="p-4">
+          {sprintsLoading ? (
+            <div className="py-8 text-center text-gray-400 text-sm">Loading sprints...</div>
+          ) : sprints.length === 0 ? (
+            <div className="py-8 text-center text-gray-400 dark:text-gray-500 text-sm">
+              No sprints yet. Create one above to get started.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sprints.map(s => (
+                <div
+                  key={s.id}
+                  className={`border rounded-lg p-4 cursor-pointer transition-shadow hover:shadow-md ${
+                    s.status === 'active'
+                      ? 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                  }`}
+                  onClick={() => navigate(`/sprints/${s.id}`)}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{s.title}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase ${statusColors[s.status] || statusColors.planned}`}>
+                        {s.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                      {s.status === 'planned' && (
+                        <button onClick={() => handleSprintStatusChange(s.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400">
+                          Start
+                        </button>
+                      )}
+                      {s.status === 'active' && (
+                        <button onClick={() => handleSprintStatusChange(s.id, 'completed')} className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400">
+                          Complete
+                        </button>
+                      )}
+                      {s.status === 'completed' && (
+                        <button onClick={() => handleSprintStatusChange(s.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400">
+                          Reopen
+                        </button>
+                      )}
+                      <button onClick={() => handleDeleteSprint(s.id)} className="text-xs text-red-400 hover:text-red-600">
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-400 dark:text-gray-500">
+                    Sprint {s.sprint_number} · {s.open_tasks || 0} open · {s.done_tasks || 0} done
+                    {s.start_date && ` · ${new Date(s.start_date).toLocaleDateString()}`}
+                    {s.end_date && ` – ${new Date(s.end_date).toLocaleDateString()}`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Backlog section */}
+        <div className="border-t border-gray-200 dark:border-gray-700">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Backlog ({backlogTasks.length})</span>
+          </div>
+          <QuickAddBar
+            value={quickAdd}
+            onChange={setQuickAdd}
+            onSubmit={handleQuickAdd}
+            placeholder="Add a task to backlog..."
+          />
+          {backlogTasks.length > 0 ? (
+            <div>
+              {(backlogTasks as TaskItem[]).map(t => (
+                <TaskRow
+                  key={t.id}
+                  task={t}
+                  onToggle={() => handleToggleTask(t.id)}
+                  onEdit={() => setEditingTask(t)}
+                  onDelete={() => setDeleteTarget({ type: 'task', id: t.id, title: t.title })}
+                  onToggleFavorite={() => handleToggleFavorite(t.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="py-6 text-center text-gray-400 dark:text-gray-500 text-sm">
+              No backlog tasks.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderProjectDetail = () => {
     if (!activeProjectData) return <div className="p-8 text-center text-gray-400">Loading...</div>;
     const p = activeProjectData;
+
+    // Non-personal projects get sprint view
+    if (p.type && p.type !== 'personal') {
+      return renderSprintProjectDetail();
+    }
+
     return (
       <div>
-        {/* Back + header */}
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
-          <button onClick={() => { setActiveProject(null); setActiveProjectData(null); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              {p.hex_color && <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.hex_color }} />}
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">{p.title}</h3>
-            </div>
-            {p.description && <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>}
-          </div>
-          <button
-            onClick={() => setEditingProject(projects.find(pr => pr.id === activeProject) || null)}
-            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            Edit
-          </button>
-        </div>
+        {renderProjectDetailHeader(p)}
 
         {/* Quick add for project */}
         <QuickAddBar
@@ -1946,7 +2141,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     );
   };
 
-  const renderProjects = () => {
+  const renderSprints = () => {
     if (activeProject) return renderProjectDetail();
 
     return (
@@ -1971,6 +2166,11 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                 <div className="flex items-center gap-2">
                   {p.hex_color && <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.hex_color }} />}
                   <span className="font-medium text-gray-900 dark:text-gray-100">{p.title}</span>
+                  {p.type && p.type !== 'personal' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase">
+                      {p.type}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                   <button onClick={() => api.toggleProjectFavorite(p.id).then(loadProjects)} className={`text-sm ${p.is_favorite ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600'}`}>
@@ -2257,7 +2457,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
               ) : (
                 <>
                   {tab === 'overview' && renderOverview()}
-                  {tab === 'projects' && renderProjects()}
+                  {tab === 'projects' && renderSprints()}
                   {tab === 'labels' && renderLabels()}
                   {tab === 'email' && renderEmail()}
                 </>

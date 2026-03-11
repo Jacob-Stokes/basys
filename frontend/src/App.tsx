@@ -13,6 +13,8 @@ import Login from './pages/Login';
 import Settings from './pages/Settings';
 import Agents from './pages/Agents';
 import SharedGoalView from './pages/SharedGoalView';
+import SprintBoard from './pages/SprintBoard';
+import Sprints from './pages/Sprints';
 import NavBar from './components/NavBar';
 import TimerFooter from './components/TimerFooter';
 import ChatSidebar from './components/chat/ChatSidebar';
@@ -122,6 +124,8 @@ function App() {
           <Route path="/journal" element={<Journal />} />
           <Route path="/terminal" element={<Terminal />} />
           <Route path="/goal/:goalId" element={<GoalGrid />} />
+          <Route path="/sprints" element={<Sprints />} />
+          <Route path="/sprints/:sprintId" element={<SprintBoard />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>

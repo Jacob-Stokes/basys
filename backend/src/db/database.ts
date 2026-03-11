@@ -253,14 +253,32 @@ CREATE TABLE IF NOT EXISTS task_comments (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Buckets (Kanban columns per project)
-CREATE TABLE IF NOT EXISTS buckets (
+-- Sprints (time-boxed iterations within a project)
+CREATE TABLE IF NOT EXISTS sprints (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
   title TEXT NOT NULL,
-  position REAL DEFAULT 0,
+  description TEXT,
+  sprint_number INTEGER,
+  status TEXT DEFAULT 'planned' CHECK(status IN ('planned', 'active', 'completed')),
+  start_date TEXT,
+  end_date TEXT,
   created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Buckets (Kanban columns for projects or sprints)
+CREATE TABLE IF NOT EXISTS buckets (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  sprint_id TEXT,
+  title TEXT NOT NULL,
+  position REAL DEFAULT 0,
+  is_done_column INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
 );
 
 -- Polymorphic task links (many-to-many between tasks and goals/subgoals/habits/pomodoros)
@@ -290,6 +308,9 @@ CREATE INDEX IF NOT EXISTS idx_task_links_task ON task_links(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_links_target ON task_links(target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_user ON pomodoro_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_started ON pomodoro_sessions(started_at);
+
+CREATE INDEX IF NOT EXISTS idx_sprints_project ON sprints(project_id);
+CREATE INDEX IF NOT EXISTS idx_sprints_status ON sprints(status);
 
 CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);
@@ -639,6 +660,46 @@ export function initDatabase() {
     console.log('Migration check (gmail columns):', err);
   }
 
+  // Migration: Add type to projects
+  try {
+    const projCols = db.prepare("PRAGMA table_info(projects)").all() as any[];
+    if (!projCols.some((col: any) => col.name === 'type')) {
+      db.exec(`ALTER TABLE projects ADD COLUMN type TEXT DEFAULT 'personal'`);
+      console.log('Added type column to projects table');
+    }
+  } catch (err) {
+    console.log('Migration check (projects type):', err);
+  }
+
+  // Migration: Add sprint/assignee/task_type columns to tasks
+  try {
+    const taskCols = db.prepare("PRAGMA table_info(tasks)").all() as any[];
+    if (!taskCols.some((col: any) => col.name === 'sprint_id')) {
+      db.exec(`ALTER TABLE tasks ADD COLUMN sprint_id TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE tasks ADD COLUMN assignee_user_id TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE tasks ADD COLUMN assignee_name TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT 'task'`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_sprint ON tasks(sprint_id)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_user_id)`);
+      console.log('Added sprint/assignee/task_type columns to tasks table');
+    }
+  } catch (err) {
+    console.log('Migration check (tasks sprint):', err);
+  }
+
+  // Migration: Add sprint_id and is_done_column to buckets
+  try {
+    const bucketCols = db.prepare("PRAGMA table_info(buckets)").all() as any[];
+    if (!bucketCols.some((col: any) => col.name === 'sprint_id')) {
+      db.exec(`ALTER TABLE buckets ADD COLUMN sprint_id TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE buckets ADD COLUMN is_done_column INTEGER DEFAULT 0`);
+      console.log('Added sprint_id and is_done_column to buckets table');
+    }
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_buckets_sprint ON buckets(sprint_id)`);
+  } catch (err) {
+    console.log('Migration check (buckets sprint):', err);
+  }
+
   console.log('Database initialized at:', DB_PATH);
 }
 
@@ -804,11 +865,26 @@ export interface TaskComment {
   updated_at: string;
 }
 
-export interface Bucket {
+export interface Sprint {
   id: string;
   project_id: string;
   title: string;
+  description: string | null;
+  sprint_number: number | null;
+  status: 'planned' | 'active' | 'completed';
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Bucket {
+  id: string;
+  project_id: string | null;
+  sprint_id: string | null;
+  title: string;
   position: number;
+  is_done_column: number;
   created_at: string;
 }
 

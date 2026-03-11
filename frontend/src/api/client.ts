@@ -236,6 +236,28 @@ export const api = {
   toggleProjectArchive: (id: string) =>
     apiRequest<any>(`/api/projects/${id}/archive`, { method: 'PATCH' }),
 
+  // Sprints
+  getSprints: (projectId: string) =>
+    apiRequest<any[]>(`/api/projects/${projectId}/sprints`),
+  createSprint: (projectId: string, data: any) =>
+    apiRequest<any>(`/api/projects/${projectId}/sprints`, { method: 'POST', body: JSON.stringify(data) }),
+  getSprint: (id: string) =>
+    apiRequest<any>(`/api/sprints/${id}`),
+  updateSprint: (id: string, data: any) =>
+    apiRequest<any>(`/api/sprints/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSprint: (id: string) =>
+    apiRequest<any>(`/api/sprints/${id}`, { method: 'DELETE' }),
+  updateSprintStatus: (id: string, status: string) =>
+    apiRequest<any>(`/api/sprints/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  getSprintColumns: (sprintId: string) =>
+    apiRequest<any[]>(`/api/sprints/${sprintId}/columns`),
+  createSprintColumn: (sprintId: string, data: any) =>
+    apiRequest<any>(`/api/sprints/${sprintId}/columns`, { method: 'POST', body: JSON.stringify(data) }),
+  updateSprintColumn: (sprintId: string, columnId: string, data: any) =>
+    apiRequest<any>(`/api/sprints/${sprintId}/columns/${columnId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSprintColumn: (sprintId: string, columnId: string) =>
+    apiRequest<any>(`/api/sprints/${sprintId}/columns/${columnId}`, { method: 'DELETE' }),
+
   // Labels
   getLabels: () => apiRequest<any[]>('/api/labels'),
   createLabel: (data: any) =>

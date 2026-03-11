@@ -30,7 +30,7 @@ router.get('/', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const { title, description, hex_color, parent_project_id } = req.body;
+    const { title, description, hex_color, parent_project_id, type } = req.body;
     if (!title?.trim()) return fail(res, 400, 'Title is required');
 
     if (parent_project_id) {
@@ -41,9 +41,9 @@ router.post('/', (req: Request, res: Response) => {
     const id = uuidv4();
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO projects (id, user_id, title, description, hex_color, parent_project_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userId, title.trim(), description || null, hex_color || '', parent_project_id || null, now, now);
+      INSERT INTO projects (id, user_id, title, description, hex_color, parent_project_id, type, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, userId, title.trim(), description || null, hex_color || '', parent_project_id || null, type || 'personal', now, now);
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     ok(res, project, 201);
@@ -104,7 +104,7 @@ router.put('/:id', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, userId);
     if (!existing) return fail(res, 404, 'Project not found');
 
-    const { title, description, hex_color, parent_project_id } = req.body;
+    const { title, description, hex_color, parent_project_id, type } = req.body;
 
     const now = new Date().toISOString();
     db.prepare(`
@@ -113,6 +113,7 @@ router.put('/:id', (req: Request, res: Response) => {
         description = COALESCE(?, description),
         hex_color = COALESCE(?, hex_color),
         parent_project_id = ?,
+        type = COALESCE(?, type),
         updated_at = ?
       WHERE id = ?
     `).run(
@@ -120,6 +121,7 @@ router.put('/:id', (req: Request, res: Response) => {
       description !== undefined ? description : null,
       hex_color !== undefined ? hex_color : null,
       parent_project_id !== undefined ? parent_project_id : (existing as any).parent_project_id,
+      type || null,
       now, id
     );
 

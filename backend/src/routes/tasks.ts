@@ -76,7 +76,7 @@ const TASK_SELECT = `
 router.get('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const { project_id, done, priority, label, due_before, due_after, search, favorite, linked_to } = req.query;
+    const { project_id, done, priority, label, due_before, due_after, search, favorite, linked_to, project_type, sprint_id, exclude_dev } = req.query;
 
     let sql = TASK_SELECT;
     const conditions: string[] = ['t.user_id = ?'];
@@ -85,6 +85,19 @@ router.get('/', (req: Request, res: Response) => {
     if (project_id) {
       conditions.push('t.project_id = ?');
       params.push(project_id);
+    }
+    if (sprint_id) {
+      conditions.push('t.sprint_id = ?');
+      params.push(sprint_id);
+    }
+    // Filter by project type (e.g. project_type=personal to only show personal tasks)
+    if (project_type) {
+      conditions.push('(p.type = ? OR t.project_id IS NULL)');
+      params.push(project_type);
+    }
+    // Exclude tasks belonging to non-personal projects (for homepage)
+    if (exclude_dev === 'true' || exclude_dev === '1') {
+      conditions.push("(p.type IS NULL OR p.type = 'personal' OR t.project_id IS NULL)");
     }
     if (done !== undefined) {
       conditions.push('t.done = ?');
@@ -140,7 +153,7 @@ router.get('/', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, bucket_id, repeat_after, repeat_mode, labels, links } = req.body;
+    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, bucket_id, repeat_after, repeat_mode, labels, links, sprint_id, assignee_user_id, assignee_name, task_type } = req.body;
     if (!title?.trim()) return fail(res, 400, 'Title is required');
 
     if (project_id) {
@@ -152,12 +165,14 @@ router.post('/', (req: Request, res: Response) => {
     const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO tasks (id, user_id, project_id, title, description, due_date, start_date, end_date,
-        priority, hex_color, bucket_id, repeat_after, repeat_mode, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        priority, hex_color, bucket_id, repeat_after, repeat_mode, sprint_id, assignee_user_id, assignee_name, task_type, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, userId, project_id || null, title.trim(), description || null,
       due_date || null, start_date || null, end_date || null,
       priority || 0, hex_color || '', bucket_id || null,
-      repeat_after || 0, repeat_mode || 0, now, now);
+      repeat_after || 0, repeat_mode || 0,
+      sprint_id || null, assignee_user_id || null, assignee_name || null, task_type || 'task',
+      now, now);
 
     // Attach labels if provided
     if (labels && Array.isArray(labels)) {
@@ -213,7 +228,7 @@ router.put('/:id', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(id, userId) as any;
     if (!existing) return fail(res, 404, 'Task not found');
 
-    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, percent_done, position, bucket_id, repeat_after, repeat_mode, labels, links } = req.body;
+    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, percent_done, position, bucket_id, repeat_after, repeat_mode, labels, links, sprint_id, assignee_user_id, assignee_name, task_type } = req.body;
 
     const now = new Date().toISOString();
     db.prepare(`
@@ -231,6 +246,10 @@ router.put('/:id', (req: Request, res: Response) => {
         bucket_id = ?,
         repeat_after = COALESCE(?, repeat_after),
         repeat_mode = COALESCE(?, repeat_mode),
+        sprint_id = ?,
+        assignee_user_id = ?,
+        assignee_name = ?,
+        task_type = COALESCE(?, task_type),
         updated_at = ?
       WHERE id = ?
     `).run(
@@ -247,6 +266,10 @@ router.put('/:id', (req: Request, res: Response) => {
       bucket_id !== undefined ? bucket_id : existing.bucket_id,
       repeat_after !== undefined ? repeat_after : null,
       repeat_mode !== undefined ? repeat_mode : null,
+      sprint_id !== undefined ? sprint_id : existing.sprint_id,
+      assignee_user_id !== undefined ? assignee_user_id : existing.assignee_user_id,
+      assignee_name !== undefined ? assignee_name : existing.assignee_name,
+      task_type || null,
       now, id
     );
 
