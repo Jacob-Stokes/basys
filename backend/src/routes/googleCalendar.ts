@@ -275,6 +275,7 @@ router.put('/events/:googleEventId', async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const googleEventId = req.params.googleEventId as string;
     const { calendar_id, title, description, start_date, end_date, all_day, location } = req.body;
+    console.log('PUT /events/:googleEventId', { googleEventId, calendar_id, title, start_date, end_date, all_day, location });
 
     if (!calendar_id) return fail(res, 400, 'calendar_id is required');
 
@@ -282,39 +283,47 @@ router.put('/events/:googleEventId', async (req: Request, res: Response) => {
 
     const event: any = {};
     if (title !== undefined) event.summary = title;
-    if (description !== undefined) event.description = description;
-    if (location !== undefined) event.location = location;
+    if (description !== undefined && description !== null) event.description = description;
+    if (location !== undefined && location !== null) event.location = location;
+
+    const tzOffsetToString = (d: Date) => {
+      const off = d.getTimezoneOffset();
+      const sign = off <= 0 ? '+' : '-';
+      const h = String(Math.floor(Math.abs(off) / 60)).padStart(2, '0');
+      const m = String(Math.abs(off) % 60).padStart(2, '0');
+      return `${sign}${h}:${m}`;
+    };
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     if (start_date !== undefined) {
-      const tzOffsetToString = (d: Date) => {
-        const off = d.getTimezoneOffset();
-        const sign = off <= 0 ? '+' : '-';
-        const h = String(Math.floor(Math.abs(off) / 60)).padStart(2, '0');
-        const m = String(Math.abs(off) % 60).padStart(2, '0');
-        return `${sign}${h}:${m}`;
-      };
-
       if (all_day) {
+        // Google all-day end date is exclusive (day after)
+        const endStr = end_date ? end_date.slice(0, 10) : start_date.slice(0, 10);
+        const endExclusive = new Date(endStr + 'T00:00:00');
+        endExclusive.setDate(endExclusive.getDate() + 1);
+        const endExclusiveStr = endExclusive.toISOString().slice(0, 10);
         event.start = { date: start_date.slice(0, 10) };
-        event.end = { date: end_date ? end_date.slice(0, 10) : start_date.slice(0, 10) };
+        event.end = { date: endExclusiveStr };
       } else {
         let startDT = start_date;
         let endDT = end_date;
         if (!/[Zz]|[+-]\d{2}:\d{2}/.test(startDT)) {
-          startDT += tzOffsetToString(new Date(startDT));
+          startDT += ':00' + tzOffsetToString(new Date(startDT));
         }
         if (!endDT) {
-          const endDate = new Date(startDT);
-          endDate.setHours(endDate.getHours() + 1);
-          endDT = endDate.toISOString().replace('Z', tzOffsetToString(endDate));
+          const endMs = new Date(startDT).getTime() + 60 * 60 * 1000;
+          const endObj = new Date(endMs);
+          const pad = (n: number) => String(n).padStart(2, '0');
+          endDT = `${endObj.getFullYear()}-${pad(endObj.getMonth()+1)}-${pad(endObj.getDate())}T${pad(endObj.getHours())}:${pad(endObj.getMinutes())}:00${tzOffsetToString(endObj)}`;
         } else if (!/[Zz]|[+-]\d{2}:\d{2}/.test(endDT)) {
-          endDT += tzOffsetToString(new Date(endDT));
+          endDT += ':00' + tzOffsetToString(new Date(endDT));
         }
-        event.start = { dateTime: startDT };
-        event.end = { dateTime: endDT };
+        event.start = { dateTime: startDT, timeZone: tz };
+        event.end = { dateTime: endDT, timeZone: tz };
       }
     }
 
+    console.log('Google PATCH payload:', JSON.stringify(event, null, 2));
     const updated = await updateGoogleEvent(accessToken, calendar_id, googleEventId, event);
 
     syncGoogleEvents(userId).catch(err =>
@@ -323,6 +332,7 @@ router.put('/events/:googleEventId', async (req: Request, res: Response) => {
 
     ok(res, updated);
   } catch (error: any) {
+    console.error('Google Calendar update error:', error);
     if (error.message?.includes('not connected')) return fail(res, 400, error.message);
     serverError(res, error);
   }

@@ -75,35 +75,41 @@ router.post('/', (req: Request, res: Response) => {
 
 // PUT /:id — update event
 router.put('/:id', (req: Request, res: Response) => {
-  const userId = (req as any).user.id;
-  const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(req.params.id, userId) as any;
-  if (!existing) return fail(res, 404, 'Event not found');
+  try {
+    const userId = (req as any).user.id;
+    console.log('PUT /api/events/:id', { id: req.params.id, body: req.body });
+    const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(req.params.id, userId) as any;
+    if (!existing) return fail(res, 404, 'Event not found');
 
-  const { title, description, start_date, end_date, all_day, color, location } = req.body;
-  const now = new Date().toISOString();
+    const { title, description, start_date, end_date, all_day, color, location } = req.body;
+    const now = new Date().toISOString();
 
-  db.prepare(`
-    UPDATE events SET
-      title = COALESCE(?, title),
-      description = COALESCE(?, description),
-      start_date = COALESCE(?, start_date),
-      end_date = ?,
-      all_day = COALESCE(?, all_day),
-      color = COALESCE(?, color),
-      location = ?,
-      updated_at = ?
-    WHERE id = ?
-  `).run(
-    title || null, description, start_date || null,
-    end_date !== undefined ? end_date : existing.end_date,
-    all_day !== undefined ? (all_day ? 1 : 0) : null,
-    color || null,
-    location !== undefined ? location : existing.location,
-    now, req.params.id
-  );
+    db.prepare(`
+      UPDATE events SET
+        title = COALESCE(?, title),
+        description = COALESCE(?, description),
+        start_date = COALESCE(?, start_date),
+        end_date = ?,
+        all_day = COALESCE(?, all_day),
+        color = COALESCE(?, color),
+        location = ?,
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      title || null, description !== undefined ? description : null, start_date || null,
+      end_date !== undefined ? end_date : existing.end_date,
+      all_day !== undefined ? (all_day ? 1 : 0) : null,
+      color || null,
+      location !== undefined ? location : existing.location,
+      now, req.params.id
+    );
 
-  const event = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
-  return ok(res, event);
+    const event = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
+    return ok(res, event);
+  } catch (error) {
+    console.error('Event update error:', error);
+    return res.status(500).json({ success: false, data: null, error: (error as Error).message });
+  }
 });
 
 // DELETE /:id — delete event
