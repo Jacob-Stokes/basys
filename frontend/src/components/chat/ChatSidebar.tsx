@@ -159,7 +159,7 @@ export default function ChatSidebar() {
 
   return (
     <div
-      className={`fixed top-14 right-0 bottom-14 w-full sm:w-[400px] bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
+      className={`fixed top-14 right-0 bottom-14 w-full sm:w-[300px] bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
         isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
       }`}
     >
