@@ -446,3 +446,230 @@ code {
 .academia-2026.dark h1.text-2xl {
   color: #f0e8d5 !important;
 }
+
+/* ============================================================
+   ARC THEME
+   Frosted white/grey glassmorphism — clean cool surfaces,
+   vivid indigo+sky accent, Inter UI font
+   ============================================================ */
+
+/* Base */
+.arc body,
+.arc #root {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  background-color: #f0f2f5;
+  background-image:
+    radial-gradient(ellipse 70% 50% at 15% 5%,  rgba(200,210,255,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 45% at 85% 95%,  rgba(186,230,255,0.18) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 50% 50%,  rgba(238,240,255,0.12) 0%, transparent 40%);
+}
+
+/* Subtle grain texture */
+.arc body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.022;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px 128px;
+}
+
+/* ------ Background surfaces ------ */
+.arc .bg-gray-100 { background-color: #f0f2f5 !important; }
+.arc .bg-gray-50  { background-color: #f7f8fa !important; }
+.arc .bg-white    {
+  background-color: rgba(255,255,255,0.72) !important;
+  backdrop-filter: blur(14px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.5) !important;
+}
+.arc .bg-gray-200 { background-color: rgba(218,222,232,0.6) !important; }
+
+/* ------ Borders ------ */
+.arc .border-gray-200 { border-color: rgba(210,215,228,0.55) !important; }
+.arc .border-gray-300 { border-color: rgba(190,196,212,0.6) !important; }
+.arc .divide-y > * + * { border-color: rgba(210,215,228,0.45) !important; }
+
+/* ------ Frosted glass cards ------ */
+.arc .shadow,
+.arc .shadow-sm {
+  background: rgba(255,255,255,0.68) !important;
+  backdrop-filter: blur(14px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.6) !important;
+  border: 1px solid rgba(255,255,255,0.75) !important;
+  box-shadow: 0 2px 12px rgba(100,110,160,0.08), inset 0 1px 0 rgba(255,255,255,0.9) !important;
+}
+.arc .shadow-md {
+  background: rgba(255,255,255,0.74) !important;
+  backdrop-filter: blur(18px) saturate(1.7) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.7) !important;
+  border: 1px solid rgba(255,255,255,0.8) !important;
+  box-shadow: 0 4px 24px rgba(80,90,150,0.10), inset 0 1px 0 rgba(255,255,255,0.95) !important;
+  border-radius: 14px !important;
+}
+.arc .shadow-lg,
+.arc .shadow-xl,
+.arc .shadow-2xl {
+  background: rgba(255,255,255,0.84) !important;
+  backdrop-filter: blur(24px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
+  border: 1px solid rgba(255,255,255,0.85) !important;
+  box-shadow: 0 8px 40px rgba(60,70,140,0.12), inset 0 1px 0 rgba(255,255,255,1) !important;
+  border-radius: 18px !important;
+}
+
+/* ------ Navbar — deep slate glass ------ */
+.arc nav.bg-white,
+.arc nav.bg-gray-800,
+.arc nav[class*="sticky"] {
+  background: rgba(22,24,32,0.86) !important;
+  backdrop-filter: blur(22px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.6) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.07) !important;
+  box-shadow: 0 1px 0 rgba(99,102,241,0.1) !important;
+}
+
+/* ------ Primary accent: indigo ------ */
+.arc .bg-blue-600  { background-color: #4f46e5 !important; }
+.arc .bg-blue-700  { background-color: #4338ca !important; }
+.arc .bg-blue-500  { background-color: #6366f1 !important; }
+.arc .bg-blue-50   { background-color: rgba(238,242,255,0.65) !important; backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important; }
+.arc .bg-blue-100  { background-color: rgba(224,231,255,0.7) !important; }
+.arc .text-blue-600 { color: #4f46e5 !important; }
+.arc .text-blue-700 { color: #4338ca !important; }
+.arc .text-blue-800 { color: #3730a3 !important; }
+.arc .text-blue-500 { color: #6366f1 !important; }
+.arc .text-blue-400 { color: #818cf8 !important; }
+.arc .border-blue-200 { border-color: rgba(199,210,254,0.6) !important; }
+.arc .border-blue-500 { border-color: #6366f1 !important; }
+.arc .border-blue-600 { border-color: #4f46e5 !important; }
+.arc .ring-blue-500 { --tw-ring-color: #6366f1 !important; }
+.arc .focus\:ring-blue-500:focus { --tw-ring-color: rgba(99,102,241,0.35) !important; }
+.arc .hover\:bg-blue-700:hover { background-color: #4338ca !important; }
+.arc .hover\:bg-blue-600:hover { background-color: #4f46e5 !important; }
+.arc .hover\:text-blue-800:hover { color: #3730a3 !important; }
+.arc .bg-blue-900\/30 { background-color: rgba(49,46,129,0.25) !important; }
+
+/* Active nav link in arc theme */
+.arc .text-blue-600.bg-blue-50 {
+  background-color: rgba(238,242,255,0.7) !important;
+  color: #4f46e5 !important;
+}
+
+/* ------ Secondary accent: sky/cyan ------ */
+.arc .bg-green-600  { background-color: #0284c7 !important; }
+.arc .bg-green-700  { background-color: #0369a1 !important; }
+.arc .bg-green-500  { background-color: #0ea5e9 !important; }
+.arc .bg-green-100  { background-color: rgba(224,242,254,0.65) !important; }
+.arc .bg-green-50   { background-color: rgba(240,249,255,0.6) !important; }
+.arc .text-green-600 { color: #0284c7 !important; }
+.arc .text-green-700 { color: #0369a1 !important; }
+.arc .text-green-400 { color: #38bdf8 !important; }
+.arc .text-green-300 { color: #7dd3fc !important; }
+.arc .border-green-200 { border-color: rgba(186,230,255,0.55) !important; }
+.arc .hover\:bg-green-700:hover { background-color: #0369a1 !important; }
+.arc .hover\:bg-green-600:hover { background-color: #0284c7 !important; }
+.arc .bg-emerald-500 { background-color: #0284c7 !important; }
+.arc .bg-emerald-600 { background-color: #0369a1 !important; }
+.arc .text-emerald-600 { color: #0284c7 !important; }
+.arc .bg-green-900\/30 { background-color: rgba(3,105,161,0.2) !important; }
+
+/* ------ Red/destructive — rose ------ */
+.arc .bg-red-600  { background-color: #e11d48 !important; }
+.arc .bg-red-500  { background-color: #f43f5e !important; }
+.arc .text-red-600 { color: #e11d48 !important; }
+.arc .text-red-500 { color: #f43f5e !important; }
+.arc .text-red-700 { color: #be123c !important; }
+.arc .text-red-400 { color: #fb7185 !important; }
+.arc .hover\:bg-red-700:hover { background-color: #be123c !important; }
+
+/* ------ Inputs — frosted white ------ */
+.arc input,
+.arc textarea,
+.arc select {
+  background: rgba(255,255,255,0.7) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border-color: rgba(210,215,228,0.6) !important;
+  border-radius: 10px !important;
+}
+.arc input:focus,
+.arc textarea:focus,
+.arc select:focus {
+  background: rgba(255,255,255,0.92) !important;
+  border-color: rgba(99,102,241,0.5) !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.15) !important;
+}
+
+/* ------ Sidebar panels ------ */
+.arc .bg-white.border-r,
+.arc .bg-white.border-l,
+.arc .bg-gray-800.border-r,
+.arc .bg-gray-800.border-l {
+  background: rgba(248,250,254,0.82) !important;
+  backdrop-filter: blur(20px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.5) !important;
+  border-color: rgba(210,218,240,0.5) !important;
+}
+
+/* ------ Habit week grid ------ */
+.arc .habit-week-cell.bg-gray-200 { background-color: rgba(210,218,235,0.55) !important; }
+
+/* ---- Dark mode ---- */
+.arc.dark body {
+  background-color: #0f1117;
+  background-image:
+    radial-gradient(ellipse 70% 50% at 15% 5%,  rgba(79,70,229,0.15) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 45% at 85% 95%,  rgba(14,165,233,0.10) 0%, transparent 50%);
+}
+.arc.dark .bg-gray-900 { background-color: #0f1117 !important; }
+.arc.dark .bg-gray-800 {
+  background-color: rgba(20,22,30,0.92) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+.arc.dark .bg-white {
+  background-color: rgba(30,33,45,0.78) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+}
+.arc.dark .bg-gray-700 { background-color: rgba(38,42,58,0.88) !important; }
+.arc.dark .border-gray-700 { border-color: rgba(60,65,90,0.5) !important; }
+.arc.dark .shadow-md {
+  background: rgba(26,29,42,0.82) !important;
+  border-color: rgba(60,65,100,0.45) !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+}
+.arc.dark .shadow-lg,
+.arc.dark .shadow-xl,
+.arc.dark .shadow-2xl {
+  background: rgba(28,32,46,0.9) !important;
+  border-color: rgba(65,70,110,0.45) !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+}
+.arc.dark .text-blue-600 { color: #818cf8 !important; }
+.arc.dark .text-blue-400 { color: #a5b4fc !important; }
+.arc.dark .bg-blue-600   { background-color: #4f46e5 !important; }
+.arc.dark .bg-blue-700   { background-color: #4338ca !important; }
+.arc.dark .bg-blue-50    { background-color: rgba(49,46,129,0.25) !important; }
+.arc.dark .text-green-400 { color: #38bdf8 !important; }
+.arc.dark .text-green-600 { color: #0ea5e9 !important; }
+.arc.dark .bg-green-600  { background-color: #0284c7 !important; }
+.arc.dark .bg-emerald-500 { background-color: #0284c7 !important; }
+.arc.dark .habit-week-cell.bg-gray-700 { background-color: rgba(40,45,68,0.65) !important; }
+.arc.dark input,
+.arc.dark textarea,
+.arc.dark select {
+  background: rgba(26,29,42,0.75) !important;
+  border-color: rgba(60,65,100,0.55) !important;
+}
+.arc.dark .bg-white.border-r,
+.arc.dark .bg-white.border-l,
+.arc.dark .bg-gray-800.border-r,
+.arc.dark .bg-gray-800.border-l {
+  background: rgba(20,23,36,0.88) !important;
+  border-color: rgba(55,60,90,0.5) !important;
+}

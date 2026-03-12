@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 export type ViewMode = 'list' | 'compact' | 'full';
 export type CenterLayout = 'single' | 'radial';
 export type CenterBackdrop = 'page' | 'card';
-export type AppThemeName = 'default' | 'academia' | 'academia-2026' | 'custom-theme';
+export type AppThemeName = 'default' | 'academia' | 'academia-2026' | 'arc' | 'custom-theme';
 
 export interface PaletteDefinition {
   label: string;
@@ -26,6 +26,11 @@ export const appThemeOptions: Record<AppThemeName, { label: string; description:
     label: 'Academia 2026',
     description: 'Glassmorphism + warm parchment — frosted glass depth, grain texture, editorial serif',
     defaultPalette: 'mono',
+  },
+  arc: {
+    label: 'Arc',
+    description: 'Frosted white/grey glassmorphism — cool neutral surfaces, vivid accent pops',
+    defaultPalette: 'classic',
   },
   'custom-theme': {
     label: 'Custom CSS',

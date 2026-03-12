@@ -17,6 +17,11 @@ const themeColors: Record<AppThemeName, string[]> = {
     '#8b4513', '#a06030', '#cabf9e',
     '#7a9448', '#96ae64', '#c8b898',
   ],
+  arc: [
+    '#e0e7ff', '#c7d2fe', '#a5b4fc',
+    '#818cf8', '#6366f1', '#4f46e5',
+    '#e0f2fe', '#7dd3fc', '#38bdf8',
+  ],
   'custom-theme': [
     'hsl(0, 100%, 75%)', 'hsl(30, 100%, 75%)', 'hsl(60, 100%, 75%)',
     'hsl(120, 100%, 75%)', 'hsl(180, 100%, 75%)', 'hsl(210, 100%, 75%)',
@@ -28,6 +33,7 @@ const themeStrokes: Record<AppThemeName, string> = {
   default: 'white',
   academia: '#fffff8',
   'academia-2026': 'rgba(253,250,244,0.6)',
+  arc: 'rgba(255,255,255,0.7)',
   'custom-theme': 'white',
 };
 
