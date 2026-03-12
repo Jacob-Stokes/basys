@@ -2017,7 +2017,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
           {/* Calendar — 2/5 (always visible) */}
           <div className="w-full lg:w-2/5">
-              <div ref={calendarCardRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 lg:sticky lg:top-8 lg:mt-0">
+              <div ref={calendarCardRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5">
                 <Calendar
                   taskDates={taskDates}
                   eventDateColors={eventDateColors}
