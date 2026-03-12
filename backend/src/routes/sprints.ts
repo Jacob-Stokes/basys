@@ -50,9 +50,15 @@ router.post('/projects/:projectId/sprints', (req: Request, res: Response) => {
     const { title, description, start_date, end_date } = req.body;
     if (!title?.trim()) return fail(res, 400, 'Title is required');
 
-    // Auto-increment sprint_number
-    const maxNum = db.prepare('SELECT MAX(sprint_number) as max FROM sprints WHERE project_id = ?').get(projectId) as any;
-    const sprintNumber = (maxNum?.max ?? 0) + 1;
+    const projectMode = (project as any).project_mode || 'simple';
+    const isSprintMode = projectMode === 'sprint';
+
+    // Auto-increment sprint_number only for sprint mode
+    let sprintNumber = null;
+    if (isSprintMode) {
+      const maxNum = db.prepare('SELECT MAX(sprint_number) as max FROM sprints WHERE project_id = ?').get(projectId) as any;
+      sprintNumber = (maxNum?.max ?? 0) + 1;
+    }
 
     const id = uuidv4();
     const now = new Date().toISOString();
@@ -62,9 +68,23 @@ router.post('/projects/:projectId/sprints', (req: Request, res: Response) => {
       VALUES (?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?)
     `).run(id, projectId, title.trim(), description || null, sprintNumber, start_date || null, end_date || null, now, now);
 
-    // Create default columns (project_id required by existing NOT NULL constraint)
+    // Create kanban columns — use project default_columns if set, otherwise global defaults
+    let columnsToCreate = DEFAULT_COLUMNS;
+    const projectDefaultColumns = (project as any).default_columns;
+    if (projectDefaultColumns) {
+      try {
+        const parsed = JSON.parse(projectDefaultColumns);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          columnsToCreate = parsed.map((c: any, i: number) => ({
+            title: c.title || `Column ${i + 1}`,
+            position: c.position ?? i,
+            is_done_column: c.is_done_column ?? 0,
+          }));
+        }
+      } catch { /* ignore parse errors, use defaults */ }
+    }
     const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)');
-    for (const col of DEFAULT_COLUMNS) {
+    for (const col of columnsToCreate) {
       insertBucket.run(uuidv4(), projectId, id, col.title, col.position, col.is_done_column);
     }
 
@@ -84,7 +104,7 @@ router.get('/sprints/:id', (req: Request, res: Response) => {
     const id = req.params.id;
 
     const sprint = db.prepare(`
-      SELECT s.* FROM sprints s
+      SELECT s.*, p.project_mode FROM sprints s
       JOIN projects p ON s.project_id = p.id
       WHERE s.id = ? AND p.user_id = ?
     `).get(id, userId) as any;

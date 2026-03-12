@@ -84,7 +84,7 @@ function MainContent() {
   return (
     <>
       <div
-        className={`transition-[margin] duration-200 ease-in-out ${sidebarOpen ? 'sm:mr-[400px]' : ''} ${leftPanelOpen ? 'sm:ml-[300px]' : ''}`}
+        className={`transition-[margin] duration-200 ease-in-out ${sidebarOpen ? 'sm:mr-[300px]' : ''} ${leftPanelOpen ? 'sm:ml-[300px]' : ''}`}
       >
         <NavBar />
         <div className="pb-14">

@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
+import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import { parseTaskInput, formatParsedPreview } from '../utils/taskParser';
 import Calendar from '../components/Calendar';
+import TaskEditModal, { relationDisplay } from '../components/TaskEditModal';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -64,6 +66,20 @@ interface TaskItem {
   project: { id: string; title: string; hex_color: string } | null;
   labels: LabelItem[];
   links: TaskLinkItem[];
+  relations: TaskRelationItem[];
+  checklist_count: { total: number; done: number };
+  checklist_items?: Array<{ id: string; title: string; done: number; position: number }>;
+}
+
+interface TaskRelationItem {
+  id: string;
+  relation_kind: string;
+  other_task_id: string;
+  other_task_title: string;
+  other_task_done: number;
+  other_task_priority: number;
+  created_at: string;
+  is_inverse?: boolean;
 }
 
 type ActiveTab = 'overview' | 'labels' | 'email';
@@ -409,109 +425,175 @@ function QuickAddBar({ value, onChange, onSubmit, placeholder, inputRef }: {
   );
 }
 
+// relationDisplay imported from ../components/TaskEditModal
+
 // ── TaskRow ────────────────────────────────────────────────────────
 
-function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite }: {
+function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite, isExpanded, onToggleExpand, onToggleCheckItem }: {
   task: TaskItem;
   onToggle: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onToggleFavorite: () => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
+  onToggleCheckItem?: (itemId: string, currentDone: number) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const isOverdue = task.due_date && !task.done && datePart(task.due_date) < todayStr();
+  const hasChecklist = (task.checklist_count?.total || 0) > 0;
 
   return (
-    <div className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 group ${task.done ? 'opacity-60' : ''}`}>
-      {/* Checkbox */}
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggle(); }}
-        className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-          task.done
-            ? 'bg-green-500 border-green-500 text-white'
-            : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
-        }`}
-      >
-        {!!task.done && (
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-          </svg>
+    <>
+      <div className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 group ${task.done ? 'opacity-60' : ''}`}>
+        {/* Expand chevron for checklist */}
+        {hasChecklist ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
+            className={`p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+          >
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M6 4l8 6-8 6V4z" /></svg>
+          </button>
+        ) : (
+          <span className="w-4 flex-shrink-0" />
         )}
-      </button>
 
-      {/* Priority dot */}
-      {task.priority > 0 && (
-        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: priorityColor(task.priority) }} title={priorityLabel(task.priority)} />
-      )}
-
-      {/* Title + details */}
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={onEdit}>
-        <div className={`text-sm ${task.done ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
-          {task.title}
-        </div>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {task.due_date && (
-            <span className={`text-xs ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
-              {relativeDue(task.due_date)}
-            </span>
-          )}
-          {task.repeat_after > 0 && (
-            <span className="text-xs text-teal-500 dark:text-teal-400" title="Repeating task">↻</span>
-          )}
-          {task.project && (
-            <span
-              className="text-xs px-1.5 py-0.5 rounded"
-              style={{
-                backgroundColor: task.project.hex_color ? task.project.hex_color + '20' : '#e2e8f020',
-                color: task.project.hex_color || '#6b7280',
-              }}
-            >
-              {task.project.title}
-            </span>
-          )}
-          {task.labels.map(l => <LabelPill key={l.id} label={l} small />)}
-          {task.links?.map(link => (
-            <span key={`${link.target_type}-${link.target_id}`} className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-              {link.target_type === 'goal' ? '🎯' : link.target_type === 'subgoal' ? '📌' : link.target_type === 'habit' ? '✅' : '🍅'}{' '}
-              {link.target_title}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Favorite */}
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
-        className={`text-sm flex-shrink-0 transition-colors ${task.is_favorite ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100'}`}
-      >
-        ★
-      </button>
-
-      {/* Three-dot menu */}
-      <div className="relative flex-shrink-0">
+        {/* Checkbox */}
         <button
-          onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+            task.done
+              ? 'bg-green-500 border-green-500 text-white'
+              : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+          }`}
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z" />
-          </svg>
+          {!!task.done && (
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
         </button>
-        {menuOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 z-20 py-1">
-              <button onClick={() => { onEdit(); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
-                Edit
-              </button>
-              <button onClick={() => { onDelete(); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
-                Delete
-              </button>
-            </div>
-          </>
+
+        {/* Priority dot */}
+        {task.priority > 0 && (
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: priorityColor(task.priority) }} title={priorityLabel(task.priority)} />
         )}
+
+        {/* Title + details */}
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={onEdit}>
+          <div className={`text-sm ${task.done ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+            {task.title}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {task.due_date && (
+              <span className={`text-xs ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
+                {relativeDue(task.due_date)}
+              </span>
+            )}
+            {task.repeat_after > 0 && (
+              <span className="text-xs text-teal-500 dark:text-teal-400" title="Repeating task">↻</span>
+            )}
+            {task.project && (
+              <span
+                className="text-xs px-1.5 py-0.5 rounded"
+                style={{
+                  backgroundColor: task.project.hex_color ? task.project.hex_color + '20' : '#e2e8f020',
+                  color: task.project.hex_color || '#6b7280',
+                }}
+              >
+                {task.project.title}
+              </span>
+            )}
+            {task.labels.map(l => <LabelPill key={l.id} label={l} small />)}
+            {task.links?.map(link => (
+              <span key={`${link.target_type}-${link.target_id}`} className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                {link.target_type === 'goal' ? '🎯' : link.target_type === 'subgoal' ? '📌' : link.target_type === 'habit' ? '✅' : '🍅'}{' '}
+                {link.target_title}
+              </span>
+            ))}
+            {task.relations?.length > 0 && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-500 dark:text-blue-400" title={task.relations.map(r => `${relationDisplay(r.relation_kind).emoji} ${relationDisplay(r.relation_kind).label}: ${r.other_task_title}`).join('\n')}>
+                🔗 {task.relations.length}
+              </span>
+            )}
+            {hasChecklist && !isExpanded && (
+              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                task.checklist_count.done === task.checklist_count.total
+                  ? 'bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+              }`} title="Checklist items">
+                ☑ {task.checklist_count.done}/{task.checklist_count.total}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Favorite */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+          className={`text-sm flex-shrink-0 transition-colors ${task.is_favorite ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100'}`}
+        >
+          ★
+        </button>
+
+        {/* Three-dot menu */}
+        <div className="relative flex-shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z" />
+            </svg>
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 z-20 py-1">
+                <button onClick={() => { onEdit(); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                  Edit
+                </button>
+                <button onClick={() => { onDelete(); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Inline checklist items */}
+      {isExpanded && task.checklist_items && task.checklist_items.length > 0 && (
+        <div className="border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+          {task.checklist_items.map(item => (
+            <div key={item.id} className="flex items-center gap-2 pl-12 pr-3 py-1.5 hover:bg-gray-100/50 dark:hover:bg-gray-700/30">
+              <button
+                onClick={() => onToggleCheckItem?.(item.id, item.done)}
+                className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                  item.done
+                    ? 'bg-green-500 border-green-500 text-white'
+                    : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+                }`}
+              >
+                {item.done ? (
+                  <svg className="w-2 h-2" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : null}
+              </button>
+              <span className={`text-xs ${item.done ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                {item.title}
+              </span>
+            </div>
+          ))}
+          <div className="pl-12 pr-3 py-1 flex items-center">
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+              {task.checklist_count.done}/{task.checklist_count.total} done
+            </span>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -565,6 +647,8 @@ function EventEditModal({ event, onSave, onDelete, onClose }: {
       location: location || null,
     });
   };
+
+  useModKeySubmit(true, () => handleSubmit({ preventDefault: () => {} } as React.FormEvent), !!title.trim() && !isReadOnly);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -826,324 +910,9 @@ function EmailReadModal({ message, onMarkRead, onMarkUnread, onClose }: {
   );
 }
 
-// ── TaskEditModal ──────────────────────────────────────────────────
+// TaskRelationsSection now handled inside shared TaskEditModal component
 
-function TaskEditModal({ task, projects, labels, onSave, onClose }: {
-  task: TaskItem | null; // null = create
-  projects: ProjectItem[];
-  labels: LabelItem[];
-  onSave: (data: any) => void;
-  onClose: () => void;
-}) {
-  const [title, setTitle] = useState(task?.title || '');
-  const [description, setDescription] = useState(task?.description || '');
-  // datetime-local input needs value in "YYYY-MM-DDTHH:MM" format
-  const toInputVal = (v: string) => {
-    if (!v) return '';
-    if (v.includes('T')) return v.slice(0, 16); // trim seconds
-    return v + 'T00:00'; // date-only → add midnight
-  };
-  const [dueDate, setDueDate] = useState(toInputVal(task?.due_date || ''));
-  const [priority, setPriority] = useState(task?.priority || 0);
-  const [repeatAfter, setRepeatAfter] = useState(task?.repeat_after || 0);
-  const [projectId, setProjectId] = useState(task?.project_id || '');
-  const [selectedLabels, setSelectedLabels] = useState<string[]>(task?.labels.map(l => l.id) || []);
-
-  // Link state
-  const [selectedLinks, setSelectedLinks] = useState<{ target_type: TaskLinkItem['target_type']; target_id: string; target_title: string }[]>(
-    task?.links?.map(l => ({ target_type: l.target_type, target_id: l.target_id, target_title: l.target_title })) || []
-  );
-  const [showLinkPicker, setShowLinkPicker] = useState(false);
-  const [linkType, setLinkType] = useState<TaskLinkItem['target_type']>('goal');
-  const [linkQuery, setLinkQuery] = useState('');
-  const [linkResults, setLinkResults] = useState<{ id: string; title: string }[]>([]);
-  const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
-  const linkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Debounced search for link targets
-  useEffect(() => {
-    if (linkTimerRef.current) clearTimeout(linkTimerRef.current);
-    if (!showLinkPicker) { setLinkResults([]); setLinkDropdownOpen(false); return; }
-
-    const doSearch = async () => {
-      try {
-        let results: { id: string; title: string }[] = [];
-        if (linkType === 'goal') {
-          if (!linkQuery.trim()) { setLinkResults([]); setLinkDropdownOpen(false); return; }
-          const data = await api.getGoals(linkQuery.trim());
-          results = data.map((g: any) => ({ id: g.id, title: g.title }));
-        } else if (linkType === 'subgoal') {
-          if (!linkQuery.trim()) { setLinkResults([]); setLinkDropdownOpen(false); return; }
-          const data = await api.searchSubGoals(linkQuery.trim());
-          results = data.map((sg: any) => ({ id: sg.id, title: `${sg.goal_title} › ${sg.title}` }));
-        } else if (linkType === 'habit') {
-          const data = await api.getHabits();
-          results = data.map((h: any) => ({ id: h.id, title: `${h.emoji || ''} ${h.title}`.trim() }));
-          const q = linkQuery.trim().toLowerCase();
-          if (q) results = results.filter(r => r.title.toLowerCase().includes(q));
-        } else if (linkType === 'pomodoro') {
-          const data = await api.getPomodoros({ limit: '50' });
-          results = data.map((p: any) => ({ id: p.id, title: p.note || `Pomodoro ${new Date(p.started_at).toLocaleDateString()}` }));
-          const q = linkQuery.trim().toLowerCase();
-          if (q) results = results.filter(r => r.title.toLowerCase().includes(q));
-        }
-        // Filter out already-linked items
-        results = results.filter(r => !selectedLinks.some(l => l.target_type === linkType && l.target_id === r.id));
-        setLinkResults(results);
-        setLinkDropdownOpen(results.length > 0);
-      } catch { setLinkResults([]); setLinkDropdownOpen(false); }
-    };
-
-    const delay = (linkType === 'habit' || linkType === 'pomodoro') ? 150 : 300;
-    linkTimerRef.current = setTimeout(doSearch, delay);
-    return () => { if (linkTimerRef.current) clearTimeout(linkTimerRef.current); };
-  }, [linkQuery, linkType, showLinkPicker]);
-
-  const addLink = (target: { id: string; title: string }) => {
-    if (selectedLinks.some(l => l.target_type === linkType && l.target_id === target.id)) return;
-    setSelectedLinks(prev => [...prev, { target_type: linkType, target_id: target.id, target_title: target.title }]);
-    setLinkQuery(''); setLinkResults([]); setLinkDropdownOpen(false); setShowLinkPicker(false);
-  };
-
-  const removeLink = (targetType: string, targetId: string) => {
-    setSelectedLinks(prev => prev.filter(l => !(l.target_type === targetType && l.target_id === targetId)));
-  };
-
-  const linkEmoji = (type: string) =>
-    type === 'goal' ? '🎯' : type === 'subgoal' ? '📌' : type === 'habit' ? '✅' : '🍅';
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    onSave({
-      title: title.trim(),
-      description: description || null,
-      due_date: dueDate || null,
-      priority,
-      repeat_after: repeatAfter,
-      repeat_mode: 0,
-      project_id: projectId || null,
-      labels: selectedLabels,
-      links: selectedLinks.map(l => ({ target_type: l.target_type, target_id: l.target_id })),
-    });
-  };
-
-  const toggleLabel = (labelId: string) => {
-    setSelectedLabels(prev =>
-      prev.includes(labelId) ? prev.filter(l => l !== labelId) : [...prev, labelId]
-    );
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          {task ? 'Edit Task' : 'New Task'}
-        </h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Title */}
-          <input
-            type="text"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Task title..."
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            autoFocus
-          />
-
-          {/* Description */}
-          <textarea
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            placeholder="Description (optional)"
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-          />
-
-          {/* Due date + Priority row */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Due date & time</label>
-              <input
-                type="datetime-local"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Priority</label>
-              <select
-                value={priority}
-                onChange={e => setPriority(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-              >
-                <option value={0}>None</option>
-                <option value={1}>Low</option>
-                <option value={2}>Medium</option>
-                <option value={3}>High</option>
-                <option value={4}>Urgent</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Repeat */}
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Repeat</label>
-            <select
-              value={repeatAfter}
-              onChange={e => setRepeatAfter(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-            >
-              <option value={0}>No repeat</option>
-              <option value={3600}>Every hour</option>
-              <option value={86400}>Every day</option>
-              <option value={259200}>Every 3 days</option>
-              <option value={604800}>Every week</option>
-              <option value={1209600}>Every 2 weeks</option>
-              <option value={2592000}>Every month</option>
-              <option value={7776000}>Every 3 months</option>
-              <option value={31536000}>Every year</option>
-            </select>
-          </div>
-
-          {/* Project */}
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Project</label>
-            <select
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-            >
-              <option value="">No project</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.title}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Labels */}
-          {labels.length > 0 && (
-            <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Labels</label>
-              <div className="flex flex-wrap gap-1.5">
-                {labels.map(l => {
-                  const selected = selectedLabels.includes(l.id);
-                  return (
-                    <button
-                      key={l.id}
-                      type="button"
-                      onClick={() => toggleLabel(l.id)}
-                      className={`px-2 py-1 text-xs rounded-full border transition-all ${
-                        selected
-                          ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-gray-800'
-                          : 'opacity-60 hover:opacity-100'
-                      }`}
-                      style={{
-                        backgroundColor: l.hex_color || '#e2e8f0',
-                        color: l.hex_color && !['#e2e8f0', '#ffffff', ''].includes(l.hex_color.toLowerCase()) ? '#fff' : '#374151',
-                        borderColor: selected ? 'transparent' : 'transparent',
-                      }}
-                    >
-                      {l.title}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Links */}
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Links</label>
-
-            {selectedLinks.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {selectedLinks.map(l => (
-                  <span
-                    key={`${l.target_type}-${l.target_id}`}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                  >
-                    {linkEmoji(l.target_type)} {l.target_title}
-                    <button type="button" onClick={() => removeLink(l.target_type, l.target_id)} className="text-gray-400 hover:text-red-500 font-bold ml-0.5">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {showLinkPicker ? (
-              <div className="flex gap-2 items-start">
-                <select
-                  value={linkType}
-                  onChange={e => { setLinkType(e.target.value as TaskLinkItem['target_type']); setLinkQuery(''); setLinkResults([]); setLinkDropdownOpen(false); }}
-                  className="px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-                >
-                  <option value="goal">🎯 Goal</option>
-                  <option value="subgoal">📌 Sub-goal</option>
-                  <option value="habit">✅ Habit</option>
-                  <option value="pomodoro">🍅 Pomodoro</option>
-                </select>
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={linkQuery}
-                    onChange={e => setLinkQuery(e.target.value)}
-                    onFocus={() => { if (linkResults.length > 0) setLinkDropdownOpen(true); }}
-                    placeholder={`Search ${linkType}s...`}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    autoFocus
-                  />
-                  {linkDropdownOpen && linkResults.length > 0 && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setLinkDropdownOpen(false)} />
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 z-20 max-h-48 overflow-y-auto">
-                        {linkResults.map(r => (
-                          <button
-                            key={r.id}
-                            type="button"
-                            onClick={() => addLink(r)}
-                            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100"
-                          >
-                            {r.title}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setShowLinkPicker(false); setLinkQuery(''); setLinkResults([]); setLinkDropdownOpen(false); }}
-                  className="px-2 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowLinkPicker(true)}
-                className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-              >
-                + Add Link
-              </button>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-              Cancel
-            </button>
-            <button type="submit" disabled={!title.trim()} className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-              {task ? 'Save' : 'Create'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+// Local TaskEditModal replaced by shared TaskEditModal component (imported above)
 
 // ── LabelEditModal ─────────────────────────────────────────────────
 
@@ -1155,6 +924,8 @@ function LabelEditModal({ label, onSave, onClose }: {
   const [title, setTitle] = useState(label?.title || '');
   const [hexColor, setHexColor] = useState(label?.hex_color || '#e2e8f0');
   const [description, setDescription] = useState(label?.description || '');
+
+  useModKeySubmit(true, () => { if (title.trim()) onSave({ title: title.trim(), hex_color: hexColor, description: description || null }); }, !!title.trim());
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -1228,6 +999,8 @@ function ProjectEditModal({ project, onSave, onClose }: {
   const [customType, setCustomType] = useState('');
 
   const effectiveType = projectType === '_custom' ? customType.trim().toLowerCase() : projectType;
+
+  useModKeySubmit(true, () => { if (title.trim()) onSave({ title: title.trim(), description: description || null, hex_color: hexColor, type: effectiveType || 'personal' }); }, !!title.trim());
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -1335,6 +1108,10 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   const [quickAdd, setQuickAdd] = useState('');
   const quickAddRef = useRef<HTMLInputElement>(null);
 
+  // Checklist expand state
+  const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
+  const [allChecklistsCollapsed, setAllChecklistsCollapsed] = useState(false);
+
   // Project state
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectItem | null | 'new'>(null);
@@ -1413,6 +1190,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
       if (hiddenTypesRef.current) {
         params.exclude_types = hiddenTypesRef.current;
       }
+      params.include_checklist = '1';
       const data = await api.getTasks(params);
       setTasks(data);
     } catch (err) {
@@ -1766,6 +1544,30 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     }
   };
 
+  const handleToggleCheckItem = async (taskId: string, itemId: string, currentDone: number) => {
+    // Optimistic update
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId || !t.checklist_items) return t;
+      const items = t.checklist_items.map(ci => ci.id === itemId ? { ...ci, done: currentDone ? 0 : 1 } : ci);
+      const doneCount = items.filter(ci => ci.done).length;
+      return { ...t, checklist_items: items, checklist_count: { total: items.length, done: doneCount } };
+    }));
+    try {
+      await api.updateChecklistItem(taskId, itemId, { done: currentDone ? 0 : 1 });
+    } catch {
+      loadTasks(); // revert on failure
+    }
+  };
+
+  const toggleTaskExpand = (taskId: string) => {
+    setCollapsedTasks(prev => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
   const handleToggleFavorite = async (id: string) => {
     try {
       await api.toggleTaskFavorite(id);
@@ -1866,6 +1668,9 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
               onEdit={() => setEditingTask(t)}
               onDelete={() => setDeleteTarget({ type: 'task', id: t.id, title: t.title })}
               onToggleFavorite={() => handleToggleFavorite(t.id)}
+              isExpanded={!allChecklistsCollapsed && !collapsedTasks.has(t.id) && (t.checklist_count?.total || 0) > 0}
+              onToggleExpand={() => toggleTaskExpand(t.id)}
+              onToggleCheckItem={(itemId, done) => handleToggleCheckItem(t.id, itemId, done)}
             />
           ))}
         </div>
@@ -1911,6 +1716,9 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                 onEdit={() => setEditingTask(t)}
                 onDelete={() => setDeleteTarget({ type: 'task', id: t.id, title: t.title })}
                 onToggleFavorite={() => handleToggleFavorite(t.id)}
+                isExpanded={!allChecklistsCollapsed && !collapsedTasks.has(t.id) && (t.checklist_count?.total || 0) > 0}
+                onToggleExpand={() => toggleTaskExpand(t.id)}
+                onToggleCheckItem={(itemId, done) => handleToggleCheckItem(t.id, itemId, done)}
               />
             )) : null
           ) : null}
@@ -2171,6 +1979,20 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                 )}
               </div>
 
+              {/* Collapse all checklists toggle */}
+              {tab === 'overview' && tasks.some(t => t.checklist_count?.total > 0) && (
+                <div className="px-3 py-1 border-b border-gray-100 dark:border-gray-700 flex justify-end">
+                  <button
+                    onClick={() => { setAllChecklistsCollapsed(!allChecklistsCollapsed); setCollapsedTasks(new Set()); }}
+                    className="text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1"
+                    title={allChecklistsCollapsed ? 'Expand all checklists' : 'Collapse all checklists'}
+                  >
+                    <svg className={`w-3 h-3 transition-transform ${allChecklistsCollapsed ? '' : 'rotate-90'}`} fill="currentColor" viewBox="0 0 20 20"><path d="M6 4l8 6-8 6V4z" /></svg>
+                    {allChecklistsCollapsed ? 'Show checklists' : 'Hide checklists'}
+                  </button>
+                </div>
+              )}
+
               {loading ? (
                 <div className="py-12 text-center text-gray-400">Loading...</div>
               ) : (
@@ -2379,10 +2201,17 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
       {editingTask && (
         <TaskEditModal
           task={editingTask === 'new' ? null : editingTask}
-          projects={projects}
+          projects={projects.map(p => ({ id: p.id, title: p.title, hex_color: p.hex_color }))}
           labels={labels}
           onSave={handleSaveTask}
           onClose={() => setEditingTask(null)}
+          showProjectSelector
+          showLabels
+          showLinks
+          showRelations
+          showRepeat
+          showDates
+          showChecklist
         />
       )}
 

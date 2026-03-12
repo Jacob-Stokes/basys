@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { useModKeySubmit } from '../hooks/useModKeySubmit';
 
 interface QuickCreateMenuProps {
   compact?: boolean; // mobile style
@@ -99,6 +100,8 @@ export default function QuickCreateMenu({ compact }: QuickCreateMenuProps) {
       setTitle('');
     }
   };
+
+  useModKeySubmit(!!creating, handleSubmit, !!title.trim() && !loading);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {

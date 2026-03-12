@@ -193,7 +193,7 @@ export const api = {
     apiRequest<{ loggedDates: string[]; stats: any }>(`/api/habits/${habitId}/calendar?year=${year}&month=${month}`),
 
   // Tasks
-  getTasks: (params?: { project_id?: string; done?: string; priority?: string; label?: string; due_before?: string; due_after?: string; search?: string; favorite?: string; exclude_types?: string }) => {
+  getTasks: (params?: { project_id?: string; sprint_id?: string; done?: string; priority?: string; label?: string; due_before?: string; due_after?: string; search?: string; favorite?: string; exclude_types?: string; include_checklist?: string }) => {
     const query = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([k, v]) => { if (v !== undefined) query.append(k, v); });
@@ -282,6 +282,24 @@ export const api = {
     apiRequest<any[]>(`/api/tasks/${taskId}/links`, { method: 'POST', body: JSON.stringify({ target_type, target_id }) }),
   removeTaskLink: (taskId: string, targetType: string, targetId: string) =>
     apiRequest<any>(`/api/tasks/${taskId}/links/${targetType}/${targetId}`, { method: 'DELETE' }),
+
+  // Task Relations
+  getTaskRelations: (taskId: string) =>
+    apiRequest<any[]>(`/api/tasks/${taskId}/relations`),
+  addTaskRelation: (taskId: string, related_task_id: string, relation_kind: string) =>
+    apiRequest<any[]>(`/api/tasks/${taskId}/relations`, { method: 'POST', body: JSON.stringify({ related_task_id, relation_kind }) }),
+  deleteTaskRelation: (taskId: string, relationId: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/relations/${relationId}`, { method: 'DELETE' }),
+
+  // Task Checklist
+  getTaskChecklist: (taskId: string) =>
+    apiRequest<any[]>(`/api/tasks/${taskId}/checklist`),
+  addChecklistItem: (taskId: string, title: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/checklist`, { method: 'POST', body: JSON.stringify({ title }) }),
+  updateChecklistItem: (taskId: string, itemId: string, data: { title?: string; done?: number; position?: number }) =>
+    apiRequest<any>(`/api/tasks/${taskId}/checklist/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteChecklistItem: (taskId: string, itemId: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/checklist/${itemId}`, { method: 'DELETE' }),
 
   // Pomodoros
   getPomodoros: (params?: { status?: string; limit?: string }) => {

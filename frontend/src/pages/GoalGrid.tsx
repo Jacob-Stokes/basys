@@ -9,6 +9,7 @@ import Guestbook from '../components/Guestbook';
 import ShareGoalModal from '../components/ShareGoalModal';
 import ConfirmModal from '../components/ConfirmModal';
 import { useDisplaySettings, GoalTheme, computeColorsFromTheme, extractThemeFromSettings, getAllPalettes, DEFAULT_FALLBACK_COLOR } from '../context/DisplaySettingsContext';
+import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import { getReadableTextColor, lightenColor } from '../utils/color';
 
 interface ActivityLog {
@@ -444,6 +445,14 @@ export default function GoalGrid() {
       setTextModalSubmitting(false);
     }
   };
+
+  // Cmd/Ctrl+Enter submit for modal dialogs
+  useModKeySubmit(textModal !== null, () => handleTextModalSubmit(), textModalValue.trim() !== '' && !textModalSubmitting);
+  useModKeySubmit(showLogModal, () => {
+    if (!selectedAction || !logForm.content.trim()) return;
+    handleAddLog({ preventDefault: () => {} } as React.FormEvent);
+  }, logForm.content.trim() !== '');
+  useModKeySubmit(showDescriptionModal, handleSaveDescription);
 
   const renderSubGoalCard = (position: number) => {
     const subGoal = getSubGoalAtPosition(position);

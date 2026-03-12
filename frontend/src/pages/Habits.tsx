@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
+import { useModKeySubmit } from '../hooks/useModKeySubmit';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -755,6 +756,12 @@ export default function Habits() {
       setError((err as Error).message);
     }
   };
+
+  useModKeySubmit(!!editingItem, () => {
+    if (editingItem && editTitle.trim()) {
+      handleSaveEdit({ preventDefault: () => {} } as React.FormEvent);
+    }
+  }, !!editTitle.trim());
 
   const handleDelete = async () => {
     if (!deleteTarget) return;

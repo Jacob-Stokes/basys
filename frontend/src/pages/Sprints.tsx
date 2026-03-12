@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { useModKeySubmit } from '../hooks/useModKeySubmit';
+import TaskEditModal from '../components/TaskEditModal';
 
 interface Project {
   id: string;
@@ -8,10 +10,12 @@ interface Project {
   description: string | null;
   hex_color: string;
   type: string;
+  project_mode: 'simple' | 'sprint';
   open_tasks: number;
   done_tasks: number;
   is_favorite: number;
   archived: number;
+  parent_project_id: string | null;
 }
 
 interface Sprint {
@@ -39,6 +43,8 @@ interface ProjectForm {
   customType: string;
   hex_color: string;
   description: string;
+  project_mode: 'simple' | 'sprint';
+  parent_project_id: string;
 }
 
 const statusColors: Record<string, string> = {
@@ -51,7 +57,20 @@ const PRESET_COLORS = ['#e2e8f0', '#ef4444', '#f97316', '#eab308', '#22c55e', '#
 const PROJECT_TYPES = ['personal', 'dev', 'design', 'work', 'research', 'learning'];
 
 const emptySprintForm: SprintForm = { title: '', description: '', start_date: '', end_date: '' };
-const emptyProjectForm: ProjectForm = { title: '', type: 'personal', customType: '', hex_color: '#3b82f6', description: '' };
+const emptyProjectForm: ProjectForm = { title: '', type: 'personal', customType: '', hex_color: '#3b82f6', description: '', project_mode: 'simple', parent_project_id: '' };
+
+const modeLabel = (mode: string, plural = false) =>
+  mode === 'sprint' ? (plural ? 'Sprints' : 'Sprint') : (plural ? 'Sections' : 'Section');
+
+type ProjectViewMode = 'card' | 'list';
+const CARD_SIZES = [
+  { id: 'sm', label: 'S', width: 180 },
+  { id: 'md', label: 'M', width: 240 },
+  { id: 'lg', label: 'L', width: 300 },
+] as const;
+type CardSize = typeof CARD_SIZES[number]['id'];
+
+// ProjectTaskEditModal replaced by shared TaskEditModal component
 
 export default function Sprints() {
   const navigate = useNavigate();
@@ -59,7 +78,27 @@ export default function Sprints() {
   const [sprintsByProject, setSprintsByProject] = useState<Record<string, Sprint[]>>({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
+  const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // View preferences (persisted in localStorage)
+  const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>(() =>
+    (localStorage.getItem('projects_view_mode') as ProjectViewMode) || 'card'
+  );
+  const [cardSize, setCardSize] = useState<CardSize>(() =>
+    (localStorage.getItem('projects_card_size') as CardSize) || 'md'
+  );
+
+  const updateViewMode = (mode: ProjectViewMode) => {
+    setProjectViewMode(mode);
+    localStorage.setItem('projects_view_mode', mode);
+  };
+  const updateCardSize = (size: CardSize) => {
+    setCardSize(size);
+    localStorage.setItem('projects_card_size', size);
+  };
+
+  const cardWidth = CARD_SIZES.find(s => s.id === cardSize)?.width ?? 240;
 
   // Sprint modal state
   const [sprintModalProjectId, setSprintModalProjectId] = useState<string | null>(null);
@@ -76,6 +115,20 @@ export default function Sprints() {
   // Project detail view
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [sprintStatusFilter, setSprintStatusFilter] = useState<string>('all');
+
+  // Project-level tasks (sprint_id = NULL)
+  const [projectTasks, setProjectTasks] = useState<any[]>([]);
+  const [newProjectTaskTitle, setNewProjectTaskTitle] = useState('');
+  const [showProjectTaskInput, setShowProjectTaskInput] = useState(false);
+  const [editingProjectTask, setEditingProjectTask] = useState<any | null>(null);
+
+  // Expand/collapse state
+  const [collapsedProjectTasks, setCollapsedProjectTasks] = useState<Set<string>>(new Set());
+  const [expandedSprints, setExpandedSprints] = useState<Set<string>>(new Set());
+  const [sprintTasks, setSprintTasks] = useState<Record<string, any[]>>({});
+  const [loadingSprintTasks, setLoadingSprintTasks] = useState<Set<string>>(new Set());
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [collapsedSprintTasks, setCollapsedSprintTasks] = useState<Set<string>>(new Set());
 
   // Derive unique project types for tabs
   const projectTypes = useMemo(() => {
@@ -94,20 +147,30 @@ export default function Sprints() {
     return list;
   }, [projectTypes]);
 
+  const archivedCount = useMemo(() => projects.filter(p => p.archived).length, [projects]);
+
   const filteredProjects = useMemo(() => {
-    if (activeTab === 'all') return projects;
-    if (activeTab === 'home') {
-      return projects.filter(p => {
-        const sprints = sprintsByProject[p.id] || [];
-        return sprints.some(s => s.status === 'active' || s.status === 'planned') || p.open_tasks > 0;
-      });
-    }
-    if (activeTab.startsWith('type:')) {
+    // Filter by active/archived
+    const pool = showArchived ? projects.filter(p => p.archived) : projects.filter(p => !p.archived);
+    let base: Project[];
+    if (activeTab === 'all') base = pool;
+    else if (activeTab === 'home') {
+      base = [...pool].sort((a, b) => (a.type || 'personal').localeCompare(b.type || 'personal'));
+    } else if (activeTab.startsWith('type:')) {
       const type = activeTab.slice(5);
-      return projects.filter(p => (p.type || 'personal') === type);
+      base = pool.filter(p => (p.type || 'personal') === type);
+    } else base = pool;
+
+    // Build parent→children ordering: top-level first, then children indented after parent
+    const topLevel = base.filter(p => !p.parent_project_id || !base.some(pp => pp.id === p.parent_project_id));
+    const result: Project[] = [];
+    for (const parent of topLevel) {
+      result.push(parent);
+      const children = base.filter(p => p.parent_project_id === parent.id);
+      result.push(...children);
     }
-    return projects;
-  }, [activeTab, projects, sprintsByProject]);
+    return result;
+  }, [activeTab, projects, sprintsByProject, showArchived]);
 
   const loadData = useCallback(async () => {
     try {
@@ -138,9 +201,15 @@ export default function Sprints() {
   const openNewSprint = (projectId: string) => {
     setSprintModalProjectId(projectId);
     setEditingSprint(null);
-    const today = new Date().toISOString().split('T')[0];
-    const twoWeeks = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
-    setSprintForm({ title: '', description: '', start_date: today, end_date: twoWeeks });
+    const project = projects.find(p => p.id === projectId);
+    const isSimple = !project || (project.project_mode || 'simple') === 'simple';
+    if (isSimple) {
+      setSprintForm({ title: '', description: '', start_date: '', end_date: '' });
+    } else {
+      const today = new Date().toISOString().split('T')[0];
+      const twoWeeks = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+      setSprintForm({ title: '', description: '', start_date: today, end_date: twoWeeks });
+    }
   };
 
   const openEditSprint = (sprint: Sprint, projectId: string) => {
@@ -200,6 +269,8 @@ export default function Sprints() {
       customType: knownType ? '' : (project.type || ''),
       hex_color: project.hex_color || '#3b82f6',
       description: project.description || '',
+      project_mode: project.project_mode || 'simple',
+      parent_project_id: project.parent_project_id || '',
     });
     setShowProjectModal(true);
   };
@@ -220,6 +291,8 @@ export default function Sprints() {
         type,
         hex_color: projectForm.hex_color,
         description: projectForm.description.trim() || null,
+        project_mode: projectForm.project_mode,
+        parent_project_id: projectForm.parent_project_id || null,
       };
       if (editingProject) {
         await api.updateProject(editingProject.id, data);
@@ -245,8 +318,10 @@ export default function Sprints() {
     }
   };
 
-  const handleDeleteSprint = async (sprintId: string) => {
-    if (!confirm('Delete this sprint? Tasks will be moved back to the backlog.')) return;
+  const handleDeleteSprint = async (sprintId: string, projectId?: string) => {
+    const proj = projectId ? projects.find(p => p.id === projectId) : undefined;
+    const label = modeLabel((proj?.project_mode || 'simple')).toLowerCase();
+    if (!confirm(`Delete this ${label}? Tasks will be moved back to the backlog.`)) return;
     try {
       await api.deleteSprint(sprintId);
       await loadData();
@@ -265,6 +340,147 @@ export default function Sprints() {
       setError((err as Error).message);
     }
   };
+
+  const handleToggleArchive = async (projectId: string) => {
+    try {
+      await api.toggleProjectArchive(projectId);
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  // ── Project-level Tasks ────────────────────────────────────────
+
+  const loadProjectTasks = useCallback(async (projectId: string) => {
+    try {
+      const tasks = await api.getTasks({ project_id: projectId, sprint_id: 'none', include_checklist: '1' });
+      setProjectTasks(tasks);
+    } catch {
+      setProjectTasks([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      loadProjectTasks(selectedProject);
+      setShowProjectTaskInput(false);
+      setNewProjectTaskTitle('');
+    } else {
+      setProjectTasks([]);
+    }
+  }, [selectedProject, loadProjectTasks]);
+
+  const handleAddProjectTask = async () => {
+    if (!newProjectTaskTitle.trim() || !selectedProject) return;
+    try {
+      await api.createTask({ title: newProjectTaskTitle.trim(), project_id: selectedProject });
+      setNewProjectTaskTitle('');
+      await loadProjectTasks(selectedProject);
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleToggleProjectTask = async (taskId: string) => {
+    try {
+      await api.toggleTask(taskId);
+      if (selectedProject) await loadProjectTasks(selectedProject);
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleDeleteProjectTask = async (taskId: string) => {
+    if (!confirm('Delete this task?')) return;
+    try {
+      await api.deleteTask(taskId);
+      if (selectedProject) await loadProjectTasks(selectedProject);
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleSaveProjectTask = async (data: any) => {
+    if (!editingProjectTask) return;
+    try {
+      await api.updateTask(editingProjectTask.id, data);
+      setEditingProjectTask(null);
+      if (selectedProject) await loadProjectTasks(selectedProject);
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleToggleProjectCheckItem = async (taskId: string, itemId: string, currentDone: number) => {
+    setProjectTasks(prev => prev.map(t => {
+      if (t.id !== taskId || !t.checklist_items) return t;
+      const items = t.checklist_items.map((ci: any) => ci.id === itemId ? { ...ci, done: currentDone ? 0 : 1 } : ci);
+      const doneCount = items.filter((ci: any) => ci.done).length;
+      return { ...t, checklist_items: items, checklist_count: { total: items.length, done: doneCount } };
+    }));
+    try {
+      await api.updateChecklistItem(taskId, itemId, { done: currentDone ? 0 : 1 });
+    } catch {
+      if (selectedProject) loadProjectTasks(selectedProject);
+    }
+  };
+
+  const toggleSprintExpand = async (sprintId: string) => {
+    if (expandedSprints.has(sprintId)) {
+      setExpandedSprints(prev => { const next = new Set(prev); next.delete(sprintId); return next; });
+    } else {
+      setExpandedSprints(prev => new Set(prev).add(sprintId));
+      if (!sprintTasks[sprintId]) {
+        setLoadingSprintTasks(prev => new Set(prev).add(sprintId));
+        try {
+          const tasks = await api.getTasks({ sprint_id: sprintId, include_checklist: '1' });
+          setSprintTasks(prev => ({ ...prev, [sprintId]: tasks }));
+        } catch { /* ignore */ }
+        setLoadingSprintTasks(prev => { const next = new Set(prev); next.delete(sprintId); return next; });
+      }
+    }
+  };
+
+  const handleToggleSprintTask = async (taskId: string, sprintId: string) => {
+    try {
+      await api.toggleTask(taskId);
+      const tasks = await api.getTasks({ sprint_id: sprintId, include_checklist: '1' });
+      setSprintTasks(prev => ({ ...prev, [sprintId]: tasks }));
+      await loadData();
+    } catch { /* ignore */ }
+  };
+
+  const handleToggleSprintCheckItem = async (sprintId: string, taskId: string, itemId: string, currentDone: number) => {
+    setSprintTasks(prev => {
+      const tasks = prev[sprintId];
+      if (!tasks) return prev;
+      return {
+        ...prev,
+        [sprintId]: tasks.map(t => {
+          if (t.id !== taskId || !t.checklist_items) return t;
+          const items = t.checklist_items.map((ci: any) => ci.id === itemId ? { ...ci, done: currentDone ? 0 : 1 } : ci);
+          const doneCount = items.filter((ci: any) => ci.done).length;
+          return { ...t, checklist_items: items, checklist_count: { total: items.length, done: doneCount } };
+        })
+      };
+    });
+    try {
+      await api.updateChecklistItem(taskId, itemId, { done: currentDone ? 0 : 1 });
+    } catch {
+      // Revert on failure
+      const tasks = await api.getTasks({ sprint_id: sprintId, include_checklist: '1' });
+      setSprintTasks(prev => ({ ...prev, [sprintId]: tasks }));
+    }
+  };
+
+  // Cmd+Enter submit for modals
+  useModKeySubmit(!!sprintModalProjectId, handleSaveSprint, !!sprintForm.title.trim() && !savingSprint);
+  useModKeySubmit(showProjectModal, handleSaveProject, !!projectForm.title.trim() && !savingProject);
 
   // ── Helpers ────────────────────────────────────────────────────
 
@@ -295,70 +511,179 @@ export default function Sprints() {
   // ── Sprint Row Component ───────────────────────────────────────
 
   const renderSprintRow = (sprint: Sprint, projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    const isSimple = (project?.project_mode || 'simple') === 'simple';
     const days = sprintDuration(sprint);
     const totalTasks = (sprint.open_tasks || 0) + (sprint.done_tasks || 0);
     const progress = totalTasks > 0 ? Math.round(((sprint.done_tasks || 0) / totalTasks) * 100) : 0;
+    const isSprintExpanded = expandedSprints.has(sprint.id);
+    const isLoadingTasks = loadingSprintTasks.has(sprint.id);
+    const tasks = sprintTasks[sprint.id] || [];
 
     return (
-      <div
-        key={sprint.id}
-        onClick={() => navigate(`/sprints/${sprint.id}`)}
-        className={`px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${
-          sprint.status === 'active' ? 'bg-green-50/50 dark:bg-green-900/5' : ''
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{sprint.title}</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase flex-shrink-0 ${statusColors[sprint.status] || statusColors.planned}`}>
-                {sprint.status}
-              </span>
-            </div>
-            <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-              <span>Sprint {sprint.sprint_number}</span>
-              <span>·</span>
-              <span>{sprint.open_tasks || 0} open · {sprint.done_tasks || 0} done</span>
-              {days && <><span>·</span><span>{days}d</span></>}
-              {sprint.start_date && (
-                <>
-                  <span>·</span>
-                  <span>{formatDate(sprint.start_date)}{sprint.end_date && ` – ${formatDate(sprint.end_date)}`}</span>
-                </>
+      <React.Fragment key={sprint.id}>
+        <div
+          className={`px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${
+            !isSimple && sprint.status === 'active' ? 'bg-green-50/50 dark:bg-green-900/5' : ''
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1 flex items-center gap-2">
+              {/* Expand chevron */}
+              {totalTasks > 0 ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleSprintExpand(sprint.id); }}
+                  className={`p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 transition-transform ${isSprintExpanded ? 'rotate-90' : ''}`}
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M6 4l8 6-8 6V4z" /></svg>
+                </button>
+              ) : (
+                <span className="w-4 flex-shrink-0" />
               )}
-            </div>
-            {sprint.status === 'active' && totalTasks > 0 && (
-              <div className="mt-1.5 flex items-center gap-2">
-                <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+              <div className="min-w-0 flex-1" onClick={() => navigate(`/sprints/${sprint.id}`)}>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{sprint.title}</span>
+                  {!isSimple && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase flex-shrink-0 ${statusColors[sprint.status] || statusColors.planned}`}>
+                      {sprint.status}
+                    </span>
+                  )}
                 </div>
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">{progress}%</span>
+                <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  {!isSimple && sprint.sprint_number && <><span>Sprint {sprint.sprint_number}</span><span>·</span></>}
+                  <span>{sprint.open_tasks || 0} open · {sprint.done_tasks || 0} done</span>
+                  {!isSimple && days && <><span>·</span><span>{days}d</span></>}
+                  {!isSimple && sprint.start_date && (
+                    <>
+                      <span>·</span>
+                      <span>{formatDate(sprint.start_date)}{sprint.end_date && ` – ${formatDate(sprint.end_date)}`}</span>
+                    </>
+                  )}
+                </div>
+                {!isSimple && sprint.status === 'active' && totalTasks > 0 && (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                    </div>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">{progress}%</span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0 ml-3" onClick={e => e.stopPropagation()}>
-            <button onClick={() => openEditSprint(sprint, projectId)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1" title="Edit sprint">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
-              </svg>
-            </button>
-            {sprint.status === 'planned' && (
-              <button onClick={() => handleStatusChange(sprint.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded hover:bg-green-50 dark:hover:bg-green-900/20">Start</button>
-            )}
-            {sprint.status === 'active' && (
-              <button onClick={() => handleStatusChange(sprint.id, 'completed')} className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20">Complete</button>
-            )}
-            {sprint.status === 'completed' && (
-              <button onClick={() => handleStatusChange(sprint.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded hover:bg-green-50 dark:hover:bg-green-900/20">Reopen</button>
-            )}
-            <button onClick={() => handleDeleteSprint(sprint.id)} className="text-xs text-red-400 hover:text-red-600 p-1" title="Delete sprint">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-              </svg>
-            </button>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0 ml-3" onClick={e => e.stopPropagation()}>
+              <button onClick={() => openEditSprint(sprint, projectId)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1" title={`Edit ${modeLabel(project?.project_mode || 'simple').toLowerCase()}`}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                </svg>
+              </button>
+              {!isSimple && sprint.status === 'planned' && (
+                <button onClick={() => handleStatusChange(sprint.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded hover:bg-green-50 dark:hover:bg-green-900/20">Start</button>
+              )}
+              {!isSimple && sprint.status === 'active' && (
+                <button onClick={() => handleStatusChange(sprint.id, 'completed')} className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20">Complete</button>
+              )}
+              {!isSimple && sprint.status === 'completed' && (
+                <button onClick={() => handleStatusChange(sprint.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded hover:bg-green-50 dark:hover:bg-green-900/20">Reopen</button>
+              )}
+              <button onClick={() => handleDeleteSprint(sprint.id, projectId)} className="text-xs text-red-400 hover:text-red-600 p-1" title={`Delete ${modeLabel(project?.project_mode || 'simple').toLowerCase()}`}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+
+        {/* Expanded sprint tasks */}
+        {isSprintExpanded && (
+          <div className="border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/30 dark:bg-gray-800/30">
+            {isLoadingTasks ? (
+              <div className="pl-10 pr-4 py-3 text-xs text-gray-400">Loading tasks...</div>
+            ) : tasks.length === 0 ? (
+              <div className="pl-10 pr-4 py-3 text-xs text-gray-400">No tasks</div>
+            ) : (
+              tasks.map((task: any) => {
+                const hasChecklist = (task.checklist_count?.total || 0) > 0;
+                const isTaskExpanded = hasChecklist && !collapsedSprintTasks.has(task.id);
+                return (
+                  <React.Fragment key={task.id}>
+                    <div className="pl-8 pr-4 py-1.5 flex items-center gap-2 hover:bg-gray-100/50 dark:hover:bg-gray-700/20">
+                      {/* Checklist expand chevron */}
+                      {hasChecklist ? (
+                        <button
+                          onClick={() => setCollapsedSprintTasks(prev => {
+                            const next = new Set(prev);
+                            if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+                            return next;
+                          })}
+                          className={`p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 transition-transform ${isTaskExpanded ? 'rotate-90' : ''}`}
+                        >
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M6 4l8 6-8 6V4z" /></svg>
+                        </button>
+                      ) : (
+                        <span className="w-3.5 flex-shrink-0" />
+                      )}
+                      <button
+                        onClick={() => handleToggleSprintTask(task.id, sprint.id)}
+                        className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                          task.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+                        }`}
+                      >
+                        {task.done ? <svg className="w-2 h-2" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> : null}
+                      </button>
+                      <span
+                        className={`text-xs flex-1 cursor-pointer ${task.done ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}
+                        onClick={() => setEditingProjectTask(task)}
+                      >
+                        {task.title}
+                      </span>
+                      {hasChecklist && !isTaskExpanded && (
+                        <span className={`text-[10px] ${
+                          task.checklist_count.done === task.checklist_count.total ? 'text-green-500' : 'text-gray-400'
+                        }`}>☑ {task.checklist_count.done}/{task.checklist_count.total}</span>
+                      )}
+                      {task.bucket_title && !task.done && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                          task.bucket_title.toLowerCase().includes('progress') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' :
+                          task.bucket_title.toLowerCase().includes('review') ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300' :
+                          task.bucket_title.toLowerCase().includes('done') || task.bucket_title.toLowerCase().includes('complete') ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
+                          'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>{task.bucket_title}</span>
+                      )}
+                      {task.priority > 0 && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                          task.priority >= 4 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
+                          task.priority >= 3 ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300' :
+                          task.priority >= 2 ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' :
+                          'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>P{task.priority}</span>
+                      )}
+                    </div>
+                    {/* Inline checklist items for sprint task */}
+                    {isTaskExpanded && task.checklist_items?.length > 0 && (
+                      <div className="bg-gray-50/50 dark:bg-gray-800/30">
+                        {task.checklist_items.map((item: any) => (
+                          <div key={item.id} className="flex items-center gap-2 pl-16 pr-4 py-1 hover:bg-gray-100/50 dark:hover:bg-gray-700/20">
+                            <button
+                              onClick={() => handleToggleSprintCheckItem(sprint.id, task.id, item.id, item.done)}
+                              className={`w-3 h-3 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                                item.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+                              }`}
+                            >
+                              {item.done ? <svg className="w-2 h-2" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> : null}
+                            </button>
+                            <span className={`text-[11px] ${item.done ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}>{item.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </div>
+        )}
+      </React.Fragment>
     );
   };
 
@@ -386,17 +711,23 @@ export default function Sprints() {
           <div className="flex items-start justify-between mb-2">
             <div className="min-w-0">
               <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{project.title}</h3>
-              {project.type && (
+              {project.parent_project_id && (() => {
+                const parent = projects.find(p => p.id === project.parent_project_id);
+                return parent ? <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate block">↳ {parent.title}</span> : null;
+              })()}
+              {project.archived ? (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-300 font-medium uppercase inline-block mt-1">Archived</span>
+              ) : project.type ? (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase inline-block mt-1">{project.type}</span>
-              )}
+              ) : null}
             </div>
           </div>
 
           {/* Stats */}
           <div className="text-xs text-gray-400 dark:text-gray-500 mb-3">
             {project.open_tasks} open · {project.done_tasks} done
-            {plannedCount > 0 && ` · ${plannedCount} planned`}
-            {totalSprints > 0 && ` · ${totalSprints} sprint${totalSprints !== 1 ? 's' : ''}`}
+            {(project.project_mode || 'simple') === 'sprint' && plannedCount > 0 && ` · ${plannedCount} planned`}
+            {totalSprints > 0 && ` · ${totalSprints} ${modeLabel(project.project_mode || 'simple', totalSprints !== 1).toLowerCase()}`}
           </div>
 
           {/* Active sprint progress or next sprint info */}
@@ -416,7 +747,7 @@ export default function Sprints() {
                 {displaySprints[0].status === 'completed' ? `Last: ${displaySprints[0].title}` : `Next: ${displaySprints[0].title}`}
               </div>
             ) : (
-              <div className="text-xs text-gray-400 dark:text-gray-500">No sprints</div>
+              <div className="text-xs text-gray-400 dark:text-gray-500">No {modeLabel(project.project_mode || 'simple', true).toLowerCase()}</div>
             )}
           </div>
         </div>
@@ -428,6 +759,8 @@ export default function Sprints() {
 
   const renderProjectCard = (project: Project) => {
     const { display: displaySprints, total: totalSprints, plannedCount } = getSmartSprints(project.id);
+    const allSprints = sprintsByProject[project.id] || [];
+    const isProjectExpanded = expandedProjects.has(project.id);
 
     return (
       <div key={project.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
@@ -437,10 +770,32 @@ export default function Sprints() {
           onClick={() => { setSelectedProject(project.id); setSprintStatusFilter('all'); }}
         >
           <div className="flex items-center gap-2">
+            {/* Expand chevron */}
+            {totalSprints > 0 ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedProjects(prev => {
+                    const next = new Set(prev);
+                    if (next.has(project.id)) next.delete(project.id); else next.add(project.id);
+                    return next;
+                  });
+                }}
+                className={`p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 transition-transform ${isProjectExpanded ? 'rotate-90' : ''}`}
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M6 4l8 6-8 6V4z" /></svg>
+              </button>
+            ) : (
+              <span className="w-4 flex-shrink-0" />
+            )}
             {project.hex_color && (
               <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: project.hex_color }} />
             )}
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">{project.title}</h2>
+            {project.parent_project_id && (() => {
+              const parent = projects.find(p => p.id === project.parent_project_id);
+              return parent ? <span className="text-[10px] text-gray-400 dark:text-gray-500">↳ {parent.title}</span> : null;
+            })()}
             {project.type && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase">{project.type}</span>
             )}
@@ -450,27 +805,38 @@ export default function Sprints() {
             </span>
           </div>
           <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-            <button onClick={() => openNewSprint(project.id)} className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">+ Sprint</button>
+            <button onClick={() => openNewSprint(project.id)} className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">+ {modeLabel(project.project_mode || 'simple')}</button>
           </div>
         </div>
 
-        {/* Smart sprint display */}
-        {displaySprints.length === 0 ? (
-          <div className="py-5 text-center text-gray-400 dark:text-gray-500 text-sm">No sprints yet.</div>
+        {isProjectExpanded ? (
+          /* Expanded: show ALL sprints */
+          allSprints.length === 0 ? (
+            <div className="py-5 text-center text-gray-400 dark:text-gray-500 text-sm">No {modeLabel(project.project_mode || 'simple', true).toLowerCase()} yet.</div>
+          ) : (
+            <div>
+              {allSprints.map(sprint => renderSprintRow(sprint, project.id))}
+            </div>
+          )
         ) : (
-          <div>
-            {displaySprints.map(sprint => renderSprintRow(sprint, project.id))}
-          </div>
-        )}
-
-        {/* View all link if there are more sprints */}
-        {totalSprints > displaySprints.length && (
-          <button
-            onClick={() => { setSelectedProject(project.id); setSprintStatusFilter('all'); }}
-            className="w-full px-4 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors border-t border-gray-100 dark:border-gray-700/50"
-          >
-            View all {totalSprints} sprints →
-          </button>
+          /* Collapsed: smart preview */
+          <>
+            {displaySprints.length === 0 ? (
+              <div className="py-5 text-center text-gray-400 dark:text-gray-500 text-sm">No {modeLabel(project.project_mode || 'simple', true).toLowerCase()} yet.</div>
+            ) : (
+              <div>
+                {displaySprints.map(sprint => renderSprintRow(sprint, project.id))}
+              </div>
+            )}
+            {totalSprints > displaySprints.length && (
+              <button
+                onClick={() => { setSelectedProject(project.id); setSprintStatusFilter('all'); }}
+                className="w-full px-4 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors border-t border-gray-100 dark:border-gray-700/50"
+              >
+                View all {totalSprints} {modeLabel(project.project_mode || 'simple', true).toLowerCase()} →
+              </button>
+            )}
+          </>
         )}
       </div>
     );
@@ -509,15 +875,36 @@ export default function Sprints() {
           </button>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {project.hex_color && <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: project.hex_color }} />}
-            <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{project.title}</h1>
+            <div className="min-w-0">
+              {project.parent_project_id && (() => {
+                const parent = projects.find(p => p.id === project.parent_project_id);
+                return parent ? (
+                  <button onClick={() => { setSelectedProject(parent.id); setSprintStatusFilter('all'); }} className="text-xs text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 truncate block">
+                    {parent.title} ›
+                  </button>
+                ) : null;
+              })()}
+              <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{project.title}</h1>
+            </div>
             {project.type && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase">{project.type}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => openEditProject(project)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700">Edit</button>
+            <button
+              onClick={() => handleToggleArchive(project.id)}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              {project.archived ? 'Unarchive' : 'Archive'}
+            </button>
             <button onClick={() => handleDeleteProject(project.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">Delete</button>
-            <button onClick={() => openNewSprint(project.id)} className="text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">+ Sprint</button>
+            {!project.archived && (
+              <>
+                <button onClick={() => { setShowProjectTaskInput(true); setTimeout(() => document.getElementById('project-task-input')?.focus(), 50); }} className="text-xs px-2.5 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700">+ Task</button>
+                <button onClick={() => openNewSprint(project.id)} className="text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">+ {modeLabel(project.project_mode || 'simple')}</button>
+              </>
+            )}
           </div>
         </div>
 
@@ -525,28 +912,185 @@ export default function Sprints() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{project.description}</p>
         )}
 
-        {/* Sprint status filter pills */}
-        <div className="flex gap-1.5 mb-4">
-          {(['all', 'active', 'planned', 'completed'] as const).map(status => (
-            <button
-              key={status}
-              onClick={() => setSprintStatusFilter(status)}
-              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                sprintStatusFilter === status
-                  ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800 border-gray-800 dark:border-gray-200'
-                  : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
-              }`}
-            >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-              <span className="ml-1 opacity-60">{counts[status]}</span>
-            </button>
-          ))}
-        </div>
+        {/* Child projects */}
+        {(() => {
+          const children = projects.filter(p => p.parent_project_id === project.id && !p.archived);
+          if (children.length === 0) return null;
+          return (
+            <div className="mb-4">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Sub-projects</h3>
+              <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                {children.map(child => (
+                  <button
+                    key={child.id}
+                    onClick={() => { setSelectedProject(child.id); setSprintStatusFilter('all'); }}
+                    className="text-left bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      {child.hex_color && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: child.hex_color }} />}
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{child.title}</span>
+                    </div>
+                    <span className="text-[10px] text-gray-400">{child.open_tasks} open · {child.done_tasks} done</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
-        {/* Sprint list */}
+        {/* Sprint status filter pills — only for sprint mode */}
+        {(project.project_mode || 'simple') === 'sprint' && (
+          <div className="flex gap-1.5 mb-4">
+            {(['all', 'active', 'planned', 'completed'] as const).map(status => (
+              <button
+                key={status}
+                onClick={() => setSprintStatusFilter(status)}
+                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                  sprintStatusFilter === status
+                    ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800 border-gray-800 dark:border-gray-200'
+                    : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                }`}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+                <span className="ml-1 opacity-60">{counts[status]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Project-level tasks */}
+        {(projectTasks.length > 0 || showProjectTaskInput) && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden mb-4">
+            <div className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Project Tasks</h3>
+              <span className="text-[10px] text-gray-400">{projectTasks.filter(t => !t.done).length} open · {projectTasks.filter(t => t.done).length} done</span>
+            </div>
+            {projectTasks.map((task: any) => {
+              const hasChecklist = (task.checklist_count?.total || 0) > 0;
+              const isTaskExpanded = hasChecklist && !collapsedProjectTasks.has(task.id);
+              return (
+                <React.Fragment key={task.id}>
+                  <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700/50 last:border-b-0 flex items-center gap-2 group hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                    {/* Expand chevron */}
+                    {hasChecklist ? (
+                      <button
+                        onClick={() => setCollapsedProjectTasks(prev => {
+                          const next = new Set(prev);
+                          if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+                          return next;
+                        })}
+                        className={`p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 transition-transform ${isTaskExpanded ? 'rotate-90' : ''}`}
+                      >
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M6 4l8 6-8 6V4z" /></svg>
+                      </button>
+                    ) : (
+                      <span className="w-4 flex-shrink-0" />
+                    )}
+                    <button
+                      onClick={() => handleToggleProjectTask(task.id)}
+                      className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                        task.done
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+                      }`}
+                    >
+                      {task.done && (
+                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    <span
+                      className={`text-sm flex-1 cursor-pointer ${task.done ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}
+                      onClick={() => setEditingProjectTask(task)}
+                    >
+                      {task.title}
+                    </span>
+                    {hasChecklist && !isTaskExpanded && (
+                      <span className={`text-[10px] px-1 rounded ${
+                        task.checklist_count.done === task.checklist_count.total
+                          ? 'bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400'
+                          : 'text-gray-400 dark:text-gray-500'
+                      }`}>☑ {task.checklist_count.done}/{task.checklist_count.total}</span>
+                    )}
+                    {task.priority > 0 && (
+                      <span className={`text-[10px] px-1 rounded font-medium ${
+                        task.priority >= 4 ? 'bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400' :
+                        task.priority >= 3 ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/50 dark:text-orange-400' :
+                        task.priority >= 2 ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/50 dark:text-yellow-400' :
+                        'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                      }`}>P{task.priority}</span>
+                    )}
+                    <button
+                      onClick={() => handleDeleteProjectTask(task.id)}
+                      className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Inline checklist items */}
+                  {isTaskExpanded && task.checklist_items?.length > 0 && (
+                    <div className="border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
+                      {task.checklist_items.map((item: any) => (
+                        <div key={item.id} className="flex items-center gap-2 pl-14 pr-4 py-1 hover:bg-gray-100/50 dark:hover:bg-gray-700/30">
+                          <button
+                            onClick={() => handleToggleProjectCheckItem(task.id, item.id, item.done)}
+                            className={`w-3 h-3 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                              item.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-600 hover:border-green-400'
+                            }`}
+                          >
+                            {item.done ? <svg className="w-2 h-2" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> : null}
+                          </button>
+                          <span className={`text-xs ${item.done ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}>{item.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            {showProjectTaskInput && (
+              <div className="px-4 py-2 flex items-center gap-2">
+                <input
+                  id="project-task-input"
+                  type="text"
+                  value={newProjectTaskTitle}
+                  onChange={e => setNewProjectTaskTitle(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleAddProjectTask();
+                    if (e.key === 'Escape') { setShowProjectTaskInput(false); setNewProjectTaskTitle(''); }
+                  }}
+                  placeholder="Task title..."
+                  className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1.5 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                />
+                <button
+                  onClick={handleAddProjectTask}
+                  disabled={!newProjectTaskTitle.trim()}
+                  className="text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => { setShowProjectTaskInput(false); setNewProjectTaskTitle(''); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Sprint/section list */}
         {sorted.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md py-12 text-center text-gray-400 dark:text-gray-500 text-sm">
-            {sprintStatusFilter === 'all' ? 'No sprints yet. Create one to get started!' : `No ${sprintStatusFilter} sprints.`}
+            {sprintStatusFilter === 'all'
+              ? `No ${modeLabel(project.project_mode || 'simple', true).toLowerCase()} yet. Create one to get started!`
+              : `No ${sprintStatusFilter} ${modeLabel(project.project_mode || 'simple', true).toLowerCase()}.`}
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
@@ -562,7 +1106,7 @@ export default function Sprints() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-        <div className="max-w-4xl mx-auto p-6">
+        <div className="container mx-auto px-4 sm:px-16 py-8">
           <p className="text-gray-400 text-center py-12">Loading...</p>
         </div>
       </div>
@@ -573,7 +1117,7 @@ export default function Sprints() {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="container mx-auto px-4 sm:px-16 py-8">
         {error && (
           <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
             {error}
@@ -584,7 +1128,7 @@ export default function Sprints() {
         {/* If a project is selected, show detail view */}
         {selectedProject ? renderProjectDetail() : (
           <>
-            {/* Tab bar + New Project button */}
+            {/* Tab bar + View controls + New Project */}
             <div className="flex items-center justify-between mb-5 gap-3">
               <div className="flex gap-1.5 flex-wrap">
                 {tabs.map(tab => (
@@ -605,12 +1149,64 @@ export default function Sprints() {
                   </button>
                 ))}
               </div>
-              <button
-                onClick={openNewProject}
-                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex-shrink-0"
-              >
-                + New Project
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* View mode toggle */}
+                <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <button
+                    onClick={() => updateViewMode('card')}
+                    className={`p-1.5 transition-colors ${projectViewMode === 'card' ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800' : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                    title="Card view"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1" /><rect x="9" y="1" width="6" height="6" rx="1" /><rect x="1" y="9" width="6" height="6" rx="1" /><rect x="9" y="9" width="6" height="6" rx="1" /></svg>
+                  </button>
+                  <button
+                    onClick={() => updateViewMode('list')}
+                    className={`p-1.5 transition-colors ${projectViewMode === 'list' ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800' : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                    title="List view"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="3" rx="1" /><rect x="1" y="6.5" width="14" height="3" rx="1" /><rect x="1" y="12" width="14" height="3" rx="1" /></svg>
+                  </button>
+                </div>
+
+                {/* Card size selector — only in card view */}
+                {projectViewMode === 'card' && (
+                  <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    {CARD_SIZES.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => updateCardSize(s.id)}
+                        className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                          cardSize === s.id
+                            ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800'
+                            : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                        }`}
+                        title={`${s.label} cards`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {archivedCount > 0 && (
+                  <button
+                    onClick={() => setShowArchived(!showArchived)}
+                    className={`px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
+                      showArchived
+                        ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    Archived ({archivedCount})
+                  </button>
+                )}
+                <button
+                  onClick={openNewProject}
+                  className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  + New Project
+                </button>
+              </div>
             </div>
 
             {filteredProjects.length === 0 ? (
@@ -619,14 +1215,14 @@ export default function Sprints() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
                 </svg>
                 <p className="text-gray-500 dark:text-gray-400 mb-2">
-                  {activeTab === 'home' ? 'No active projects' : 'No projects in this category'}
+                  {activeTab === 'home' ? 'No projects yet' : 'No projects in this category'}
                 </p>
                 <p className="text-sm text-gray-400 dark:text-gray-500">
-                  {activeTab === 'home' ? 'Projects with active/planned sprints or open tasks will appear here.' : 'Click "+ New Project" to create one.'}
+                  Click "+ New Project" to create one.
                 </p>
               </div>
-            ) : activeTab === 'home' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            ) : projectViewMode === 'card' ? (
+              <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardWidth}px, 1fr))` }}>
                 {filteredProjects.map(project => renderHomeCard(project))}
               </div>
             ) : (
@@ -638,67 +1234,88 @@ export default function Sprints() {
         )}
       </div>
 
-      {/* ── Sprint Create/Edit Modal ─────────────────────────────── */}
-      {sprintModalProjectId && (
+      {/* ── Sprint/Section Create/Edit Modal ─────────────────────── */}
+      {sprintModalProjectId && (() => {
+        const modalProject = projects.find(p => p.id === sprintModalProjectId);
+        const modalIsSimple = (modalProject?.project_mode || 'simple') === 'simple';
+        const label = modeLabel(modalProject?.project_mode || 'simple');
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={closeSprintModal}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{editingSprint ? 'Edit Sprint' : 'New Sprint'}</h3>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{editingSprint ? `Edit ${label}` : `New ${label}`}</h3>
               <button onClick={closeSprintModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="px-5 py-4 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Sprint Title <span className="text-red-400">*</span></label>
-                <input type="text" value={sprintForm.title} onChange={e => setSprintForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Sprint 1 — Auth & Login" autoFocus className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{label} Title <span className="text-red-400">*</span></label>
+                <input type="text" value={sprintForm.title} onChange={e => setSprintForm(f => ({ ...f, title: e.target.value }))} placeholder={modalIsSimple ? 'e.g. Backlog, Ideas, v1.0' : 'e.g. Sprint 1 — Auth & Login'} autoFocus className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Description</label>
-                <textarea value={sprintForm.description} onChange={e => setSprintForm(f => ({ ...f, description: e.target.value }))} placeholder="Sprint goal or focus area..." rows={2} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none" />
+                <textarea value={sprintForm.description} onChange={e => setSprintForm(f => ({ ...f, description: e.target.value }))} placeholder={modalIsSimple ? 'What is this section for?' : 'Sprint goal or focus area...'} rows={2} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
-                  <input type="date" value={sprintForm.start_date} onChange={e => setSprintForm(f => ({ ...f, start_date: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">End Date</label>
-                  <input type="date" value={sprintForm.end_date} onChange={e => setSprintForm(f => ({ ...f, end_date: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
-                </div>
-              </div>
-              {sprintForm.start_date && sprintForm.end_date && (
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  {Math.ceil((new Date(sprintForm.end_date).getTime() - new Date(sprintForm.start_date).getTime()) / 86400000)} days
-                  {' '}({Math.ceil((new Date(sprintForm.end_date).getTime() - new Date(sprintForm.start_date).getTime()) / 86400000 / 7)} weeks)
-                </p>
-              )}
-              {!editingSprint && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">Quick:</span>
-                  {[7, 14, 21, 30].map(days => (
-                    <button key={days} onClick={() => {
-                      const start = sprintForm.start_date || new Date().toISOString().split('T')[0];
-                      const end = new Date(new Date(start).getTime() + days * 86400000).toISOString().split('T')[0];
-                      setSprintForm(f => ({ ...f, start_date: start, end_date: end }));
-                    }} className="text-[11px] px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors">
-                      {days === 7 ? '1w' : days === 14 ? '2w' : days === 21 ? '3w' : '1m'}
-                    </button>
-                  ))}
-                </div>
+              {!modalIsSimple && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
+                      <input type="date" value={sprintForm.start_date} onChange={e => setSprintForm(f => ({ ...f, start_date: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">End Date</label>
+                      <input type="date" value={sprintForm.end_date} onChange={e => setSprintForm(f => ({ ...f, end_date: e.target.value }))} className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+                    </div>
+                  </div>
+                  {sprintForm.start_date && sprintForm.end_date && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      {Math.ceil((new Date(sprintForm.end_date).getTime() - new Date(sprintForm.start_date).getTime()) / 86400000)} days
+                      {' '}({Math.ceil((new Date(sprintForm.end_date).getTime() - new Date(sprintForm.start_date).getTime()) / 86400000 / 7)} weeks)
+                    </p>
+                  )}
+                  {!editingSprint && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">Quick:</span>
+                      {[7, 14, 21, 30].map(days => (
+                        <button key={days} onClick={() => {
+                          const start = sprintForm.start_date || new Date().toISOString().split('T')[0];
+                          const end = new Date(new Date(start).getTime() + days * 86400000).toISOString().split('T')[0];
+                          setSprintForm(f => ({ ...f, start_date: start, end_date: end }));
+                        }} className="text-[11px] px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors">
+                          {days === 7 ? '1w' : days === 14 ? '2w' : days === 21 ? '3w' : '1m'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
             <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2 bg-gray-50 dark:bg-gray-900/50">
               <button onClick={closeSprintModal} className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 rounded">Cancel</button>
               <button onClick={handleSaveSprint} disabled={!sprintForm.title.trim() || savingSprint} className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                {savingSprint ? 'Saving...' : editingSprint ? 'Update Sprint' : 'Create Sprint'}
+                {savingSprint ? 'Saving...' : editingSprint ? `Update ${label}` : `Create ${label}`}
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── Project Create/Edit Modal ────────────────────────────── */}
+      {/* Project Task Edit Modal */}
+      {editingProjectTask && (
+        <TaskEditModal
+          task={editingProjectTask}
+          onSave={(data: any) => { handleSaveProjectTask(data); }}
+          onClose={() => setEditingProjectTask(null)}
+          showRelations
+          showDates
+          showChecklist
+        />
+      )}
+
       {showProjectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={closeProjectModal}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -732,6 +1349,42 @@ export default function Sprints() {
                   <input type="text" value={projectForm.customType} onChange={e => setProjectForm(f => ({ ...f, customType: e.target.value }))} placeholder="Custom type name..." className="mt-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
                 )}
               </div>
+
+              {/* Mode */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Mode</label>
+                <div className="flex gap-2">
+                  <button onClick={() => setProjectForm(f => ({ ...f, project_mode: 'simple' }))} className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${projectForm.project_mode === 'simple' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400'}`}>
+                    Simple
+                  </button>
+                  <button onClick={() => setProjectForm(f => ({ ...f, project_mode: 'sprint' }))} className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${projectForm.project_mode === 'sprint' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400'}`}>
+                    Sprint
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  {projectForm.project_mode === 'simple'
+                    ? 'Organize tasks into named sections'
+                    : 'Time-boxed sprints with kanban boards & lifecycle'}
+                </p>
+              </div>
+
+              {/* Parent Project */}
+              {projects.filter(p => p.id !== editingProject?.id).length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Parent Project</label>
+                  <select
+                    value={projectForm.parent_project_id}
+                    onChange={e => setProjectForm(f => ({ ...f, parent_project_id: e.target.value }))}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  >
+                    <option value="">None (top-level)</option>
+                    {projects.filter(p => p.id !== editingProject?.id).map(p => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Nest this project under another project</p>
+                </div>
+              )}
 
               {/* Color */}
               <div>

@@ -45,7 +45,7 @@ router.get('/', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const { title, description, hex_color, parent_project_id, type } = req.body;
+    const { title, description, hex_color, parent_project_id, type, project_mode } = req.body;
     if (!title?.trim()) return fail(res, 400, 'Title is required');
 
     if (parent_project_id) {
@@ -56,9 +56,9 @@ router.post('/', (req: Request, res: Response) => {
     const id = uuidv4();
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO projects (id, user_id, title, description, hex_color, parent_project_id, type, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userId, title.trim(), description || null, hex_color || '', parent_project_id || null, type || 'personal', now, now);
+      INSERT INTO projects (id, user_id, title, description, hex_color, parent_project_id, type, project_mode, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, userId, title.trim(), description || null, hex_color || '', parent_project_id || null, type || 'personal', project_mode || 'simple', now, now);
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     ok(res, project, 201);
@@ -83,17 +83,26 @@ router.get('/:id', (req: Request, res: Response) => {
       ORDER BY t.done ASC, t.position ASC, t.created_at DESC
     `).all(id, userId) as any[];
 
-    // Load labels + links for each task
+    // Batch-load labels + links for all tasks
     const taskIds = tasks.map(t => t.id);
     const labelsMap: Record<string, any[]> = {};
     const linksMap: Record<string, any[]> = {};
-    for (const taskId of taskIds) {
-      labelsMap[taskId] = db.prepare(`
-        SELECT l.* FROM labels l
+    for (const id2 of taskIds) { labelsMap[id2] = []; linksMap[id2] = []; }
+    if (taskIds.length > 0) {
+      const ph = taskIds.map(() => '?').join(',');
+      const labelRows = db.prepare(`
+        SELECT l.*, tl.task_id FROM labels l
         JOIN task_labels tl ON tl.label_id = l.id
-        WHERE tl.task_id = ?
-      `).all(taskId) as any[];
-      linksMap[taskId] = db.prepare('SELECT * FROM task_links WHERE task_id = ? ORDER BY target_type, created_at').all(taskId) as any[];
+        WHERE tl.task_id IN (${ph})
+      `).all(...taskIds) as any[];
+      for (const row of labelRows) {
+        const { task_id, ...label } = row;
+        labelsMap[task_id].push(label);
+      }
+      const linkRows = db.prepare(`SELECT * FROM task_links WHERE task_id IN (${ph}) ORDER BY target_type, created_at`).all(...taskIds) as any[];
+      for (const row of linkRows) {
+        linksMap[row.task_id].push(row);
+      }
     }
 
     const enrichedTasks = tasks.map(t => ({
@@ -119,7 +128,7 @@ router.put('/:id', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, userId);
     if (!existing) return fail(res, 404, 'Project not found');
 
-    const { title, description, hex_color, parent_project_id, type } = req.body;
+    const { title, description, hex_color, parent_project_id, type, project_mode, default_columns } = req.body;
 
     const now = new Date().toISOString();
     db.prepare(`
@@ -129,6 +138,8 @@ router.put('/:id', (req: Request, res: Response) => {
         hex_color = COALESCE(?, hex_color),
         parent_project_id = ?,
         type = COALESCE(?, type),
+        project_mode = COALESCE(?, project_mode),
+        default_columns = ?,
         updated_at = ?
       WHERE id = ?
     `).run(
@@ -137,6 +148,8 @@ router.put('/:id', (req: Request, res: Response) => {
       hex_color !== undefined ? hex_color : null,
       parent_project_id !== undefined ? parent_project_id : (existing as any).parent_project_id,
       type || null,
+      project_mode || null,
+      default_columns !== undefined ? (default_columns ? JSON.stringify(default_columns) : null) : (existing as any).default_columns,
       now, id
     );
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
+import { useModKeySubmit } from '../hooks/useModKeySubmit';
 
 interface ShareLink {
   id: string;
@@ -58,6 +59,8 @@ export default function ShareGoalModal({ goalId, goalTitle, onClose }: ShareGoal
       setCreating(false);
     }
   };
+
+  useModKeySubmit(true, handleCreate, !creating);
 
   const handleRevoke = async (shareId: string) => {
     try {

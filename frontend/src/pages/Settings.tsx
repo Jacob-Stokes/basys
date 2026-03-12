@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, FormEvent, ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import i18n from '../i18n';
 import ConfirmModal from '../components/ConfirmModal';
 import { API_URL, api } from '../api/client';
@@ -676,6 +677,10 @@ export default function Settings() {
       setError((err as Error).message);
     }
   };
+
+  // Mod+Enter submit for modal dialogs
+  useModKeySubmit(!!resetPasswordUserId, handleResetPassword, resetPasswordValue.length >= 6);
+  useModKeySubmit(showCreateModal, () => handleCreateKey({ preventDefault: () => {} } as FormEvent), newKeyName.trim() !== '');
 
   const toggleGoalSelection = (goalId: string) => {
     setSelectedGoalIds((prev) =>

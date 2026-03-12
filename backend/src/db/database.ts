@@ -514,6 +514,41 @@ CREATE TABLE IF NOT EXISTS quick_notes (
 
 CREATE INDEX IF NOT EXISTS idx_quick_notes_user ON quick_notes(user_id);
 CREATE INDEX IF NOT EXISTS idx_quick_notes_updated ON quick_notes(user_id, updated_at DESC);
+
+-- Task-to-task relations (subtask, blocking, related, etc.)
+CREATE TABLE IF NOT EXISTS task_relations (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  related_task_id TEXT NOT NULL,
+  relation_kind TEXT NOT NULL CHECK(relation_kind IN (
+    'subtask', 'parent',
+    'related',
+    'duplicates',
+    'blocking', 'blocked_by',
+    'precedes', 'follows',
+    'copied_from', 'copied_to'
+  )),
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (related_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  UNIQUE(task_id, related_task_id, relation_kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_relations_task ON task_relations(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_relations_related ON task_relations(related_task_id);
+
+-- Task checklist items (lightweight inline subtasks)
+CREATE TABLE IF NOT EXISTS task_checklist_items (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  done INTEGER DEFAULT 0 CHECK(done IN (0, 1)),
+  position INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_checklist_task ON task_checklist_items(task_id);
 `;
 
 // Initialize schema
@@ -722,6 +757,30 @@ export function initDatabase() {
     }
   } catch (err) {
     console.log('Migration check (todo_hidden_project_types):', err);
+  }
+
+  // Migration: Add project_mode to projects
+  try {
+    const projCols2 = db.prepare("PRAGMA table_info(projects)").all() as any[];
+    if (!projCols2.some((col: any) => col.name === 'project_mode')) {
+      db.exec(`ALTER TABLE projects ADD COLUMN project_mode TEXT DEFAULT 'simple'`);
+      // Backfill: dev projects default to sprint mode
+      db.exec(`UPDATE projects SET project_mode = 'sprint' WHERE type = 'dev'`);
+      console.log('Added project_mode column to projects table');
+    }
+  } catch (err) {
+    console.log('Migration check (projects project_mode):', err);
+  }
+
+  // Migration: Add default_columns to projects
+  try {
+    const projCols3 = db.prepare("PRAGMA table_info(projects)").all() as any[];
+    if (!projCols3.some((col: any) => col.name === 'default_columns')) {
+      db.exec(`ALTER TABLE projects ADD COLUMN default_columns TEXT DEFAULT NULL`);
+      console.log('Added default_columns column to projects table');
+    }
+  } catch (err) {
+    console.log('Migration check (projects default_columns):', err);
   }
 
   console.log('Database initialized at:', DB_PATH);
