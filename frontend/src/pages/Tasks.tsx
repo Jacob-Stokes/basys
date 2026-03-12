@@ -5,6 +5,8 @@ import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import { parseTaskInput, formatParsedPreview } from '../utils/taskParser';
 import Calendar from '../components/Calendar';
 import TaskEditModal, { relationDisplay } from '../components/TaskEditModal';
+import StartPomoButton from '../components/StartPomoButton';
+import type { FocusItem } from '../context/TimerContext';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -527,6 +529,14 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite, isExpande
             )}
           </div>
         </div>
+
+        {/* Start pomo */}
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <StartPomoButton focusItems={[
+            { id: task.id, type: 'task', title: task.title } as FocusItem,
+            ...(task.project ? [{ id: task.project.id, type: 'project' as const, title: task.project.title, color: task.project.hex_color }] : []),
+          ]} />
+        </span>
 
         {/* Favorite */}
         <button

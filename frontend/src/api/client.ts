@@ -309,7 +309,7 @@ export const api = {
     const qs = query.toString() ? `?${query.toString()}` : '';
     return apiRequest<any[]>(`/api/pomodoros${qs}`);
   },
-  createPomodoro: (data: { duration_minutes?: number; note?: string; task_id?: string }) =>
+  createPomodoro: (data: { duration_minutes?: number; note?: string; task_id?: string; links?: { target_type: string; target_id: string }[] }) =>
     apiRequest<any>('/api/pomodoros', { method: 'POST', body: JSON.stringify(data) }),
   getPomodoro: (id: string) => apiRequest<any>(`/api/pomodoros/${id}`),
   updatePomodoro: (id: string, data: any) =>
@@ -318,6 +318,14 @@ export const api = {
     apiRequest<any>(`/api/pomodoros/${id}/complete`, { method: 'PATCH' }),
   deletePomodoro: (id: string) =>
     apiRequest<any>(`/api/pomodoros/${id}`, { method: 'DELETE' }),
+  getPomoStats: (targetType: string, targetId: string) =>
+    apiRequest<{ pomo_count: number; total_minutes: number }>(`/api/pomodoros/stats?target_type=${targetType}&target_id=${targetId}`),
+
+  // Universal search
+  universalSearch: (q: string) =>
+    apiRequest<any>(`/api/search?q=${encodeURIComponent(q)}`),
+  searchChildren: (type: string, id: string) =>
+    apiRequest<any[]>(`/api/search/children?type=${type}&id=${id}`),
 
   // Sub-goal search (for typeahead)
   searchSubGoals: (q: string) =>

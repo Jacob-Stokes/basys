@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import TaskEditModal from '../components/TaskEditModal';
+import StartPomoButton from '../components/StartPomoButton';
+import type { FocusItem } from '../context/TimerContext';
 import { SprintBoardContent } from './SprintBoard';
 
 interface Project {
@@ -201,12 +203,25 @@ export default function Sprints() {
   }, []);
 
   const goBackInTab = useCallback((tabId: string) => {
-    setWorkspaceTabs(prev => prev.map(t => {
-      if (t.id !== tabId || t.history.length === 0) return t;
-      const history = [...t.history];
-      const prev_entry = history.pop()!;
-      return { ...t, projectId: prev_entry.projectId, sprintId: prev_entry.sprintId, statusFilter: prev_entry.statusFilter, history };
-    }));
+    setWorkspaceTabs(prev => {
+      const tab = prev.find(t => t.id === tabId);
+      if (!tab) return prev;
+      if (tab.history.length > 0) {
+        // Pop from history stack
+        return prev.map(t => {
+          if (t.id !== tabId) return t;
+          const history = [...t.history];
+          const prev_entry = history.pop()!;
+          return { ...t, projectId: prev_entry.projectId, sprintId: prev_entry.sprintId, statusFilter: prev_entry.statusFilter, history };
+        });
+      }
+      // History empty on a non-home tab → switch to home tab
+      if (!tab.isHome) {
+        const homeTab = prev.find(t => t.isHome);
+        if (homeTab) setActiveWorkspaceTabId(homeTab.id);
+      }
+      return prev;
+    });
   }, []);
 
   const setSelectedProject = useCallback((id: string | null) => {
@@ -763,6 +778,10 @@ export default function Sprints() {
               </div>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0 ml-3" onClick={e => e.stopPropagation()}>
+              <StartPomoButton focusItems={[
+                { id: sprint.id, type: 'sprint', title: sprint.title } as FocusItem,
+                ...(project ? [{ id: project.id, type: 'project' as const, title: project.title, color: project.hex_color } as FocusItem] : []),
+              ]} />
               <button onClick={() => openEditSprint(sprint, projectId)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1" title={`Edit ${modeLabel(project?.project_mode || 'simple').toLowerCase()}`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />

@@ -306,8 +306,19 @@ CREATE TABLE IF NOT EXISTS pomodoro_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_task_links_task ON task_links(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_links_target ON task_links(target_type, target_id);
+CREATE TABLE IF NOT EXISTS pomodoro_links (
+  pomodoro_id TEXT NOT NULL,
+  target_type TEXT NOT NULL CHECK(target_type IN ('task','project','sprint','goal','subgoal','habit')),
+  target_id TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (pomodoro_id, target_type, target_id),
+  FOREIGN KEY (pomodoro_id) REFERENCES pomodoro_sessions(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_user ON pomodoro_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_started ON pomodoro_sessions(started_at);
+CREATE INDEX IF NOT EXISTS idx_pomo_links_pomo ON pomodoro_links(pomodoro_id);
+CREATE INDEX IF NOT EXISTS idx_pomo_links_target ON pomodoro_links(target_type, target_id);
 
 CREATE INDEX IF NOT EXISTS idx_sprints_project ON sprints(project_id);
 CREATE INDEX IF NOT EXISTS idx_sprints_status ON sprints(status);
