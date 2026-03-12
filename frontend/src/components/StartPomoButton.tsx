@@ -21,7 +21,7 @@ export default function StartPomoButton({ focusItems, size = 'xs', className = '
     <button
       onClick={handleClick}
       disabled={running}
-      className={`text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-colors ${running ? 'opacity-30 cursor-not-allowed' : ''} ${className}`}
+      className={`text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors ${running ? 'opacity-30 cursor-not-allowed' : ''} ${className}`}
       title={running ? 'Timer already running' : `Start pomodoro${focusItems.length > 0 ? ` — ${focusItems.map(f => f.title).join(', ')}` : ''}`}
     >
       <svg className={sizeClasses} viewBox="0 0 24 24" fill="currentColor">

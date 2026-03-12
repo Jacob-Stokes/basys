@@ -18,6 +18,7 @@ export interface HistoryEntry {
   duration: number; // seconds actually elapsed
   completedAt: Date;
   links?: FocusItem[];
+  note?: string;
   synced?: boolean;
 }
 
@@ -48,6 +49,7 @@ interface PersistedTimerState {
   startedAt: number;
   totalSeconds: number;
   focusItems: FocusItem[];
+  note?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -65,20 +67,20 @@ function saveTimerState(state: PersistedTimerState | null): void {
   }
 }
 
-function loadTimerState(): { mode: TimerMode; timeLeft: number; running: boolean; focusItems: FocusItem[] } {
+function loadTimerState(): { mode: TimerMode; timeLeft: number; running: boolean; focusItems: FocusItem[]; note: string } {
   try {
     const raw = localStorage.getItem(TIMER_STATE_KEY);
-    if (!raw) return { mode: 'pomodoro', timeLeft: DURATIONS.pomodoro, running: false, focusItems: [] };
+    if (!raw) return { mode: 'pomodoro', timeLeft: DURATIONS.pomodoro, running: false, focusItems: [], note: '' };
     const state: PersistedTimerState = JSON.parse(raw);
     const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
     const timeLeft = Math.max(0, state.totalSeconds - elapsed);
     if (timeLeft <= 0) {
       localStorage.removeItem(TIMER_STATE_KEY);
-      return { mode: state.mode, timeLeft: DURATIONS[state.mode], running: false, focusItems: [] };
+      return { mode: state.mode, timeLeft: DURATIONS[state.mode], running: false, focusItems: [], note: '' };
     }
-    return { mode: state.mode, timeLeft, running: true, focusItems: state.focusItems || [] };
+    return { mode: state.mode, timeLeft, running: true, focusItems: state.focusItems || [], note: state.note || '' };
   } catch {
-    return { mode: 'pomodoro', timeLeft: DURATIONS.pomodoro, running: false, focusItems: [] };
+    return { mode: 'pomodoro', timeLeft: DURATIONS.pomodoro, running: false, focusItems: [], note: '' };
   }
 }
 
@@ -107,6 +109,8 @@ interface TimerContextValue {
   running: boolean;
   history: HistoryEntry[];
   focusItems: FocusItem[];
+  note: string;
+  setNote: (note: string) => void;
   start: () => void;
   stop: () => void;
   reset: () => void;
@@ -127,15 +131,18 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState(initial.running);
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
   const [focusItems, setFocusItems] = useState<FocusItem[]>(initial.focusItems);
+  const [note, setNoteState] = useState(initial.note);
 
   const startTimeRef = useRef<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(0);
   const modeRef = useRef(mode);
   const focusRef = useRef(focusItems);
+  const noteRef = useRef(note);
 
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { focusRef.current = focusItems; }, [focusItems]);
+  useEffect(() => { noteRef.current = note; }, [note]);
 
   // Load history from backend on mount
   useEffect(() => {
@@ -154,6 +161,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
             title: l.target_title || 'Unknown',
             color: l.target_color || undefined,
           })),
+          note: s.note || undefined,
           synced: true,
         }));
       // Merge: backend entries replace localStorage entries by id
@@ -172,11 +180,12 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const syncToBackend = useCallback((entryMode: TimerMode, durationSecs: number, items: FocusItem[]) => {
+  const syncToBackend = useCallback((entryMode: TimerMode, durationSecs: number, items: FocusItem[], entryNote: string) => {
     if (entryMode !== 'pomodoro' || durationSecs < 60) return;
     api.createPomodoro({
       duration_minutes: Math.round(durationSecs / 60),
       links: items.map(f => ({ target_type: f.type, target_id: f.id })),
+      note: entryNote || undefined,
     }).then((session: any) => {
       // Immediately mark as completed
       if (session?.id) api.completePomodoro(session.id).catch(() => {});
@@ -185,12 +194,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   const addHistoryEntry = useCallback((entryMode: TimerMode, duration: number) => {
     if (duration < 1) return;
+    const currentNote = noteRef.current;
     const entry: HistoryEntry = {
       id: crypto.randomUUID(),
       mode: entryMode,
       duration,
       completedAt: new Date(),
       links: [...focusRef.current],
+      note: currentNote || undefined,
       synced: false,
     };
     setHistory(prev => {
@@ -198,7 +209,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       saveHistory(next);
       return next;
     });
-    syncToBackend(entryMode, duration, focusRef.current);
+    syncToBackend(entryMode, duration, focusRef.current, currentNote);
   }, [syncToBackend]);
 
   // Tick logic
@@ -209,7 +220,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const totalAtStart = timeLeft;
     const currentMode = modeRef.current;
 
-    saveTimerState({ mode: currentMode, startedAt: startTimeRef.current, totalSeconds: totalAtStart, focusItems: focusRef.current });
+    saveTimerState({ mode: currentMode, startedAt: startTimeRef.current, totalSeconds: totalAtStart, focusItems: focusRef.current, note: noteRef.current });
 
     intervalRef.current = setInterval(() => {
       if (startTimeRef.current === null) return;
@@ -276,6 +287,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     setFocusItems([]);
   }, []);
 
+  const setNote = useCallback((value: string) => {
+    setNoteState(value);
+  }, []);
+
   const startWithFocus = useCallback((items: FocusItem[], durationMinutes?: number) => {
     const newMode: TimerMode = 'pomodoro';
     const totalSeconds = (durationMinutes || 25) * 60;
@@ -285,7 +300,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     focusRef.current = items;
     setTimeLeft(totalSeconds);
     elapsedRef.current = 0;
-    saveTimerState({ mode: newMode, startedAt: Date.now(), totalSeconds, focusItems: items });
+    saveTimerState({ mode: newMode, startedAt: Date.now(), totalSeconds, focusItems: items, note: noteRef.current });
     setRunning(true);
   }, []);
 
@@ -303,7 +318,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   return (
     <TimerContext.Provider value={{
-      mode, timeLeft, running, history, focusItems,
+      mode, timeLeft, running, history, focusItems, note, setNote,
       start, stop, reset, switchMode,
       addFocusItem, removeFocusItem, clearFocusItems, startWithFocus,
     }}>

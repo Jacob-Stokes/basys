@@ -6,7 +6,7 @@ import FocusSearch from './FocusSearch';
 const MODES: TimerMode[] = ['pomodoro', 'shortBreak', 'longBreak'];
 
 export default function TimerFooter() {
-  const { mode, timeLeft, running, start, stop, reset, switchMode, focusItems, removeFocusItem } = useTimer();
+  const { mode, timeLeft, running, note, setNote, start, stop, reset, switchMode, focusItems, removeFocusItem } = useTimer();
   const [showSearch, setShowSearch] = useState(false);
 
   const isBreak = mode === 'shortBreak' || mode === 'longBreak';
@@ -89,6 +89,17 @@ export default function TimerFooter() {
               {formatTime(timeLeft)}
             </span>
           </div>
+
+          {/* Note input — to the right of timer, hidden for breaks */}
+          {!isBreak && (
+            <input
+              type="text"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Working on..."
+              className="w-28 sm:w-40 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-transparent outline-none flex-shrink-0"
+            />
+          )}
         </div>
 
         {/* Right: controls */}

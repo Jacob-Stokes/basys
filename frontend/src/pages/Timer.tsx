@@ -319,7 +319,7 @@ function LinkHierarchy({ links }: { links: FocusItem[] }) {
 
 // ── Main Timer Component ────────────────────────────────────────
 export default function Timer() {
-  const { mode, timeLeft, running, history, focusItems, start, stop, reset, switchMode, addFocusItem, removeFocusItem } = useTimer();
+  const { mode, timeLeft, running, history, focusItems, note, setNote, start, stop, reset, switchMode, addFocusItem, removeFocusItem } = useTimer();
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('today');
   const [retroEntry, setRetroEntry] = useState<HistoryEntry | null>(null);
 
@@ -438,10 +438,19 @@ export default function Timer() {
 
             {/* Inline focus search — only for pomodoro mode, hidden during breaks */}
             {!isBreak && !running && (
-              <InlineFocusSearch
-                onSelect={addFocusItem}
-                selectedIds={selectedIds}
-              />
+              <>
+                <InlineFocusSearch
+                  onSelect={addFocusItem}
+                  selectedIds={selectedIds}
+                />
+                <input
+                  type="text"
+                  value={note}
+                  onChange={e => setNote(e.target.value)}
+                  placeholder="What are you working on?"
+                  className="w-full mt-3 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                />
+              </>
             )}
 
             <hr className="border-gray-200 dark:border-gray-700 mt-6" />
@@ -500,6 +509,9 @@ export default function Timer() {
                             </div>
                             {isPomoEntry && entry.links && entry.links.length > 0 && (
                               <LinkHierarchy links={entry.links} />
+                            )}
+                            {entry.note && (
+                              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 italic truncate max-w-[300px]">{entry.note}</div>
                             )}
                           </div>
                         </div>
