@@ -5,6 +5,56 @@ import { ok, fail, serverError } from '../utils/response';
 
 const router = Router();
 
+function loadTaskLinkTarget(userId: string, targetType: string, targetId: string): boolean {
+  const targetQueries: Record<string, string> = {
+    goal: 'SELECT id FROM primary_goals WHERE id = ? AND user_id = ?',
+    subgoal: 'SELECT sg.id FROM sub_goals sg JOIN primary_goals pg ON sg.primary_goal_id = pg.id WHERE sg.id = ? AND pg.user_id = ?',
+    habit: 'SELECT id FROM habits WHERE id = ? AND user_id = ?',
+    pomodoro: 'SELECT id FROM pomodoro_sessions WHERE id = ? AND user_id = ?',
+  };
+
+  const sql = targetQueries[targetType];
+  if (!sql) return false;
+  return !!db.prepare(sql).get(targetId, userId);
+}
+
+function validateTaskLabels(userId: string, labelIds: string[]) {
+  const uniqueIds = [...new Set(labelIds)];
+  if (uniqueIds.length === 0) return true;
+  const placeholders = uniqueIds.map(() => '?').join(',');
+  const row = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM labels
+    WHERE user_id = ? AND id IN (${placeholders})
+  `).get(userId, ...uniqueIds) as { count: number };
+  return row.count === uniqueIds.length;
+}
+
+function getOwnedProject(userId: string, projectId: string | null | undefined) {
+  if (!projectId) return null;
+  return db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(projectId, userId) as { id: string } | undefined;
+}
+
+function getOwnedSprint(userId: string, sprintId: string | null | undefined) {
+  if (!sprintId) return null;
+  return db.prepare(`
+    SELECT s.id, s.project_id
+    FROM sprints s
+    JOIN projects p ON s.project_id = p.id
+    WHERE s.id = ? AND p.user_id = ?
+  `).get(sprintId, userId) as { id: string; project_id: string } | undefined;
+}
+
+function getOwnedBucket(userId: string, bucketId: string | null | undefined) {
+  if (!bucketId) return null;
+  return db.prepare(`
+    SELECT b.id, b.project_id, b.sprint_id
+    FROM buckets b
+    JOIN projects p ON b.project_id = p.id
+    WHERE b.id = ? AND p.user_id = ?
+  `).get(bucketId, userId) as { id: string; project_id: string; sprint_id: string | null } | undefined;
+}
+
 // Helper: load labels for a set of task IDs (batch query)
 function loadTaskLabels(taskIds: string[]): Record<string, any[]> {
   const map: Record<string, any[]> = {};
@@ -223,7 +273,7 @@ const TASK_SELECT = `
     b.title as bucket_title,
     u.username as assignee_username
   FROM tasks t
-  LEFT JOIN projects p ON t.project_id = p.id
+  LEFT JOIN projects p ON t.project_id = p.id AND p.user_id = t.user_id
   LEFT JOIN buckets b ON t.bucket_id = b.id
   LEFT JOIN users u ON t.assignee_user_id = u.id
 `;
@@ -331,9 +381,37 @@ router.post('/', (req: Request, res: Response) => {
     const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, bucket_id, repeat_after, repeat_mode, labels, links, sprint_id, assignee_user_id, assignee_name, task_type } = req.body;
     if (!title?.trim()) return fail(res, 400, 'Title is required');
 
-    if (project_id) {
-      const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(project_id, userId);
-      if (!project) return fail(res, 400, 'Project not found');
+    const project = getOwnedProject(userId, project_id);
+    if (project_id && !project) return fail(res, 400, 'Project not found');
+
+    const sprint = getOwnedSprint(userId, sprint_id);
+    if (sprint_id && !sprint) return fail(res, 400, 'Sprint not found');
+
+    const bucket = getOwnedBucket(userId, bucket_id);
+    if (bucket_id && !bucket) return fail(res, 400, 'Bucket not found');
+
+    const resolvedProjectId = project?.id ?? sprint?.project_id ?? bucket?.project_id ?? null;
+    const resolvedSprintId = sprint?.id ?? bucket?.sprint_id ?? null;
+
+    if (project && sprint && sprint.project_id !== project.id) {
+      return fail(res, 400, 'Sprint does not belong to the selected project');
+    }
+    if (bucket && resolvedProjectId && bucket.project_id !== resolvedProjectId) {
+      return fail(res, 400, 'Bucket does not belong to the selected project');
+    }
+    if (bucket && resolvedSprintId !== (bucket.sprint_id ?? null)) {
+      return fail(res, 400, 'Bucket does not belong to the selected sprint');
+    }
+    if (labels !== undefined && (!Array.isArray(labels) || !validateTaskLabels(userId, labels))) {
+      return fail(res, 400, 'One or more labels are invalid');
+    }
+    if (links !== undefined) {
+      if (!Array.isArray(links)) return fail(res, 400, 'links must be an array');
+      for (const link of links) {
+        if (!link?.target_type || !link?.target_id || !loadTaskLinkTarget(userId, link.target_type, link.target_id)) {
+          return fail(res, 400, 'One or more task links are invalid');
+        }
+      }
     }
 
     const id = uuidv4();
@@ -342,11 +420,11 @@ router.post('/', (req: Request, res: Response) => {
       INSERT INTO tasks (id, user_id, project_id, title, description, due_date, start_date, end_date,
         priority, hex_color, bucket_id, repeat_after, repeat_mode, sprint_id, assignee_user_id, assignee_name, task_type, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userId, project_id || null, title.trim(), description || null,
+    `).run(id, userId, resolvedProjectId, title.trim(), description || null,
       due_date || null, start_date || null, end_date || null,
-      priority || 0, hex_color || '', bucket_id || null,
+      priority || 0, hex_color || '', bucket?.id || null,
       repeat_after || 0, repeat_mode || 0,
-      sprint_id || null, assignee_user_id || null, assignee_name || null, task_type || 'task',
+      resolvedSprintId, assignee_user_id || null, assignee_name || null, task_type || 'task',
       now, now);
 
     // Attach labels if provided
@@ -409,18 +487,41 @@ router.put('/:id', (req: Request, res: Response) => {
 
     const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, percent_done, position, bucket_id, repeat_after, repeat_mode, labels, links, sprint_id, assignee_user_id, assignee_name, task_type } = req.body;
 
-    // Validate ownership of referenced entities
-    if (project_id !== undefined && project_id !== null) {
-      const proj = db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, userId);
-      if (!proj) return fail(res, 400, 'Project not found');
+    const requestedProjectId = project_id !== undefined ? project_id : existing.project_id;
+    const requestedSprintId = sprint_id !== undefined ? sprint_id : existing.sprint_id;
+    const requestedBucketId = bucket_id !== undefined ? bucket_id : existing.bucket_id;
+
+    const project = getOwnedProject(userId, requestedProjectId);
+    if (requestedProjectId && !project) return fail(res, 400, 'Project not found');
+
+    const sprint = getOwnedSprint(userId, requestedSprintId);
+    if (requestedSprintId && !sprint) return fail(res, 400, 'Sprint not found');
+
+    const bucket = getOwnedBucket(userId, requestedBucketId);
+    if (requestedBucketId && !bucket) return fail(res, 400, 'Bucket not found');
+
+    const resolvedProjectId = project?.id ?? sprint?.project_id ?? bucket?.project_id ?? null;
+    const resolvedSprintId = sprint?.id ?? bucket?.sprint_id ?? null;
+
+    if (project && sprint && sprint.project_id !== project.id) {
+      return fail(res, 400, 'Sprint does not belong to the selected project');
     }
-    if (sprint_id !== undefined && sprint_id !== null) {
-      const sprint = db.prepare('SELECT s.id FROM sprints s JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.user_id = ?').get(sprint_id, userId);
-      if (!sprint) return fail(res, 400, 'Sprint not found');
+    if (bucket && resolvedProjectId && bucket.project_id !== resolvedProjectId) {
+      return fail(res, 400, 'Bucket does not belong to the selected project');
     }
-    if (bucket_id !== undefined && bucket_id !== null) {
-      const bucket = db.prepare('SELECT b.id FROM buckets b JOIN projects p ON b.project_id = p.id WHERE b.id = ? AND p.user_id = ?').get(bucket_id, userId);
-      if (!bucket) return fail(res, 400, 'Bucket not found');
+    if (bucket && resolvedSprintId !== (bucket.sprint_id ?? null)) {
+      return fail(res, 400, 'Bucket does not belong to the selected sprint');
+    }
+    if (labels !== undefined && (!Array.isArray(labels) || !validateTaskLabels(userId, labels))) {
+      return fail(res, 400, 'One or more labels are invalid');
+    }
+    if (links !== undefined) {
+      if (!Array.isArray(links)) return fail(res, 400, 'links must be an array');
+      for (const link of links) {
+        if (!link?.target_type || !link?.target_id || !loadTaskLinkTarget(userId, link.target_type, link.target_id)) {
+          return fail(res, 400, 'One or more task links are invalid');
+        }
+      }
     }
 
     const now = new Date().toISOString();
@@ -448,7 +549,7 @@ router.put('/:id', (req: Request, res: Response) => {
     `).run(
       title?.trim() || null,
       description !== undefined ? description : existing.description,
-      project_id !== undefined ? project_id : existing.project_id,
+      resolvedProjectId,
       due_date !== undefined ? due_date : existing.due_date,
       start_date !== undefined ? start_date : existing.start_date,
       end_date !== undefined ? end_date : existing.end_date,
@@ -456,10 +557,10 @@ router.put('/:id', (req: Request, res: Response) => {
       hex_color !== undefined ? hex_color : null,
       percent_done !== undefined ? percent_done : null,
       position !== undefined ? position : null,
-      bucket_id !== undefined ? bucket_id : existing.bucket_id,
+      bucket?.id ?? null,
       repeat_after !== undefined ? repeat_after : null,
       repeat_mode !== undefined ? repeat_mode : null,
-      sprint_id !== undefined ? sprint_id : existing.sprint_id,
+      resolvedSprintId,
       assignee_user_id !== undefined ? assignee_user_id : existing.assignee_user_id,
       assignee_name !== undefined ? assignee_name : existing.assignee_name,
       task_type || null,
@@ -591,16 +692,7 @@ router.post('/:id/links', (req: Request, res: Response) => {
     if (!['goal', 'subgoal', 'habit', 'pomodoro'].includes(target_type)) {
       return fail(res, 400, 'target_type must be goal, subgoal, habit, or pomodoro');
     }
-
-    // Validate ownership of link target
-    const targetQueries: Record<string, string> = {
-      goal: 'SELECT id FROM primary_goals WHERE id = ? AND user_id = ?',
-      subgoal: 'SELECT sg.id FROM sub_goals sg JOIN primary_goals pg ON sg.primary_goal_id = pg.id WHERE sg.id = ? AND pg.user_id = ?',
-      habit: 'SELECT id FROM habits WHERE id = ? AND user_id = ?',
-      pomodoro: 'SELECT id FROM pomodoro_sessions WHERE id = ? AND user_id = ?',
-    };
-    const targetExists = db.prepare(targetQueries[target_type]).get(target_id, userId);
-    if (!targetExists) return fail(res, 400, `${target_type} not found`);
+    if (!loadTaskLinkTarget(userId, target_type, target_id)) return fail(res, 400, `${target_type} not found`);
 
     db.prepare('INSERT OR IGNORE INTO task_links (task_id, target_type, target_id) VALUES (?, ?, ?)')
       .run(id, target_type, target_id);

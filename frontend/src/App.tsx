@@ -2,8 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Timer from './pages/Timer';
-import Home from './pages/Home';
-import Habits from './pages/Habits';
+import Life from './pages/Life';
 import Tasks from './pages/Tasks';
 import Phonebook from './pages/Phonebook';
 import Journal from './pages/Journal';
@@ -118,8 +117,9 @@ function App() {
           <Route path="/tasks" element={<Navigate to="/" replace />} />
           <Route path="/projects" element={<Navigate to="/sprints" replace />} />
           <Route path="/timer" element={<Timer />} />
-          <Route path="/goals" element={<Home />} />
-          <Route path="/habits" element={<Habits />} />
+          <Route path="/life" element={<Life />} />
+          <Route path="/goals" element={<Navigate to="/life" replace />} />
+          <Route path="/habits" element={<Navigate to="/life?tab=habits" replace />} />
           <Route path="/phonebook" element={<Phonebook />} />
           <Route path="/journal" element={<Journal />} />
           <Route path="/terminal" element={<Terminal />} />

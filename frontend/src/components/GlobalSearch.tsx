@@ -44,7 +44,7 @@ export default function GlobalSearch({ onClose }: { onClose: () => void }) {
       }
       case 'goal': navigate(`/goal/${item.id}`); break;
       case 'subgoal': navigate(`/goal/${item.goalId || ''}`); break;
-      case 'habit': navigate('/habits'); break;
+      case 'habit': navigate('/life?tab=habits'); break;
       case 'contact': navigate('/phonebook'); break;
     }
   };

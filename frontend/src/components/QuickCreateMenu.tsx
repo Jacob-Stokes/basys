@@ -73,11 +73,11 @@ export default function QuickCreateMenu({ compact }: QuickCreateMenuProps) {
           break;
         case 'goal':
           await api.createGoal({ title: trimmed });
-          navigate('/goals');
+          navigate('/life');
           break;
         case 'habit':
           await api.createHabit({ title: trimmed, type: 'habit' });
-          navigate('/habits');
+          navigate('/life?tab=habits');
           break;
         case 'quit':
           await api.createHabit({
@@ -85,7 +85,7 @@ export default function QuickCreateMenu({ compact }: QuickCreateMenuProps) {
             type: 'quit',
             quit_date: new Date().toISOString().split('T')[0],
           });
-          navigate('/habits');
+          navigate('/life?tab=habits');
           break;
         case 'project':
           await api.createProject({ title: trimmed, hex_color: '#3b82f6' });

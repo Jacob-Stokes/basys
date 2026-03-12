@@ -52,7 +52,7 @@ export default function NavBar() {
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/' || location.pathname === '/tasks';
-    if (path === '/goals') return location.pathname === '/goals' || location.pathname.startsWith('/goal/');
+    if (path === '/life') return location.pathname === '/life' || location.pathname.startsWith('/goal/');
     return location.pathname === path;
   };
 
@@ -97,11 +97,8 @@ export default function NavBar() {
           <Link to="/timer" className={linkClass('/timer')}>
             Pomo
           </Link>
-          <Link to="/goals" className={linkClass('/goals')}>
-            Goals
-          </Link>
-          <Link to="/habits" className={linkClass('/habits')}>
-            Habits
+          <Link to="/life" className={linkClass('/life')}>
+            Life
           </Link>
           <Link to="/journal" className={linkClass('/journal')}>
             Journal
@@ -272,18 +269,11 @@ export default function NavBar() {
                   Pomo
                 </Link>
                 <Link
-                  to="/goals"
+                  to="/life"
                   onClick={() => setMobileMenuOpen(false)}
                   className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
                 >
-                  Goals
-                </Link>
-                <Link
-                  to="/habits"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  Habits
+                  Life
                 </Link>
                 <Link
                   to="/journal"

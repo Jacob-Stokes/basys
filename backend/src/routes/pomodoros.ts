@@ -7,6 +7,21 @@ const router = Router();
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+function loadPomoLinkTarget(userId: string, targetType: string, targetId: string): boolean {
+  const targetQueries: Record<string, string> = {
+    task: 'SELECT id FROM tasks WHERE id = ? AND user_id = ?',
+    project: 'SELECT id FROM projects WHERE id = ? AND user_id = ?',
+    sprint: 'SELECT s.id FROM sprints s JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.user_id = ?',
+    goal: 'SELECT id FROM primary_goals WHERE id = ? AND user_id = ?',
+    subgoal: 'SELECT sg.id FROM sub_goals sg JOIN primary_goals pg ON sg.primary_goal_id = pg.id WHERE sg.id = ? AND pg.user_id = ?',
+    habit: 'SELECT id FROM habits WHERE id = ? AND user_id = ?',
+  };
+
+  const sql = targetQueries[targetType];
+  if (!sql) return false;
+  return !!db.prepare(sql).get(targetId, userId);
+}
+
 function loadPomoLinks(pomoIds: string[]): Record<string, any[]> {
   const map: Record<string, any[]> = {};
   if (pomoIds.length === 0) return map;
@@ -19,7 +34,7 @@ function loadPomoLinks(pomoIds: string[]): Record<string, any[]> {
   return map;
 }
 
-function enrichPomoLinks(links: any[]): any[] {
+function enrichPomoLinks(links: any[], userId: string): any[] {
   // Batch-resolve target titles for display
   const byType: Record<string, Set<string>> = {};
   for (const link of links) {
@@ -32,14 +47,14 @@ function enrichPomoLinks(links: any[]): any[] {
   if (byType.task?.size) {
     const ids = Array.from(byType.task);
     const ph = ids.map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title FROM tasks WHERE id IN (${ph})`).all(...ids) as any[];
+    const rows = db.prepare(`SELECT id, title FROM tasks WHERE user_id = ? AND id IN (${ph})`).all(userId, ...ids) as any[];
     for (const r of rows) titleMap[`task:${r.id}`] = r.title;
   }
   const colorMap: Record<string, string> = {};
   if (byType.project?.size) {
     const ids = Array.from(byType.project);
     const ph = ids.map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title, hex_color FROM projects WHERE id IN (${ph})`).all(...ids) as any[];
+    const rows = db.prepare(`SELECT id, title, hex_color FROM projects WHERE user_id = ? AND id IN (${ph})`).all(userId, ...ids) as any[];
     for (const r of rows) {
       titleMap[`project:${r.id}`] = r.title;
       if (r.hex_color) colorMap[`project:${r.id}`] = r.hex_color;
@@ -48,25 +63,35 @@ function enrichPomoLinks(links: any[]): any[] {
   if (byType.sprint?.size) {
     const ids = Array.from(byType.sprint);
     const ph = ids.map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title FROM sprints WHERE id IN (${ph})`).all(...ids) as any[];
+    const rows = db.prepare(`
+      SELECT s.id, s.title
+      FROM sprints s
+      JOIN projects p ON s.project_id = p.id
+      WHERE p.user_id = ? AND s.id IN (${ph})
+    `).all(userId, ...ids) as any[];
     for (const r of rows) titleMap[`sprint:${r.id}`] = r.title;
   }
   if (byType.goal?.size) {
     const ids = Array.from(byType.goal);
     const ph = ids.map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title FROM primary_goals WHERE id IN (${ph})`).all(...ids) as any[];
+    const rows = db.prepare(`SELECT id, title FROM primary_goals WHERE user_id = ? AND id IN (${ph})`).all(userId, ...ids) as any[];
     for (const r of rows) titleMap[`goal:${r.id}`] = r.title;
   }
   if (byType.subgoal?.size) {
     const ids = Array.from(byType.subgoal);
     const ph = ids.map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title FROM sub_goals WHERE id IN (${ph})`).all(...ids) as any[];
+    const rows = db.prepare(`
+      SELECT sg.id, sg.title
+      FROM sub_goals sg
+      JOIN primary_goals pg ON sg.primary_goal_id = pg.id
+      WHERE pg.user_id = ? AND sg.id IN (${ph})
+    `).all(userId, ...ids) as any[];
     for (const r of rows) titleMap[`subgoal:${r.id}`] = r.title;
   }
   if (byType.habit?.size) {
     const ids = Array.from(byType.habit);
     const ph = ids.map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title, emoji FROM habits WHERE id IN (${ph})`).all(...ids) as any[];
+    const rows = db.prepare(`SELECT id, title, emoji FROM habits WHERE user_id = ? AND id IN (${ph})`).all(userId, ...ids) as any[];
     for (const r of rows) titleMap[`habit:${r.id}`] = r.emoji ? `${r.emoji} ${r.title}` : r.title;
   }
 
@@ -77,7 +102,7 @@ function enrichPomoLinks(links: any[]): any[] {
   }));
 }
 
-function insertPomoLinks(pomoId: string, links: { target_type: string; target_id: string }[]) {
+function insertPomoLinks(pomoId: string, links: { target_type: string; target_id: string }[], userId: string) {
   const stmt = db.prepare('INSERT OR IGNORE INTO pomodoro_links (pomodoro_id, target_type, target_id) VALUES (?, ?, ?)');
   const existingTypes = new Set(links.map(l => `${l.target_type}:${l.target_id}`));
 
@@ -90,7 +115,7 @@ function insertPomoLinks(pomoId: string, links: { target_type: string; target_id
   if (taskLinks.length > 0) {
     const taskIds = taskLinks.map(l => l.target_id);
     const ph = taskIds.map(() => '?').join(',');
-    const tasks = db.prepare(`SELECT id, project_id, sprint_id FROM tasks WHERE id IN (${ph})`).all(...taskIds) as any[];
+    const tasks = db.prepare(`SELECT id, project_id, sprint_id FROM tasks WHERE user_id = ? AND id IN (${ph})`).all(userId, ...taskIds) as any[];
     const projectIds = new Set<string>();
     const sprintIds = new Set<string>();
     for (const t of tasks) {
@@ -112,7 +137,12 @@ function insertPomoLinks(pomoId: string, links: { target_type: string; target_id
   if (subgoalLinks.length > 0) {
     const sgIds = subgoalLinks.map(l => l.target_id);
     const ph = sgIds.map(() => '?').join(',');
-    const sgs = db.prepare(`SELECT id, primary_goal_id FROM sub_goals WHERE id IN (${ph})`).all(...sgIds) as any[];
+    const sgs = db.prepare(`
+      SELECT sg.id, sg.primary_goal_id
+      FROM sub_goals sg
+      JOIN primary_goals pg ON sg.primary_goal_id = pg.id
+      WHERE pg.user_id = ? AND sg.id IN (${ph})
+    `).all(userId, ...sgIds) as any[];
     for (const sg of sgs) {
       if (sg.primary_goal_id && !existingTypes.has(`goal:${sg.primary_goal_id}`)) {
         stmt.run(pomoId, 'goal', sg.primary_goal_id);
@@ -151,7 +181,7 @@ router.get('/', (req: Request, res: Response) => {
 
     // Enrich all links in one batch
     const allLinks = ids.flatMap(id => linksMap[id] || []);
-    const enriched = enrichPomoLinks(allLinks);
+    const enriched = enrichPomoLinks(allLinks, userId);
     const enrichedMap: Record<string, any[]> = {};
     for (const link of enriched) {
       if (!enrichedMap[link.pomodoro_id]) enrichedMap[link.pomodoro_id] = [];
@@ -194,6 +224,14 @@ router.post('/', (req: Request, res: Response) => {
     const id = uuidv4();
     const now = new Date().toISOString();
 
+    if (Array.isArray(links)) {
+      for (const link of links) {
+        if (!link?.target_type || !link?.target_id || !loadPomoLinkTarget(userId, link.target_type, link.target_id)) {
+          return fail(res, 400, 'One or more pomodoro links are invalid');
+        }
+      }
+    }
+
     db.prepare(`
       INSERT INTO pomodoro_sessions (id, user_id, started_at, duration_minutes, status, note, created_at)
       VALUES (?, ?, ?, ?, 'in_progress', ?, ?)
@@ -201,7 +239,7 @@ router.post('/', (req: Request, res: Response) => {
 
     // Insert links from the links array
     if (Array.isArray(links) && links.length > 0) {
-      insertPomoLinks(id, links);
+      insertPomoLinks(id, links, userId);
     }
 
     // Legacy: if task_id provided, also link it (backward compat)
@@ -218,7 +256,7 @@ router.post('/', (req: Request, res: Response) => {
 
     const session = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(id) as any;
     const pomoLinks = loadPomoLinks([id]);
-    const enrichedLinks = enrichPomoLinks(pomoLinks[id] || []);
+    const enrichedLinks = enrichPomoLinks(pomoLinks[id] || [], userId);
     ok(res, { ...session, links: enrichedLinks }, 201);
   } catch (error) {
     serverError(res, error);
@@ -234,7 +272,7 @@ router.get('/:id', (req: Request, res: Response) => {
     if (!session) return fail(res, 404, 'Session not found');
 
     const pomoLinks = loadPomoLinks([id]);
-    const enrichedLinks = enrichPomoLinks(pomoLinks[id] || []);
+    const enrichedLinks = enrichPomoLinks(pomoLinks[id] || [], userId);
 
     ok(res, { ...session, links: enrichedLinks });
   } catch (error) {
@@ -252,6 +290,14 @@ router.put('/:id', (req: Request, res: Response) => {
 
     const { status, note, ended_at, links } = req.body;
 
+    if (Array.isArray(links)) {
+      for (const link of links) {
+        if (!link?.target_type || !link?.target_id || !loadPomoLinkTarget(userId, link.target_type, link.target_id)) {
+          return fail(res, 400, 'One or more pomodoro links are invalid');
+        }
+      }
+    }
+
     db.prepare(`
       UPDATE pomodoro_sessions SET
         status = COALESCE(?, status),
@@ -268,12 +314,12 @@ router.put('/:id', (req: Request, res: Response) => {
     // Replace links if provided
     if (Array.isArray(links)) {
       db.prepare('DELETE FROM pomodoro_links WHERE pomodoro_id = ?').run(id);
-      insertPomoLinks(id, links);
+      insertPomoLinks(id, links, userId);
     }
 
     const session = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(id) as any;
     const pomoLinks = loadPomoLinks([id]);
-    const enrichedLinks = enrichPomoLinks(pomoLinks[id] || []);
+    const enrichedLinks = enrichPomoLinks(pomoLinks[id] || [], userId);
     ok(res, { ...session, links: enrichedLinks });
   } catch (error) {
     serverError(res, error);

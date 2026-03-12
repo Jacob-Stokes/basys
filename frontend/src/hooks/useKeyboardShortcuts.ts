@@ -49,11 +49,10 @@ export function useKeyboardShortcuts() {
         case 'Digit1': navigate('/');          break;
         case 'Digit2': navigate('/sprints');   break;
         case 'Digit3': navigate('/timer');     break;
-        case 'Digit4': navigate('/goals');     break;
-        case 'Digit5': navigate('/habits');    break;
-        case 'Digit6': navigate('/journal');   break;
-        case 'Digit7': navigate('/phonebook'); break;
-        case 'Digit8': navigate('/terminal');  break;
+        case 'Digit4': navigate('/life');       break;
+        case 'Digit5': navigate('/journal');   break;
+        case 'Digit6': navigate('/phonebook'); break;
+        case 'Digit7': navigate('/terminal');  break;
         case 'Comma':  navigate('/settings');  break;
 
         // ── Panels: ⌥[ / ⌥] ─────────────────────────────
