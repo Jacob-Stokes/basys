@@ -203,3 +203,246 @@ code {
 .printable-grid.screen-hidden {
   display: none;
 }
+
+/* ============================================================
+   ACADEMIA 2026 THEME
+   Glassmorphism + warm parchment + grain texture + editorial serif
+   ============================================================ */
+
+/* Load Playfair Display from Google Fonts via @import */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+/* Grain texture overlay via SVG noise — applied to body pseudo-element */
+.academia-2026 body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px 128px;
+}
+
+/* Base typography */
+.academia-2026 body,
+.academia-2026 #root {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  background-color: #f5f0e8;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(210,185,150,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(180,160,130,0.12) 0%, transparent 50%);
+}
+
+/* Headings → Playfair Display */
+.academia-2026 h1,
+.academia-2026 h2,
+.academia-2026 h3 {
+  font-family: 'Playfair Display', Georgia, serif !important;
+  letter-spacing: -0.01em;
+}
+
+.academia-2026 code {
+  font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+}
+
+/* ------ Background surfaces ------ */
+.academia-2026 .bg-gray-100 { background-color: #f5f0e8 !important; }
+.academia-2026 .bg-gray-50  { background-color: #faf7f2 !important; }
+.academia-2026 .bg-white    { background-color: rgba(253,250,244,0.75) !important; backdrop-filter: blur(12px) saturate(1.4) !important; -webkit-backdrop-filter: blur(12px) saturate(1.4) !important; }
+.academia-2026 .bg-gray-200 { background-color: rgba(230,222,208,0.6) !important; }
+.academia-2026 .bg-gray-800 { background-color: rgba(28,22,16,0.92) !important; backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important; }
+.academia-2026 .bg-gray-900 { background-color: #1c1610 !important; }
+.academia-2026 .bg-gray-700 { background-color: rgba(38,30,22,0.88) !important; }
+
+/* ------ Borders ------ */
+.academia-2026 .border-gray-200 { border-color: rgba(200,188,168,0.5) !important; }
+.academia-2026 .border-gray-300 { border-color: rgba(180,168,148,0.6) !important; }
+.academia-2026 .border-gray-700 { border-color: rgba(80,68,52,0.5) !important; }
+.academia-2026 .divide-y > * + * { border-color: rgba(200,188,168,0.4) !important; }
+
+/* ------ Frosted glass cards ------ */
+/* Replace flat shadow-sm/md with frosted glass treatment */
+.academia-2026 .shadow,
+.academia-2026 .shadow-sm {
+  background: rgba(253,250,244,0.72) !important;
+  backdrop-filter: blur(14px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.6) !important;
+  border: 1px solid rgba(220,208,185,0.55) !important;
+  box-shadow: 0 2px 12px rgba(120,95,60,0.08), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+}
+.academia-2026 .shadow-md {
+  background: rgba(253,250,244,0.78) !important;
+  backdrop-filter: blur(18px) saturate(1.7) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.7) !important;
+  border: 1px solid rgba(220,208,185,0.6) !important;
+  box-shadow: 0 4px 24px rgba(100,80,45,0.10), inset 0 1px 0 rgba(255,255,255,0.65) !important;
+  border-radius: 12px !important;
+}
+.academia-2026 .shadow-lg,
+.academia-2026 .shadow-xl,
+.academia-2026 .shadow-2xl {
+  background: rgba(253,250,244,0.88) !important;
+  backdrop-filter: blur(24px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
+  border: 1px solid rgba(220,208,185,0.65) !important;
+  box-shadow: 0 8px 40px rgba(80,60,30,0.14), inset 0 1px 0 rgba(255,255,255,0.7) !important;
+  border-radius: 16px !important;
+}
+
+/* ------ Navbar ------ */
+.academia-2026 nav.bg-white,
+.academia-2026 nav.bg-gray-800,
+.academia-2026 nav[class*="sticky"] {
+  background: rgba(28,22,16,0.88) !important;
+  backdrop-filter: blur(20px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.5) !important;
+  border-bottom: 1px solid rgba(255,220,150,0.12) !important;
+  box-shadow: 0 1px 0 rgba(255,200,100,0.06) !important;
+}
+
+/* ------ Primary accent: warm amber-burgundy ------ */
+.academia-2026 .bg-blue-600  { background-color: #8b4513 !important; }
+.academia-2026 .bg-blue-700  { background-color: #7a3a0f !important; }
+.academia-2026 .bg-blue-500  { background-color: #9e5020 !important; }
+.academia-2026 .bg-blue-50   { background-color: rgba(255,240,220,0.6) !important; backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important; }
+.academia-2026 .bg-blue-100  { background-color: rgba(245,225,200,0.65) !important; }
+.academia-2026 .text-blue-600 { color: #8b4513 !important; }
+.academia-2026 .text-blue-700 { color: #7a3a0f !important; }
+.academia-2026 .text-blue-800 { color: #6a2e0a !important; }
+.academia-2026 .text-blue-500 { color: #9e5020 !important; }
+.academia-2026 .text-blue-400 { color: #b5683a !important; }
+.academia-2026 .border-blue-200 { border-color: rgba(200,155,110,0.5) !important; }
+.academia-2026 .border-blue-500 { border-color: #9e5020 !important; }
+.academia-2026 .border-blue-600 { border-color: #8b4513 !important; }
+.academia-2026 .ring-blue-500 { --tw-ring-color: #9e5020 !important; }
+.academia-2026 .focus\:ring-blue-500:focus { --tw-ring-color: rgba(142,69,19,0.4) !important; }
+.academia-2026 .hover\:bg-blue-700:hover { background-color: #7a3a0f !important; }
+.academia-2026 .hover\:bg-blue-600:hover { background-color: #8b4513 !important; }
+.academia-2026 .hover\:text-blue-800:hover { color: #6a2e0a !important; }
+
+/* ------ Secondary accent: moss green ------ */
+.academia-2026 .bg-green-600  { background-color: #4a5e2a !important; }
+.academia-2026 .bg-green-700  { background-color: #3d4e22 !important; }
+.academia-2026 .bg-green-500  { background-color: #586d34 !important; }
+.academia-2026 .bg-green-100  { background-color: rgba(220,230,195,0.6) !important; }
+.academia-2026 .bg-green-50   { background-color: rgba(235,242,215,0.55) !important; }
+.academia-2026 .text-green-600 { color: #4a5e2a !important; }
+.academia-2026 .text-green-700 { color: #3d4e22 !important; }
+.academia-2026 .text-green-400 { color: #7a9448 !important; }
+.academia-2026 .text-green-300 { color: #96ae64 !important; }
+.academia-2026 .border-green-200 { border-color: rgba(180,200,140,0.5) !important; }
+.academia-2026 .hover\:bg-green-700:hover { background-color: #3d4e22 !important; }
+.academia-2026 .hover\:bg-green-600:hover { background-color: #4a5e2a !important; }
+.academia-2026 .bg-emerald-500 { background-color: #4a5e2a !important; }
+.academia-2026 .bg-emerald-600 { background-color: #3d4e22 !important; }
+.academia-2026 .text-emerald-600 { color: #4a5e2a !important; }
+
+/* ------ Red/destructive → warm brick ------ */
+.academia-2026 .bg-red-600  { background-color: #8b3a3a !important; }
+.academia-2026 .bg-red-500  { background-color: #9e4444 !important; }
+.academia-2026 .text-red-600 { color: #8b3a3a !important; }
+.academia-2026 .text-red-500 { color: #9e4444 !important; }
+.academia-2026 .text-red-700 { color: #7a2e2e !important; }
+.academia-2026 .hover\:bg-red-700:hover { background-color: #7a2e2e !important; }
+.academia-2026 .text-red-400 { color: #c06060 !important; }
+
+/* ------ Input fields — frosted glass ------ */
+.academia-2026 input,
+.academia-2026 textarea,
+.academia-2026 select {
+  background: rgba(253,250,244,0.65) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border-color: rgba(200,182,155,0.55) !important;
+  border-radius: 8px !important;
+}
+.academia-2026 input:focus,
+.academia-2026 textarea:focus,
+.academia-2026 select:focus {
+  background: rgba(253,250,244,0.88) !important;
+  border-color: rgba(139,69,19,0.5) !important;
+  box-shadow: 0 0 0 3px rgba(139,69,19,0.12) !important;
+}
+
+/* ------ Page greeting heading ------ */
+.academia-2026 h1.text-3xl,
+.academia-2026 h1.text-2xl {
+  font-family: 'Playfair Display', Georgia, serif !important;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #1c1610 !important;
+}
+
+/* ------ Section headers (OVERDUE, UPCOMING etc) ------ */
+.academia-2026 .text-xs.font-semibold.uppercase,
+.academia-2026 .text-xs.font-bold.uppercase {
+  font-family: 'Inter', sans-serif !important;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+/* ------ Label pills → frosted ------ */
+.academia-2026 .rounded-full[class*="bg-"] {
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
+/* ------ Habit week grid ------ */
+.academia-2026 .habit-week-cell.bg-gray-200 { background-color: rgba(210,200,180,0.5) !important; }
+
+/* ------ Sidebar panels ------ */
+.academia-2026 .bg-white.border-r,
+.academia-2026 .bg-white.border-l,
+.academia-2026 .bg-gray-800.border-r,
+.academia-2026 .bg-gray-800.border-l {
+  background: rgba(248,244,235,0.82) !important;
+  backdrop-filter: blur(20px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.5) !important;
+  border-color: rgba(200,185,160,0.45) !important;
+}
+
+/* ---- Dark mode ---- */
+.academia-2026.dark body {
+  background-color: #120f0a;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(80,55,30,0.25) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(60,45,25,0.2) 0%, transparent 50%);
+}
+.academia-2026.dark .bg-gray-900 { background-color: #120f0a !important; }
+.academia-2026.dark .bg-gray-800 { background-color: rgba(30,24,16,0.92) !important; backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important; }
+.academia-2026.dark .bg-white    { background-color: rgba(38,30,20,0.78) !important; backdrop-filter: blur(14px) !important; -webkit-backdrop-filter: blur(14px) !important; }
+.academia-2026.dark .bg-gray-700 { background-color: rgba(46,38,26,0.88) !important; }
+.academia-2026.dark .border-gray-700 { border-color: rgba(90,70,45,0.45) !important; }
+.academia-2026.dark .shadow-md {
+  background: rgba(38,30,20,0.82) !important;
+  border-color: rgba(90,70,45,0.45) !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,220,150,0.06) !important;
+}
+.academia-2026.dark .shadow-lg,
+.academia-2026.dark .shadow-xl,
+.academia-2026.dark .shadow-2xl {
+  background: rgba(42,34,22,0.9) !important;
+  border-color: rgba(100,78,48,0.45) !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,220,150,0.07) !important;
+}
+.academia-2026.dark .text-blue-600 { color: #c8895a !important; }
+.academia-2026.dark .text-blue-400 { color: #d4a070 !important; }
+.academia-2026.dark .bg-blue-600  { background-color: #9e5020 !important; }
+.academia-2026.dark .bg-blue-700  { background-color: #8b4513 !important; }
+.academia-2026.dark .text-green-400 { color: #96ae64 !important; }
+.academia-2026.dark .bg-green-600  { background-color: #586d34 !important; }
+.academia-2026.dark .bg-emerald-500 { background-color: #586d34 !important; }
+.academia-2026.dark .habit-week-cell.bg-gray-700 { background-color: rgba(60,50,35,0.6) !important; }
+.academia-2026.dark input,
+.academia-2026.dark textarea,
+.academia-2026.dark select {
+  background: rgba(38,30,20,0.7) !important;
+  border-color: rgba(100,78,48,0.5) !important;
+}
+.academia-2026.dark h1.text-3xl,
+.academia-2026.dark h1.text-2xl {
+  color: #f0e8d5 !important;
+}
