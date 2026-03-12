@@ -29,7 +29,7 @@
   },
 
   "login": {
-    "title": "Basys",
+    "title": "Thesys",
     "subtitle": "目標にアクセスするにはサインインしてください",
     "username": "ユーザー名",
     "password": "パスワード",
@@ -173,7 +173,7 @@
   },
 
   "agents": {
-    "agentBriefing": "Basys \u00b7 エージェントブリーフィング",
+    "agentBriefing": "Thesys \u00b7 エージェントブリーフィング",
     "agentLandingPage": "エージェントランディングページ",
     "loadingBriefing": "ブリーフィング情報を読み込み中...",
     "manageApiKeys": "APIキーを管理",
@@ -359,7 +359,7 @@
     "darkModeDesc": "ライトテーマとダークテーマを切り替えます。",
     "enableDarkMode": "ダークモードを有効にする",
     "headerBranding": "ヘッダーブランディング",
-    "headerBrandingDesc": "ロゴの横にBasysのタイトルとサブタイトルを表示または非表示にします。",
+    "headerBrandingDesc": "ロゴの横にThesysのタイトルとサブタイトルを表示または非表示にします。",
     "showHeaderBranding": "タイトルとサブタイトルを表示",
 
     "saveCustomPalette": "カスタムパレットとして保存",

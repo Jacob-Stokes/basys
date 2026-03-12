@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  basys:
+  thesys:
     build: .
     ports:
       - "4000:3001"
@@ -15,7 +15,7 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - SESSION_SECRET=change-me-to-something-secure
-      - TERMINAL_SHARED_SECRET=basys-terminal-secret-change-me
+      - TERMINAL_SHARED_SECRET=thesys-terminal-secret-change-me
       - VAULT_PATH=/vault
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
@@ -32,10 +32,10 @@ services:
       - ./data:/app/data
     environment:
       - PORT=4001
-      - TERMINAL_SHARED_SECRET=basys-terminal-secret-change-me
+      - TERMINAL_SHARED_SECRET=thesys-terminal-secret-change-me
       - TERMINAL_CWD=/workspace
     depends_on:
-      - basys
+      - thesys
     restart: unless-stopped
 
   obsidian:
@@ -45,7 +45,7 @@ services:
     environment:
       - OBSIDIAN_EMAIL=${OBSIDIAN_EMAIL:-}
       - OBSIDIAN_PASSWORD=${OBSIDIAN_PASSWORD:-}
-      - OBSIDIAN_VAULT_NAME=${OBSIDIAN_VAULT_NAME:-basys}
+      - OBSIDIAN_VAULT_NAME=${OBSIDIAN_VAULT_NAME:-thesys}
     restart: unless-stopped
 
 volumes:

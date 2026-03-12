@@ -1,7 +1,7 @@
 {
-  "name": "basys-terminal",
+  "name": "thesys-terminal",
   "version": "1.0.0",
-  "description": "WebSocket terminal sidecar for Basys",
+  "description": "WebSocket terminal sidecar for Thesys",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

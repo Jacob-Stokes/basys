@@ -14,7 +14,7 @@ interface ChatSidebarState {
 
 const ChatSidebarContext = createContext<ChatSidebarState | null>(null);
 
-const STORAGE_KEY = 'basys-chat-sidebar';
+const STORAGE_KEY = 'thesys-chat-sidebar';
 
 export function ChatSidebarProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(() => {

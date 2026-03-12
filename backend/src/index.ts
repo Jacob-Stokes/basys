@@ -68,7 +68,7 @@ initDatabase();
 
 // Routes
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Basys API is running' });
+  res.json({ status: 'ok', message: 'Thesys API is running' });
 });
 
 // Auth routes (no auth required)
@@ -78,7 +78,7 @@ app.use('/api/auth', authRouter);
 app.get('/api', optionalAuth, (req, res) => {
   const username = req.user?.username || 'the authenticated user';
   res.json({
-    name: 'Basys API',
+    name: 'Thesys API',
     description: `API for ${username}'s Harada Method goal tracking system. The Harada Method is a Japanese goal-setting framework using nested 64-square grids.`,
     owner: username,
     structure: {

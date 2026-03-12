@@ -29,7 +29,7 @@
   },
 
   "login": {
-    "title": "Basys",
+    "title": "Thesys",
     "subtitle": "Sign in to access your goals",
     "username": "Username",
     "password": "Password",
@@ -173,7 +173,7 @@
   },
 
   "agents": {
-    "agentBriefing": "Basys \u00b7 Agent Briefing",
+    "agentBriefing": "Thesys \u00b7 Agent Briefing",
     "agentLandingPage": "Agent Landing Page",
     "loadingBriefing": "Loading briefing information...",
     "manageApiKeys": "Manage API Keys",
@@ -359,7 +359,7 @@
     "darkModeDesc": "Switch between light and dark themes.",
     "enableDarkMode": "Enable dark mode",
     "headerBranding": "Header Branding",
-    "headerBrandingDesc": "Show or hide the Basys title and subtitle next to the logo.",
+    "headerBrandingDesc": "Show or hide the Thesys title and subtitle next to the logo.",
     "showHeaderBranding": "Show title and subtitle",
 
     "saveCustomPalette": "Save as Custom Palette",

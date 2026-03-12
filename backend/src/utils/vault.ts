@@ -63,9 +63,9 @@ export function generateProjectDoc(
 
   const now = new Date().toISOString();
   const content = `---
-basys_id: "${project.id}"
-basys_type: project
-basys_url: "/tasks?project=${project.id}"
+thesys_id: "${project.id}"
+thesys_type: project
+thesys_url: "/tasks?project=${project.id}"
 type: "${project.type}"
 color: "${project.hex_color}"
 created: "${now}"
@@ -129,9 +129,9 @@ export function generateSprintDoc(
   const now = new Date().toISOString();
   const sprintLabel = sprint.sprint_number ? `Sprint ${sprint.sprint_number}: ` : '';
   const content = `---
-basys_id: "${sprint.id}"
-basys_type: sprint
-basys_project_id: "${sprint.project_id}"
+thesys_id: "${sprint.id}"
+thesys_type: sprint
+thesys_project_id: "${sprint.project_id}"
 sprint_number: ${sprint.sprint_number ?? 'null'}
 status: planned
 start_date: "${sprint.start_date || ''}"

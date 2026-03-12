@@ -117,9 +117,9 @@ export default function ChatSidebar() {
       },
       // onToolUse — also trigger side effects (e.g. start timer when agent creates a pomodoro)
       (tool: ToolCall) => {
-        if ((tool.name === 'manage_pomodoro' || tool.name === 'mcp__basys__manage_pomodoro') && tool.input?.action === 'create') {
+        if ((tool.name === 'manage_pomodoro' || tool.name === 'mcp__thesys__manage_pomodoro') && tool.input?.action === 'create') {
           const minutes = tool.input?.duration_minutes ?? 25;
-          window.dispatchEvent(new CustomEvent('basys:timer-start', { detail: { duration_minutes: minutes } }));
+          window.dispatchEvent(new CustomEvent('thesys:timer-start', { detail: { duration_minutes: minutes } }));
         }
         setMessages(prev => prev.map(m =>
           m.id === assistantId ? { ...m, toolCalls: [...(m.toolCalls || []), tool] } : m

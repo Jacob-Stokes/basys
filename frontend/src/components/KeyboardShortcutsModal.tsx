@@ -52,8 +52,8 @@ export default function KeyboardShortcutsModal() {
 
   useEffect(() => {
     const onShow = () => setShow(true);
-    window.addEventListener('basys:show-shortcuts', onShow);
-    return () => window.removeEventListener('basys:show-shortcuts', onShow);
+    window.addEventListener('thesys:show-shortcuts', onShow);
+    return () => window.removeEventListener('thesys:show-shortcuts', onShow);
   }, []);
 
   // Close on Escape

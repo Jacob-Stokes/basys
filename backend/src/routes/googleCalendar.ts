@@ -247,12 +247,12 @@ router.post('/push-event', async (req: Request, res: Response) => {
 
     const created = await createGoogleEvent(accessToken, calendar_id, event);
 
-    // Sync to cache the new event locally, then mark origin as 'basys'
+    // Sync to cache the new event locally, then mark origin as 'thesys'
     try {
       await syncGoogleEvents(userId);
       if (created.id) {
         db.prepare(
-          "UPDATE google_calendar_events SET origin = 'basys' WHERE user_id = ? AND google_event_id = ?"
+          "UPDATE google_calendar_events SET origin = 'thesys' WHERE user_id = ? AND google_event_id = ?"
         ).run(userId, created.id);
       }
     } catch (err) {

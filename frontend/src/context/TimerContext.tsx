@@ -41,8 +41,8 @@ export const MODE_COLORS: Record<TimerMode, string> = {
   longBreak: 'bg-green-500',
 };
 
-const STORAGE_KEY = 'basys-pomo-history';
-const TIMER_STATE_KEY = 'basys-pomo-timer';
+const STORAGE_KEY = 'thesys-pomo-history';
+const TIMER_STATE_KEY = 'thesys-pomo-timer';
 
 interface PersistedTimerState {
   mode: TimerMode;
@@ -312,8 +312,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       const items: FocusItem[] = detail?.focusItems ?? [];
       startWithFocus(items, minutes);
     };
-    window.addEventListener('basys:timer-start', handler);
-    return () => window.removeEventListener('basys:timer-start', handler);
+    window.addEventListener('thesys:timer-start', handler);
+    return () => window.removeEventListener('thesys:timer-start', handler);
   }, [startWithFocus]);
 
   return (

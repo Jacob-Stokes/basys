@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/jacob-stokes/basys
+  IMAGE_NAME: ghcr.io/jacob-stokes/thesys
 
 jobs:
   build-and-push:

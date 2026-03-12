@@ -25,7 +25,7 @@ function getUserId(extra: any): string {
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
-    name: 'basys',
+    name: 'thesys',
     version: '1.0.0',
   });
 
@@ -62,7 +62,7 @@ export function createMcpServer(): McpServer {
 
     return asTextContent({
       overview: {
-        title: `${username}'s Basys — Personal Productivity Suite`,
+        title: `${username}'s Thesys — Personal Productivity Suite`,
         description: `This is ${username}'s single source of truth: Harada goals, tasks, habits, projects, and pomodoro sessions.`,
         framework: 'Harada Method: 1 primary goal -> 8 sub-goals -> 8 actions each (64 total actions)',
         quickStats: {

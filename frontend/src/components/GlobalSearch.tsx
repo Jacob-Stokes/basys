@@ -26,18 +26,18 @@ export default function GlobalSearch({ onClose }: { onClose: () => void }) {
     onClose();
     switch (item.type) {
       case 'project': {
-        const fire = () => window.dispatchEvent(new CustomEvent('basys:open-project', { detail: { projectId: item.id } }));
+        const fire = () => window.dispatchEvent(new CustomEvent('thesys:open-project', { detail: { projectId: item.id } }));
         if (location.pathname === '/sprints') { fire(); } else { navigate('/sprints'); setTimeout(fire, 50); }
         break;
       }
       case 'sprint': {
-        const fire = () => window.dispatchEvent(new CustomEvent('basys:open-sprint', { detail: { sprintId: item.id, projectId: item.projectId } }));
+        const fire = () => window.dispatchEvent(new CustomEvent('thesys:open-sprint', { detail: { sprintId: item.id, projectId: item.projectId } }));
         if (location.pathname === '/sprints') { fire(); } else { navigate('/sprints'); setTimeout(fire, 50); }
         break;
       }
       case 'task': {
         if (item.projectId) {
-          const fire = () => window.dispatchEvent(new CustomEvent('basys:open-project', { detail: { projectId: item.projectId } }));
+          const fire = () => window.dispatchEvent(new CustomEvent('thesys:open-project', { detail: { projectId: item.projectId } }));
           if (location.pathname === '/sprints') { fire(); } else { navigate('/sprints'); setTimeout(fire, 50); }
         } else { navigate('/'); }
         break;

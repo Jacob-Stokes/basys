@@ -1,7 +1,7 @@
 {
-  "name": "basys-backend",
+  "name": "thesys-backend",
   "version": "1.0.0",
-  "description": "Basys API",
+  "description": "Thesys API",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

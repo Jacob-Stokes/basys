@@ -19,7 +19,7 @@ describe('Contacts routes', () => {
       path: '/api/contacts',
       body: {
         name: 'Alice Example',
-        company: 'Basys',
+        company: 'Thesys',
         tags: ['friend', 'vip'],
         fields: [
           { field_group: 'Meta', field_label: 'Twitter', field_value: '@alice' },

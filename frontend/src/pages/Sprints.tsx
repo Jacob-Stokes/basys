@@ -331,11 +331,11 @@ export default function Sprints() {
       const { sprintId, projectId } = (e as CustomEvent).detail;
       if (sprintId && projectId) openSprintInTab(sprintId, projectId);
     };
-    window.addEventListener('basys:open-project', handleOpenProject);
-    window.addEventListener('basys:open-sprint', handleOpenSprint);
+    window.addEventListener('thesys:open-project', handleOpenProject);
+    window.addEventListener('thesys:open-sprint', handleOpenSprint);
     return () => {
-      window.removeEventListener('basys:open-project', handleOpenProject);
-      window.removeEventListener('basys:open-sprint', handleOpenSprint);
+      window.removeEventListener('thesys:open-project', handleOpenProject);
+      window.removeEventListener('thesys:open-sprint', handleOpenSprint);
     };
   }, [openProjectInTab, openSprintInTab]);
 

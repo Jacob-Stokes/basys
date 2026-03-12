@@ -1,13 +1,13 @@
 <div align="left">
-  <img src="frontend/public/logo.svg?v=2" alt="Basys logo" width="120" height="120">
-  <h1>Basys</h1>
+  <img src="frontend/public/logo.svg?v=2" alt="Thesys logo" width="120" height="120">
+  <h1>Thesys</h1>
 </div>
 
 A **personal productivity suite** — goals, tasks, habits, and focus timers in one place, structured for both humans and AI agents.
 
 ## Philosophy
 
-Your productivity tools should live in one place that any AI agent can read, write to, and reason about. Basys is that place. It combines the **Harada Method** (a Japanese goal-setting framework: 1 Primary Goal → 8 Sub-Goals → 8 Actions each), task management, habit tracking, and pomodoro timers — all exposed through an MCP endpoint and REST API.
+Your productivity tools should live in one place that any AI agent can read, write to, and reason about. Thesys is that place. It combines the **Harada Method** (a Japanese goal-setting framework: 1 Primary Goal → 8 Sub-Goals → 8 Actions each), task management, habit tracking, and pomodoro timers — all exposed through an MCP endpoint and REST API.
 
 Progress is tracked through continuous activity logging rather than completion checkboxes. Frequency and consistency matter more than "done" states. AI agents can provide coaching, track patterns, and leave feedback at any level.
 
@@ -24,20 +24,20 @@ Progress is tracked through continuous activity logging rather than completion c
 ## Quick Start
 
 ```bash
-git clone https://github.com/Jacob-Stokes/basys.git
-cd basys
+git clone https://github.com/Jacob-Stokes/thesys.git
+cd thesys
 docker compose up --build -d
 ```
 
 Visit http://localhost:4000, register an account, and start tracking your goals, tasks, and habits.
 
-> **Note:** The main `basys` image is published to `ghcr.io/jacob-stokes/basys:latest` and pulled automatically. The `terminal` service is **built locally** from `./terminal` — this is intentional since it bundles the Claude Code CLI and requires your local `~/.claude` credentials anyway.
+> **Note:** The main `thesys` image is published to `ghcr.io/jacob-stokes/thesys:latest` and pulled automatically. The `terminal` service is **built locally** from `./terminal` — this is intentional since it bundles the Claude Code CLI and requires your local `~/.claude` credentials anyway.
 
 The default `docker-compose.yml` runs two services:
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| `basys` | 4000 | Main app (frontend + backend + MCP endpoint) |
+| `thesys` | 4000 | Main app (frontend + backend + MCP endpoint) |
 | `terminal` | 4001 | In-browser Claude Code terminal |
 
 ### Claude Auth (AI assistant + terminal)
@@ -47,7 +47,7 @@ Both the built-in AI assistant sidebar and the Terminal page use your local **Cl
 ```yaml
 # docker-compose.yml (already included by default)
 services:
-  basys:
+  thesys:
     volumes:
       - ~/.claude:/root/.claude   # Claude auth for AI sidebar
   terminal:
@@ -61,19 +61,19 @@ Make sure you're logged into Claude Code on your host machine (`claude` CLI) bef
 
 | Variable | Service | Default | Description |
 |----------|---------|---------|-------------|
-| `SESSION_SECRET` | basys | `change-me-to-something-secure` | **Change this** — signs session cookies |
-| `TERMINAL_SHARED_SECRET` | both | `basys-terminal-secret-change-me` | **Change this** — authenticates terminal WebSocket |
-| `DATABASE_URL` | basys | `file:/app/data/harada.db` | SQLite path inside container |
-| `CLAUDE_MODEL` | basys | `sonnet` | Claude model for AI sidebar (`sonnet`, `opus`, `haiku`) |
-| `MCP_SERVER_URL` | basys | — | Your public URL, required for remote MCP OAuth |
+| `SESSION_SECRET` | thesys | `change-me-to-something-secure` | **Change this** — signs session cookies |
+| `TERMINAL_SHARED_SECRET` | both | `thesys-terminal-secret-change-me` | **Change this** — authenticates terminal WebSocket |
+| `DATABASE_URL` | thesys | `file:/app/data/harada.db` | SQLite path inside container |
+| `CLAUDE_MODEL` | thesys | `sonnet` | Claude model for AI sidebar (`sonnet`, `opus`, `haiku`) |
+| `MCP_SERVER_URL` | thesys | — | Your public URL, required for remote MCP OAuth |
 
 ## MCP Server
 
-Basys has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication — the recommended way to connect AI agents. Works with Claude mobile, Claude web, and any MCP-compatible client.
+Thesys has a **built-in remote MCP endpoint** at `/mcp` with OAuth 2.1 authentication — the recommended way to connect AI agents. Works with Claude mobile, Claude web, and any MCP-compatible client.
 
 1. Deploy with `MCP_SERVER_URL` set to your public URL (e.g. `https://home.jacob.st`)
 2. Add as a custom integration in your MCP client, pointing to `https://home.jacob.st/mcp`
-3. Authenticate with your Basys username and password
+3. Authenticate with your Thesys username and password
 
 The endpoint provides **22 tools** covering goals, tasks, projects, habits, pomodoros, labels, sharing, agent etiquette, and cross-domain search.
 
@@ -148,7 +148,7 @@ cd backend && npm install && npm run dev  # port 3001
 cd frontend && npm install && npm run dev  # port 3000
 ```
 
-See the [wiki](https://github.com/Jacob-Stokes/basys/wiki) for API documentation, database schema, and architecture details.
+See the [wiki](https://github.com/Jacob-Stokes/thesys/wiki) for API documentation, database schema, and architecture details.
 
 ## License
 

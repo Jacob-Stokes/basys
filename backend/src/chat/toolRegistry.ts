@@ -392,7 +392,7 @@ registerTool('get_overview', (_, userId) => {
 
   return {
     overview: {
-      title: `${username}'s Basys`,
+      title: `${username}'s Thesys`,
       quickStats: { activeGoals: goals.filter(g => g.status === 'active').length, activeHabits: habitCount, openTasks: taskCount, activeProjects: projectCount },
     },
     etiquette: rules.map(r => r.content),

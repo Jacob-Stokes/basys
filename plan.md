@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add a full task/project/label system to Basys modeled after Vikunja's data model. Tasks and projects can be linked to goals (via `subgoal_id`). The Tasks page uses subtabs: **Overview**, **Projects**, **Labels**.
+Add a full task/project/label system to Thesys modeled after Vikunja's data model. Tasks and projects can be linked to goals (via `subgoal_id`). The Tasks page uses subtabs: **Overview**, **Projects**, **Labels**.
 
 ---
 

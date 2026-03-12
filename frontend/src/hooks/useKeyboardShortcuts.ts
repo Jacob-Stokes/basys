@@ -63,10 +63,10 @@ export function useKeyboardShortcuts() {
 
         // ── Quick actions ────────────────────────────────
         case 'KeyN':
-          window.dispatchEvent(new CustomEvent('basys:quick-create'));
+          window.dispatchEvent(new CustomEvent('thesys:quick-create'));
           break;
         case 'Slash':
-          window.dispatchEvent(new CustomEvent('basys:show-shortcuts'));
+          window.dispatchEvent(new CustomEvent('thesys:show-shortcuts'));
           break;
 
         // ── Timer (only on /timer) ───────────────────────

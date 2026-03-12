@@ -955,7 +955,7 @@ export default function Settings() {
           {/* Connected Accounts — Google Calendar */}
           <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Connected Accounts</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Connect external services to sync data with Basys.</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Connect external services to sync data with Thesys.</p>
 
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
               <div className="flex items-center justify-between">
@@ -1262,7 +1262,7 @@ export default function Settings() {
               <section>
                 <h3 className="text-lg font-semibold mb-2">{t('settings.overview')}</h3>
                 <p className="text-gray-700 dark:text-gray-300">
-                  The Basys API exposes every goal, sub-goal, action item, log, and guestbook entry so AI agents can coach, summarize, or automate check-ins. The API is RESTful, JSON-only, and every endpoint returns a predictable <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded text-sm">success/data/error</code> envelope.
+                  The Thesys API exposes every goal, sub-goal, action item, log, and guestbook entry so AI agents can coach, summarize, or automate check-ins. The API is RESTful, JSON-only, and every endpoint returns a predictable <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded text-sm">success/data/error</code> envelope.
                 </p>
               </section>
 
@@ -2308,7 +2308,7 @@ curl -X POST "$API_URL/api/guestbook" \\
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Obsidian</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              When enabled, basys auto-generates Obsidian markdown documents for new projects and sprints in a shared vault.
+              When enabled, thesys auto-generates Obsidian markdown documents for new projects and sprints in a shared vault.
             </p>
 
             {obsidianNotice && (
@@ -2336,7 +2336,7 @@ curl -X POST "$API_URL/api/guestbook" \\
                   type="text"
                   value={obsidianVaultName}
                   onChange={(e) => setObsidianVaultName(e.target.value)}
-                  placeholder="basys"
+                  placeholder="thesys"
                   className="w-full max-w-sm px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Must match the vault name in your Obsidian app for deep links to work.</p>

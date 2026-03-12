@@ -15,7 +15,7 @@ services:
       - NODE_ENV=development
       - PORT=3001
       - SESSION_SECRET=change-me-to-something-secure
-      - TERMINAL_SHARED_SECRET=basys-terminal-secret-change-me
+      - TERMINAL_SHARED_SECRET=thesys-terminal-secret-change-me
       - FRONTEND_URL=http://localhost:4000
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
@@ -46,7 +46,7 @@ services:
       - ./data:/app/data
     environment:
       - PORT=4001
-      - TERMINAL_SHARED_SECRET=basys-terminal-secret-change-me
+      - TERMINAL_SHARED_SECRET=thesys-terminal-secret-change-me
       - TERMINAL_CWD=/workspace
     depends_on:
       - backend

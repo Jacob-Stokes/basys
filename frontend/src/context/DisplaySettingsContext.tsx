@@ -202,7 +202,7 @@ export function DisplaySettingsProvider({ children }: { children: React.ReactNod
 
   // Inject custom CSS into <head> when custom-theme is active
   useEffect(() => {
-    const id = 'basys-custom-theme';
+    const id = 'thesys-custom-theme';
     let el = document.getElementById(id) as HTMLStyleElement | null;
     if (settings.appTheme === 'custom-theme' && settings.customCSS) {
       if (!el) {

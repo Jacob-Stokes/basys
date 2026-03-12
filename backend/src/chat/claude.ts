@@ -1,7 +1,7 @@
 /**
  * Claude chat client using the Agent SDK.
  * Auth: uses Claude Max subscription via mounted ~/.claude credentials.
- * Tools: exposed via in-process MCP server so the agent can read/write Basys data.
+ * Tools: exposed via in-process MCP server so the agent can read/write Thesys data.
  */
 
 import { Response as ExpressResponse } from 'express';
@@ -19,7 +19,7 @@ interface Message {
 }
 
 /**
- * Build an in-process MCP server exposing Basys tools for a specific user.
+ * Build an in-process MCP server exposing Thesys tools for a specific user.
  */
 function buildMcpServer(userId: string) {
   const mcpTools = CLAUDE_TOOLS.map((t) =>
@@ -47,7 +47,7 @@ function buildMcpServer(userId: string) {
   );
 
   return createSdkMcpServer({
-    name: 'basys',
+    name: 'thesys',
     version: '1.0.0',
     tools: mcpTools,
   });
@@ -70,8 +70,8 @@ export async function warmupConversation(userId: string): Promise<string> {
       systemPrompt,
       model: MODEL,
       maxTurns: 1,
-      mcpServers: { basys: mcpServer },
-      allowedTools: ['mcp__basys__*'],
+      mcpServers: { thesys: mcpServer },
+      allowedTools: ['mcp__thesys__*'],
       disallowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'NotebookEdit'],
       persistSession: false,
     },
@@ -141,8 +141,8 @@ export async function streamChatResponse(
         systemPrompt: fullSystemPrompt,
         model: MODEL,
         maxTurns: MAX_TURNS,
-        mcpServers: { basys: mcpServer },
-        allowedTools: ['mcp__basys__*'],
+        mcpServers: { thesys: mcpServer },
+        allowedTools: ['mcp__thesys__*'],
         disallowedTools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'NotebookEdit'],
         persistSession: false,
       },

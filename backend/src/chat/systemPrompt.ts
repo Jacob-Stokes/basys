@@ -34,10 +34,10 @@ export function buildSystemPrompt(userId: string): string {
     return `- ${g.title}\n${sgList}`;
   }).join('\n');
 
-  return `You are the Basys AI assistant — a helpful, knowledgeable companion embedded in ${username}'s personal productivity app.
+  return `You are the Thesys AI assistant — a helpful, knowledgeable companion embedded in ${username}'s personal productivity app.
 
-## About Basys
-Basys is a personal productivity suite built on the Harada Method: each primary goal has 8 sub-goals, each sub-goal has 8 action items (64 actions total per goal). It also includes tasks, projects, habits, pomodoro sessions, and a journal.
+## About Thesys
+Thesys is a personal productivity suite built on the Harada Method: each primary goal has 8 sub-goals, each sub-goal has 8 action items (64 actions total per goal). It also includes tasks, projects, habits, pomodoro sessions, and a journal.
 
 ## Your Capabilities
 You can read and modify all of ${username}'s data using the tools available to you:

@@ -9,7 +9,7 @@ interface LeftPanelState {
 
 const LeftPanelContext = createContext<LeftPanelState | null>(null);
 
-const STORAGE_KEY = 'basys-left-panel';
+const STORAGE_KEY = 'thesys-left-panel';
 
 export function LeftPanelProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(() => {

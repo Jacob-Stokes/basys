@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const STORAGE_KEY = 'basys-panels-swapped';
+const STORAGE_KEY = 'thesys-panels-swapped';
 
 let listeners: Array<(v: boolean) => void> = [];
 let globalSwapped: boolean = localStorage.getItem(STORAGE_KEY) === 'true';

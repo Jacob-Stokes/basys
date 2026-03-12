@@ -142,7 +142,7 @@ export default function NavBar() {
             </svg>
           </button>
           <button
-            onClick={() => window.dispatchEvent(new CustomEvent('basys:show-shortcuts'))}
+            onClick={() => window.dispatchEvent(new CustomEvent('thesys:show-shortcuts'))}
             className="p-1.5 rounded transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
             title="Keyboard shortcuts (⌥/)"
           >
