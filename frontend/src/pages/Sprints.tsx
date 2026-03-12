@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import TaskEditModal from '../components/TaskEditModal';
@@ -74,6 +74,7 @@ type CardSize = typeof CARD_SIZES[number]['id'];
 
 export default function Sprints() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [sprintsByProject, setSprintsByProject] = useState<Record<string, Sprint[]>>({});
   const [loading, setLoading] = useState(true);
@@ -112,9 +113,115 @@ export default function Sprints() {
   const [projectForm, setProjectForm] = useState<ProjectForm>(emptyProjectForm);
   const [savingProject, setSavingProject] = useState(false);
 
-  // Project detail view
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
-  const [sprintStatusFilter, setSprintStatusFilter] = useState<string>('all');
+  // ── Workspace tabs (multiple project views) ─────────────────
+  interface WorkspaceTab { id: string; projectId: string | null; statusFilter: string; }
+
+  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>(() => {
+    try {
+      const stored = localStorage.getItem('projects_workspace_tabs');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch { /* ignore */ }
+    return [{ id: 'tab-1', projectId: null, statusFilter: 'all' }];
+  });
+  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string>(() => {
+    const stored = localStorage.getItem('projects_workspace_active_tab');
+    return stored || 'tab-1';
+  });
+
+  // Persist workspace tabs
+  useEffect(() => {
+    localStorage.setItem('projects_workspace_tabs', JSON.stringify(workspaceTabs));
+  }, [workspaceTabs]);
+  useEffect(() => {
+    localStorage.setItem('projects_workspace_active_tab', activeWorkspaceTabId);
+  }, [activeWorkspaceTabId]);
+
+  // Ensure active tab exists
+  const activeWsTab = workspaceTabs.find(t => t.id === activeWorkspaceTabId) || workspaceTabs[0];
+
+  // Sync URL → active tab's state on mount/URL change
+  const selectedProject = searchParams.get('project');
+  const sprintStatusFilter = searchParams.get('status') || 'all';
+
+  // When URL changes, update the active tab's stored state
+  useEffect(() => {
+    setWorkspaceTabs(prev => prev.map(t =>
+      t.id === activeWsTab.id ? { ...t, projectId: selectedProject, statusFilter: sprintStatusFilter } : t
+    ));
+  }, [selectedProject, sprintStatusFilter, activeWsTab.id]);
+
+  const setSelectedProject = useCallback((id: string | null) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (id) { next.set('project', id); } else { next.delete('project'); }
+      next.delete('status');
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const setSprintStatusFilter = useCallback((status: string) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (status && status !== 'all') { next.set('status', status); } else { next.delete('status'); }
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const switchWorkspaceTab = useCallback((tabId: string) => {
+    setActiveWorkspaceTabId(tabId);
+    const tab = workspaceTabs.find(t => t.id === tabId);
+    if (tab) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        if (tab.projectId) { next.set('project', tab.projectId); } else { next.delete('project'); }
+        if (tab.statusFilter && tab.statusFilter !== 'all') { next.set('status', tab.statusFilter); } else { next.delete('status'); }
+        return next;
+      });
+    }
+  }, [workspaceTabs, setSearchParams]);
+
+  const addWorkspaceTab = useCallback((projectId?: string | null) => {
+    const id = `tab-${Date.now()}`;
+    const newTab: WorkspaceTab = { id, projectId: projectId || null, statusFilter: 'all' };
+    setWorkspaceTabs(prev => [...prev, newTab]);
+    setActiveWorkspaceTabId(id);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (projectId) { next.set('project', projectId); } else { next.delete('project'); }
+      next.delete('status');
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const closeWorkspaceTab = useCallback((tabId: string) => {
+    setWorkspaceTabs(prev => {
+      if (prev.length <= 1) return prev; // Don't close last tab
+      const filtered = prev.filter(t => t.id !== tabId);
+      if (tabId === activeWorkspaceTabId) {
+        const idx = prev.findIndex(t => t.id === tabId);
+        const nextTab = filtered[Math.min(idx, filtered.length - 1)];
+        setActiveWorkspaceTabId(nextTab.id);
+        setSearchParams(p => {
+          const next = new URLSearchParams(p);
+          if (nextTab.projectId) { next.set('project', nextTab.projectId); } else { next.delete('project'); }
+          if (nextTab.statusFilter && nextTab.statusFilter !== 'all') { next.set('status', nextTab.statusFilter); } else { next.delete('status'); }
+          return next;
+        });
+      }
+      return filtered;
+    });
+  }, [activeWorkspaceTabId, setSearchParams]);
+
+  const getTabLabel = useCallback((tab: WorkspaceTab) => {
+    if (tab.projectId) {
+      const p = projects.find(pr => pr.id === tab.projectId);
+      return p?.title || 'Project';
+    }
+    return 'Projects';
+  }, [projects]);
 
   // Project-level tasks (sprint_id = NULL)
   const [projectTasks, setProjectTasks] = useState<any[]>([]);
@@ -720,7 +827,7 @@ export default function Sprints() {
     return (
       <div
         key={project.id}
-        onClick={() => { setSelectedProject(project.id); setSprintStatusFilter('all'); }}
+        onClick={() => { setSelectedProject(project.id); }}
         className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden cursor-pointer hover:shadow-lg transition-shadow flex flex-col"
       >
         {/* Color banner */}
@@ -787,7 +894,7 @@ export default function Sprints() {
         {/* Project header — clickable to open detail view */}
         <div
           className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
-          onClick={() => { setSelectedProject(project.id); setSprintStatusFilter('all'); }}
+          onClick={() => { setSelectedProject(project.id); }}
         >
           <div className="flex items-center gap-2">
             {/* Expand chevron */}
@@ -850,7 +957,7 @@ export default function Sprints() {
             )}
             {totalSprints > displaySprints.length && (
               <button
-                onClick={() => { setSelectedProject(project.id); setSprintStatusFilter('all'); }}
+                onClick={() => { setSelectedProject(project.id); }}
                 className="w-full px-4 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors border-t border-gray-100 dark:border-gray-700/50"
               >
                 View all {totalSprints} {modeLabel(project.project_mode || 'simple', true).toLowerCase()} →
@@ -899,7 +1006,7 @@ export default function Sprints() {
               {project.parent_project_id && (() => {
                 const parent = projects.find(p => p.id === project.parent_project_id);
                 return parent ? (
-                  <button onClick={() => { setSelectedProject(parent.id); setSprintStatusFilter('all'); }} className="text-xs text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 truncate block">
+                  <button onClick={() => { setSelectedProject(parent.id); }} className="text-xs text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 truncate block">
                     {parent.title} ›
                   </button>
                 ) : null;
@@ -943,7 +1050,7 @@ export default function Sprints() {
                 {children.map(child => (
                   <button
                     key={child.id}
-                    onClick={() => { setSelectedProject(child.id); setSprintStatusFilter('all'); }}
+                    onClick={() => { setSelectedProject(child.id); }}
                     className="text-left bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
                   >
                     <div className="flex items-center gap-1.5 mb-1">
@@ -1165,6 +1272,46 @@ export default function Sprints() {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      {/* Workspace tab bar */}
+      {workspaceTabs.length >= 1 && (
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-16">
+          <div className="container mx-auto flex items-center gap-0.5 h-9 overflow-x-auto">
+            {workspaceTabs.map(tab => (
+              <div
+                key={tab.id}
+                className={`group flex items-center gap-1.5 px-3 h-full text-xs cursor-pointer border-b-2 transition-colors flex-shrink-0 ${
+                  tab.id === activeWorkspaceTabId
+                    ? 'border-blue-500 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-700/50'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/30'
+                }`}
+                onClick={() => switchWorkspaceTab(tab.id)}
+              >
+                {tab.projectId && (() => {
+                  const p = projects.find(pr => pr.id === tab.projectId);
+                  return p?.hex_color ? <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.hex_color }} /> : null;
+                })()}
+                <span className="truncate max-w-[120px]">{getTabLabel(tab)}</span>
+                {workspaceTabs.length > 1 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); closeWorkspaceTab(tab.id); }}
+                    className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              onClick={() => addWorkspaceTab()}
+              className="h-full px-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0"
+              title="New tab"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="container mx-auto px-4 sm:px-16 py-8">
         {error && (
           <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
