@@ -3,6 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import TaskEditModal from '../components/TaskEditModal';
 
+// ── Props for embedded usage ────────────────────────────────────────
+export interface SprintBoardContentProps {
+  sprintId: string;
+  onBack: () => void;
+}
+
 // ── Types ──────────────────────────────────────────────────────────
 
 interface Column {
@@ -382,9 +388,8 @@ function ListSection({ column, tasks, onTaskClick, onToggleTask, onAddTask }: {
 
 // ── Main SprintBoard Component ─────────────────────────────────────
 
-export default function SprintBoard() {
-  const { sprintId } = useParams<{ sprintId: string }>();
-  const navigate = useNavigate();
+// Prop-driven version for embedding inside workspace tabs
+export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps) {
 
   const [sprint, setSprint] = useState<Sprint | null>(null);
   const [columns, setColumns] = useState<Column[]>([]);
@@ -570,10 +575,10 @@ export default function SprintBoard() {
 
   if (error || !sprint) {
     return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+      <div className="flex items-center justify-center py-16">
         <div className="text-center">
           <p className="text-red-500 mb-2">{error || 'Sprint not found'}</p>
-          <button onClick={() => navigate(-1)} className="text-sm text-blue-600 hover:text-blue-700">Go back</button>
+          <button onClick={() => onBack()} className="text-sm text-blue-600 hover:text-blue-700">Go back</button>
         </div>
       </div>
     );
@@ -585,14 +590,14 @@ export default function SprintBoard() {
   const unassignedTasks = tasks.filter(t => !t.bucket_id);
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="flex-1 bg-gray-100 dark:bg-gray-900">
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
         {(() => {
           const isSimple = (sprint.project_mode || 'simple') === 'simple';
           return (
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <button onClick={() => onBack()} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -846,6 +851,18 @@ export default function SprintBoard() {
           showChecklist
         />
       )}
+    </div>
+  );
+}
+
+// ── Default export for direct URL access (/sprints/:sprintId) ────────
+export default function SprintBoard() {
+  const { sprintId } = useParams<{ sprintId: string }>();
+  const navigate = useNavigate();
+  if (!sprintId) return null;
+  return (
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      <SprintBoardContent sprintId={sprintId} onBack={() => navigate(-1)} />
     </div>
   );
 }

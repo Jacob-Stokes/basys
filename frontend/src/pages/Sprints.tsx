@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import TaskEditModal from '../components/TaskEditModal';
+import { SprintBoardContent } from './SprintBoard';
 
 interface Project {
   id: string;
@@ -73,8 +74,7 @@ type CardSize = typeof CARD_SIZES[number]['id'];
 // ProjectTaskEditModal replaced by shared TaskEditModal component
 
 export default function Sprints() {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [sprintsByProject, setSprintsByProject] = useState<Record<string, Sprint[]>>({});
   const [loading, setLoading] = useState(true);
@@ -114,21 +114,38 @@ export default function Sprints() {
   const [savingProject, setSavingProject] = useState(false);
 
   // ── Workspace tabs (multiple project views) ─────────────────
-  interface WorkspaceTab { id: string; projectId: string | null; statusFilter: string; }
+  interface TabHistoryEntry { projectId: string | null; sprintId: string | null; statusFilter: string; }
+  interface WorkspaceTab {
+    id: string;
+    projectId: string | null;
+    sprintId: string | null;
+    statusFilter: string;
+    history: TabHistoryEntry[];
+    isHome: boolean;
+  }
+
+  const migrateTab = (t: any, idx: number): WorkspaceTab => ({
+    id: t.id || `tab-${idx}`,
+    projectId: t.projectId || null,
+    sprintId: t.sprintId || null,
+    statusFilter: t.statusFilter || 'all',
+    history: Array.isArray(t.history) ? t.history.slice(-20) : [],
+    isHome: idx === 0 ? true : (t.isHome || false),
+  });
 
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>(() => {
     try {
       const stored = localStorage.getItem('projects_workspace_tabs');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(migrateTab);
       }
     } catch { /* ignore */ }
-    return [{ id: 'tab-1', projectId: null, statusFilter: 'all' }];
+    return [{ id: 'tab-home', projectId: null, sprintId: null, statusFilter: 'all', history: [], isHome: true }];
   });
   const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState<string>(() => {
     const stored = localStorage.getItem('projects_workspace_active_tab');
-    return stored || 'tab-1';
+    return stored || 'tab-home';
   });
 
   // Persist workspace tabs
@@ -142,86 +159,148 @@ export default function Sprints() {
   // Ensure active tab exists
   const activeWsTab = workspaceTabs.find(t => t.id === activeWorkspaceTabId) || workspaceTabs[0];
 
-  // Sync URL → active tab's state on mount/URL change
-  const selectedProject = searchParams.get('project');
-  const sprintStatusFilter = searchParams.get('status') || 'all';
+  // Active tab state drives the view — NOT URL search params
+  const selectedProject = activeWsTab.projectId;
+  const selectedSprint = activeWsTab.sprintId;
+  const sprintStatusFilter = activeWsTab.statusFilter || 'all';
 
-  // When URL changes, update the active tab's stored state
+  // One-way sync: active tab state → URL (replace, no history pollution)
+  const syncUrlRef = useRef(false);
   useEffect(() => {
+    if (syncUrlRef.current) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        if (activeWsTab.projectId) { next.set('project', activeWsTab.projectId); } else { next.delete('project'); }
+        if (activeWsTab.sprintId) { next.set('sprint', activeWsTab.sprintId); } else { next.delete('sprint'); }
+        if (activeWsTab.statusFilter && activeWsTab.statusFilter !== 'all') { next.set('status', activeWsTab.statusFilter); } else { next.delete('status'); }
+        return next;
+      }, { replace: true });
+    }
+    syncUrlRef.current = true;
+  }, [activeWsTab.projectId, activeWsTab.sprintId, activeWsTab.statusFilter, setSearchParams]);
+
+  // ── Tab navigation helpers ─────────────────────────────────
+  const updateActiveTab = useCallback((updates: Partial<WorkspaceTab>) => {
     setWorkspaceTabs(prev => prev.map(t =>
-      t.id === activeWsTab.id ? { ...t, projectId: selectedProject, statusFilter: sprintStatusFilter } : t
+      t.id === activeWorkspaceTabId ? { ...t, ...updates } : t
     ));
-  }, [selectedProject, sprintStatusFilter, activeWsTab.id]);
+  }, [activeWorkspaceTabId]);
+
+  const navigateTab = useCallback((tabId: string, entry: { projectId: string | null; sprintId: string | null; statusFilter?: string }) => {
+    setWorkspaceTabs(prev => prev.map(t => {
+      if (t.id !== tabId) return t;
+      const historyEntry: TabHistoryEntry = { projectId: t.projectId, sprintId: t.sprintId, statusFilter: t.statusFilter };
+      return {
+        ...t,
+        projectId: entry.projectId,
+        sprintId: entry.sprintId,
+        statusFilter: entry.statusFilter || 'all',
+        history: [...t.history.slice(-19), historyEntry],
+      };
+    }));
+  }, []);
+
+  const goBackInTab = useCallback((tabId: string) => {
+    setWorkspaceTabs(prev => prev.map(t => {
+      if (t.id !== tabId || t.history.length === 0) return t;
+      const history = [...t.history];
+      const prev_entry = history.pop()!;
+      return { ...t, projectId: prev_entry.projectId, sprintId: prev_entry.sprintId, statusFilter: prev_entry.statusFilter, history };
+    }));
+  }, []);
 
   const setSelectedProject = useCallback((id: string | null) => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      if (id) { next.set('project', id); } else { next.delete('project'); }
-      next.delete('status');
-      return next;
-    });
-  }, [setSearchParams]);
+    if (id) {
+      navigateTab(activeWorkspaceTabId, { projectId: id, sprintId: null });
+    } else {
+      goBackInTab(activeWorkspaceTabId);
+    }
+  }, [activeWorkspaceTabId, navigateTab, goBackInTab]);
 
   const setSprintStatusFilter = useCallback((status: string) => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      if (status && status !== 'all') { next.set('status', status); } else { next.delete('status'); }
-      return next;
-    });
-  }, [setSearchParams]);
+    updateActiveTab({ statusFilter: status || 'all' });
+  }, [updateActiveTab]);
+
+  const openProjectInTab = useCallback((projectId: string) => {
+    // Find existing tab with this project
+    const existing = workspaceTabs.find(t => !t.isHome && t.projectId === projectId);
+    if (existing) {
+      setActiveWorkspaceTabId(existing.id);
+      return;
+    }
+    // Create new tab
+    const id = `tab-${Date.now()}`;
+    const newTab: WorkspaceTab = { id, projectId, sprintId: null, statusFilter: 'all', history: [], isHome: false };
+    setWorkspaceTabs(prev => [...prev, newTab]);
+    setActiveWorkspaceTabId(id);
+  }, [workspaceTabs]);
+
+  const openSprintInTab = useCallback((sprintId: string, projectId: string) => {
+    // Find existing tab with this project
+    const existing = workspaceTabs.find(t => !t.isHome && t.projectId === projectId);
+    if (existing) {
+      setActiveWorkspaceTabId(existing.id);
+      // Navigate that tab to the sprint
+      navigateTab(existing.id, { projectId, sprintId });
+      return;
+    }
+    // Create new tab with project + sprint
+    const id = `tab-${Date.now()}`;
+    const newTab: WorkspaceTab = { id, projectId, sprintId, statusFilter: 'all', history: [{ projectId, sprintId: null, statusFilter: 'all' }], isHome: false };
+    setWorkspaceTabs(prev => [...prev, newTab]);
+    setActiveWorkspaceTabId(id);
+  }, [workspaceTabs, navigateTab]);
 
   const switchWorkspaceTab = useCallback((tabId: string) => {
     setActiveWorkspaceTabId(tabId);
-    const tab = workspaceTabs.find(t => t.id === tabId);
-    if (tab) {
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        if (tab.projectId) { next.set('project', tab.projectId); } else { next.delete('project'); }
-        if (tab.statusFilter && tab.statusFilter !== 'all') { next.set('status', tab.statusFilter); } else { next.delete('status'); }
-        return next;
-      });
-    }
-  }, [workspaceTabs, setSearchParams]);
+  }, []);
 
   const addWorkspaceTab = useCallback((projectId?: string | null) => {
     const id = `tab-${Date.now()}`;
-    const newTab: WorkspaceTab = { id, projectId: projectId || null, statusFilter: 'all' };
+    const newTab: WorkspaceTab = { id, projectId: projectId || null, sprintId: null, statusFilter: 'all', history: [], isHome: false };
     setWorkspaceTabs(prev => [...prev, newTab]);
     setActiveWorkspaceTabId(id);
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      if (projectId) { next.set('project', projectId); } else { next.delete('project'); }
-      next.delete('status');
-      return next;
-    });
-  }, [setSearchParams]);
+  }, []);
 
   const closeWorkspaceTab = useCallback((tabId: string) => {
     setWorkspaceTabs(prev => {
-      if (prev.length <= 1) return prev; // Don't close last tab
+      const tab = prev.find(t => t.id === tabId);
+      if (!tab || tab.isHome || prev.length <= 1) return prev;
       const filtered = prev.filter(t => t.id !== tabId);
       if (tabId === activeWorkspaceTabId) {
         const idx = prev.findIndex(t => t.id === tabId);
         const nextTab = filtered[Math.min(idx, filtered.length - 1)];
         setActiveWorkspaceTabId(nextTab.id);
-        setSearchParams(p => {
-          const next = new URLSearchParams(p);
-          if (nextTab.projectId) { next.set('project', nextTab.projectId); } else { next.delete('project'); }
-          if (nextTab.statusFilter && nextTab.statusFilter !== 'all') { next.set('status', nextTab.statusFilter); } else { next.delete('status'); }
-          return next;
-        });
       }
       return filtered;
     });
-  }, [activeWorkspaceTabId, setSearchParams]);
+  }, [activeWorkspaceTabId]);
 
   const getTabLabel = useCallback((tab: WorkspaceTab) => {
+    if (tab.isHome) return 'Home';
     if (tab.projectId) {
       const p = projects.find(pr => pr.id === tab.projectId);
       return p?.title || 'Project';
     }
     return 'Projects';
   }, [projects]);
+
+  // ── Popstate interceptor for per-tab back ──────────────────
+  useEffect(() => {
+    const handler = (e: PopStateEvent) => {
+      const tab = workspaceTabs.find(t => t.id === activeWorkspaceTabId);
+      if (tab && tab.history.length > 0) {
+        e.preventDefault();
+        // Push a dummy state to keep browser history balanced
+        window.history.pushState(null, '', window.location.href);
+        goBackInTab(tab.id);
+      }
+    };
+    // Push initial state so we can intercept back
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [activeWorkspaceTabId, workspaceTabs, goBackInTab]);
 
   // Project-level tasks (sprint_id = NULL)
   const [projectTasks, setProjectTasks] = useState<any[]>([]);
@@ -647,7 +726,13 @@ export default function Sprints() {
               ) : (
                 <span className="w-4 flex-shrink-0" />
               )}
-              <div className="min-w-0 flex-1" onClick={() => navigate(`/sprints/${sprint.id}`)}>
+              <div className="min-w-0 flex-1" onClick={() => {
+                if (activeWsTab.isHome) {
+                  openSprintInTab(sprint.id, projectId);
+                } else {
+                  navigateTab(activeWsTab.id, { projectId: activeWsTab.projectId, sprintId: sprint.id });
+                }
+              }}>
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{sprint.title}</span>
                   {!isSimple && (
@@ -827,7 +912,7 @@ export default function Sprints() {
     return (
       <div
         key={project.id}
-        onClick={() => { setSelectedProject(project.id); }}
+        onClick={() => { activeWsTab.isHome ? openProjectInTab(project.id) : setSelectedProject(project.id); }}
         className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden cursor-pointer hover:shadow-lg transition-shadow flex flex-col"
       >
         {/* Color banner */}
@@ -894,7 +979,7 @@ export default function Sprints() {
         {/* Project header — clickable to open detail view */}
         <div
           className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
-          onClick={() => { setSelectedProject(project.id); }}
+          onClick={() => { activeWsTab.isHome ? openProjectInTab(project.id) : setSelectedProject(project.id); }}
         >
           <div className="flex items-center gap-2">
             {/* Expand chevron */}
@@ -957,7 +1042,7 @@ export default function Sprints() {
             )}
             {totalSprints > displaySprints.length && (
               <button
-                onClick={() => { setSelectedProject(project.id); }}
+                onClick={() => { activeWsTab.isHome ? openProjectInTab(project.id) : setSelectedProject(project.id); }}
                 className="w-full px-4 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors border-t border-gray-100 dark:border-gray-700/50"
               >
                 View all {totalSprints} {modeLabel(project.project_mode || 'simple', true).toLowerCase()} →
@@ -1291,7 +1376,7 @@ export default function Sprints() {
                   return p?.hex_color ? <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.hex_color }} /> : null;
                 })()}
                 <span className="truncate max-w-[120px]">{getTabLabel(tab)}</span>
-                {workspaceTabs.length > 1 && (
+                {workspaceTabs.length > 1 && !tab.isHome && (
                   <button
                     onClick={e => { e.stopPropagation(); closeWorkspaceTab(tab.id); }}
                     className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
@@ -1312,6 +1397,13 @@ export default function Sprints() {
         </div>
       )}
 
+      {/* Sprint board renders full-width (has its own header) */}
+      {selectedSprint ? (
+        <SprintBoardContent
+          sprintId={selectedSprint}
+          onBack={() => goBackInTab(activeWsTab.id)}
+        />
+      ) : (
       <div className="container mx-auto px-4 sm:px-16 py-8">
         {error && (
           <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
@@ -1320,7 +1412,7 @@ export default function Sprints() {
           </div>
         )}
 
-        {/* If a project is selected, show detail view */}
+        {/* Project detail / project list */}
         {selectedProject ? renderProjectDetail() : (
           <>
             {/* Tab bar + View controls + New Project */}
@@ -1428,6 +1520,7 @@ export default function Sprints() {
           </>
         )}
       </div>
+      )}
 
       {/* ── Sprint/Section Create/Edit Modal ─────────────────────── */}
       {sprintModalProjectId && (() => {
