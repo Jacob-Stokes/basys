@@ -205,6 +205,136 @@ code {
 }
 
 /* ============================================================
+   ACADEMIA MONO THEME
+   Identical Tufte flat structure to Academia — white/grey
+   surfaces, slate-blue accent, IBM Plex Sans
+   ============================================================ */
+
+.academia-mono body,
+.academia-mono #root {
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.academia-mono body {
+  background-color: #f8f9fa;
+}
+.academia-mono code {
+  font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+}
+
+/* Backgrounds — cool white/grey instead of ivory */
+.academia-mono .bg-gray-100 { background-color: #f8f9fa !important; }
+.academia-mono .bg-gray-50  { background-color: #f8f9fa !important; }
+.academia-mono .bg-white    { background-color: #f8f9fa !important; }
+.academia-mono .bg-gray-200 { background-color: #edf0f3 !important; }
+.academia-mono .border-gray-200 { border-color: #d1d9e0 !important; }
+.academia-mono .border-gray-300 { border-color: #c4ced8 !important; }
+
+/* Flat design — same shadow removal as academia */
+.academia-mono .shadow,
+.academia-mono .shadow-sm,
+.academia-mono .shadow-md,
+.academia-mono .shadow-lg,
+.academia-mono .shadow-xl {
+  box-shadow: none !important;
+}
+.academia-mono .hover\:shadow-md:hover {
+  box-shadow: none !important;
+}
+.academia-mono .shadow-md {
+  border: none !important;
+  border-bottom: 1px solid #d1d9e0 !important;
+  border-radius: 0 !important;
+  margin-bottom: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+}
+.academia-mono .shadow-lg,
+.academia-mono .shadow-xl {
+  border: 1px solid #d1d9e0;
+}
+.academia-mono hr,
+.academia-mono .divide-y > * + * {
+  border-color: #d1d9e0 !important;
+}
+
+/* Primary accent: slate-blue */
+.academia-mono .bg-blue-600  { background-color: #3d5a80 !important; }
+.academia-mono .bg-blue-700  { background-color: #2e4a6e !important; }
+.academia-mono .bg-blue-500  { background-color: #4a6a92 !important; }
+.academia-mono .bg-blue-50   { background-color: #eef2f7 !important; }
+.academia-mono .bg-blue-100  { background-color: #dde6f0 !important; }
+.academia-mono .text-blue-600 { color: #3d5a80 !important; }
+.academia-mono .text-blue-700 { color: #2e4a6e !important; }
+.academia-mono .text-blue-800 { color: #213a5c !important; }
+.academia-mono .text-blue-500 { color: #4a6a92 !important; }
+.academia-mono .text-blue-400 { color: #6a87a8 !important; }
+.academia-mono .border-blue-200 { border-color: #b8cfe0 !important; }
+.academia-mono .border-blue-500 { border-color: #4a6a92 !important; }
+.academia-mono .border-blue-600 { border-color: #3d5a80 !important; }
+.academia-mono .ring-blue-500 { --tw-ring-color: #4a6a92 !important; }
+.academia-mono .focus\:ring-blue-500:focus { --tw-ring-color: #4a6a92 !important; }
+.academia-mono .hover\:bg-blue-700:hover { background-color: #2e4a6e !important; }
+.academia-mono .hover\:bg-blue-600:hover { background-color: #3d5a80 !important; }
+.academia-mono .hover\:text-blue-800:hover { color: #213a5c !important; }
+.academia-mono .hover\:text-blue-900:hover { color: #162840 !important; }
+.academia-mono .bg-blue-900\/30 { background-color: rgba(33,58,92,0.15) !important; }
+
+/* Secondary accent: cool teal-slate */
+.academia-mono .bg-green-600  { background-color: #3a6b6b !important; }
+.academia-mono .bg-green-700  { background-color: #2e5757 !important; }
+.academia-mono .bg-green-500  { background-color: #477a7a !important; }
+.academia-mono .bg-green-100  { background-color: #e6f0f0 !important; }
+.academia-mono .bg-green-50   { background-color: #f0f7f7 !important; }
+.academia-mono .text-green-600 { color: #3a6b6b !important; }
+.academia-mono .text-green-700 { color: #2e5757 !important; }
+.academia-mono .text-green-400 { color: #6a9e9e !important; }
+.academia-mono .text-green-300 { color: #8ab8b8 !important; }
+.academia-mono .border-green-200 { border-color: #b8d4d4 !important; }
+.academia-mono .border-green-300 { border-color: #a0c4c4 !important; }
+.academia-mono .hover\:bg-green-700:hover { background-color: #2e5757 !important; }
+.academia-mono .hover\:bg-green-600:hover { background-color: #3a6b6b !important; }
+.academia-mono .bg-emerald-500  { background-color: #3a6b6b !important; }
+.academia-mono .bg-emerald-600  { background-color: #2e5757 !important; }
+.academia-mono .text-emerald-600 { color: #3a6b6b !important; }
+.academia-mono .bg-green-900\/30 { background-color: rgba(46,87,87,0.2) !important; }
+
+/* Habit week grid */
+.academia-mono .habit-week-cell.bg-gray-200 { background-color: #dde3e9 !important; }
+
+/* Red/destructive — cool brick */
+.academia-mono .bg-red-600  { background-color: #8b4545 !important; }
+.academia-mono .bg-red-500  { background-color: #9e5050 !important; }
+.academia-mono .text-red-600 { color: #8b4545 !important; }
+.academia-mono .text-red-500 { color: #9e5050 !important; }
+.academia-mono .text-red-700 { color: #783838 !important; }
+.academia-mono .hover\:bg-red-700:hover { background-color: #783838 !important; }
+
+/* Dark mode */
+.academia-mono.dark body {
+  background-color: #181a1e;
+}
+.academia-mono.dark .bg-gray-900 { background-color: #181a1e !important; }
+.academia-mono.dark .bg-gray-800 { background-color: #20232a !important; }
+.academia-mono.dark .bg-white    { background-color: #20232a !important; }
+.academia-mono.dark .bg-gray-700 { background-color: #282c35 !important; }
+.academia-mono.dark .border-gray-700 { border-color: #363b46 !important; }
+.academia-mono.dark .border-gray-600 { border-color: #424858 !important; }
+.academia-mono.dark .bg-blue-600  { background-color: #4a6a92 !important; }
+.academia-mono.dark .bg-blue-700  { background-color: #3d5a80 !important; }
+.academia-mono.dark .text-blue-600 { color: #7aa0c4 !important; }
+.academia-mono.dark .text-blue-400 { color: #94b8d8 !important; }
+.academia-mono.dark .bg-green-600  { background-color: #477a7a !important; }
+.academia-mono.dark .bg-green-700  { background-color: #3a6b6b !important; }
+.academia-mono.dark .bg-emerald-500 { background-color: #477a7a !important; }
+.academia-mono.dark .habit-week-cell.bg-gray-700 { background-color: #2e343f !important; }
+.academia-mono.dark .text-green-400 { color: #8ab8b8 !important; }
+.academia-mono.dark .text-green-300 { color: #a0c8c8 !important; }
+.academia-mono.dark .bg-green-900\/30 { background-color: rgba(58,107,107,0.25) !important; }
+.academia-mono.dark .bg-red-600  { background-color: #9e5050 !important; }
+
+/* ============================================================
    ACADEMIA 2026 THEME
    Glassmorphism + warm parchment + grain texture + editorial serif
    ============================================================ */

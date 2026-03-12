@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 export type ViewMode = 'list' | 'compact' | 'full';
 export type CenterLayout = 'single' | 'radial';
 export type CenterBackdrop = 'page' | 'card';
-export type AppThemeName = 'default' | 'academia' | 'academia-2026' | 'arc' | 'custom-theme';
+export type AppThemeName = 'default' | 'academia' | 'academia-2026' | 'academia-mono' | 'arc' | 'custom-theme';
 
 export interface PaletteDefinition {
   label: string;
@@ -25,6 +25,11 @@ export const appThemeOptions: Record<AppThemeName, { label: string; description:
   'academia-2026': {
     label: 'Academia 2026',
     description: 'Glassmorphism + warm parchment — frosted glass depth, grain texture, editorial serif',
+    defaultPalette: 'mono',
+  },
+  'academia-mono': {
+    label: 'Academia Mono',
+    description: 'Same Tufte flat style as Academia — crisp white/grey surfaces, slate-blue accent',
     defaultPalette: 'mono',
   },
   arc: {
