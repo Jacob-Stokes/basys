@@ -27,6 +27,7 @@ import googleCalendarRouter, { googleCalendarCallbackRouter } from './routes/goo
 import gmailRouter from './routes/gmail';
 import sprintsRouter from './routes/sprints';
 import notesRouter from './routes/notes';
+import contactsRouter from './routes/contacts';
 import { setupMcpRoutes } from './mcp/server';
 
 const app = express();
@@ -157,6 +158,7 @@ app.use('/api/projects', requireAuth, projectsRouter);
 app.use('/api/labels', requireAuth, labelsRouter);
 app.use('/api/pomodoros', requireAuth, pomodorosRouter);
 app.use('/api/search', requireAuth, searchRouter);
+app.use('/api/contacts', requireAuth, contactsRouter);
 app.use('/api/admin', requireAuth, requireAdmin, adminRouter);
 app.use('/api/chat', requireAuth, chatRouter);
 app.use('/api/events', requireAuth, eventsRouter);

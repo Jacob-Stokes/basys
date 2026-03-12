@@ -412,6 +412,36 @@ export const api = {
   deleteNote: (id: string) =>
     apiRequest<any>(`/api/notes/${id}`, { method: 'DELETE' }),
 
+  // Contacts (Personal CRM)
+  getContacts: (params?: { q?: string; tag?: string; type?: string; archived?: string }) => {
+    const query = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => { if (v !== undefined) query.append(k, v); });
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<any[]>(`/api/contacts${qs}`);
+  },
+  getContact: (id: string) => apiRequest<any>(`/api/contacts/${id}`),
+  createContact: (data: any) =>
+    apiRequest<any>('/api/contacts', { method: 'POST', body: JSON.stringify(data) }),
+  updateContact: (id: string, data: any) =>
+    apiRequest<any>(`/api/contacts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteContact: (id: string) =>
+    apiRequest<any>(`/api/contacts/${id}`, { method: 'DELETE' }),
+  toggleContactFavorite: (id: string) =>
+    apiRequest<any>(`/api/contacts/${id}/favorite`, { method: 'PUT' }),
+  updateContactTags: (id: string, tags: string[]) =>
+    apiRequest<any>(`/api/contacts/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tags }) }),
+  updateContactFields: (id: string, fields: any[]) =>
+    apiRequest<any>(`/api/contacts/${id}/fields`, { method: 'PUT', body: JSON.stringify({ fields }) }),
+  getContactInteractions: (contactId: string) =>
+    apiRequest<any[]>(`/api/contacts/${contactId}/interactions`),
+  createInteraction: (contactId: string, data: any) =>
+    apiRequest<any>(`/api/contacts/${contactId}/interactions`, { method: 'POST', body: JSON.stringify(data) }),
+  updateInteraction: (id: string, data: any) =>
+    apiRequest<any>(`/api/contacts/interactions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteInteraction: (id: string) =>
+    apiRequest<any>(`/api/contacts/interactions/${id}`, { method: 'DELETE' }),
+  getDueReminders: () => apiRequest<any[]>('/api/contacts/reminders/due'),
+
   getSharedGoal: async (token: string) => {
     const response = await fetch(`${API_URL}/api/shared/${token}/goal`);
     const parsed = await response.json();

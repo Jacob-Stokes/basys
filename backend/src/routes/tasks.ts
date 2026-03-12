@@ -50,35 +50,40 @@ function loadTaskLinks(taskIds: string[]): Record<string, any[]> {
   }
 
   // 3. Batch-resolve all targets (max 4 queries instead of N)
+  // Determine owner user_id from the first task's link for scoping resolution queries
+  // Since loadTaskLinks is only called with the current user's tasks, we extract user_id from the task
+  const ownerRow = taskIds.length > 0 ? db.prepare('SELECT user_id FROM tasks WHERE id = ?').get(taskIds[0]) as any : null;
+  const ownerId = ownerRow?.user_id;
+
   const goalMap: Record<string, any> = {};
-  if (goalIds.size > 0) {
+  if (goalIds.size > 0 && ownerId) {
     const ph = [...goalIds].map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title FROM primary_goals WHERE id IN (${ph})`).all(...goalIds) as any[];
+    const rows = db.prepare(`SELECT id, title FROM primary_goals WHERE id IN (${ph}) AND user_id = ?`).all(...goalIds, ownerId) as any[];
     for (const r of rows) goalMap[r.id] = r;
   }
 
   const subgoalMap: Record<string, any> = {};
-  if (subgoalIds.size > 0) {
+  if (subgoalIds.size > 0 && ownerId) {
     const ph = [...subgoalIds].map(() => '?').join(',');
     const rows = db.prepare(`
       SELECT sg.id, sg.title, sg.position, pg.id as goal_id, pg.title as goal_title
       FROM sub_goals sg JOIN primary_goals pg ON sg.primary_goal_id = pg.id
-      WHERE sg.id IN (${ph})
-    `).all(...subgoalIds) as any[];
+      WHERE sg.id IN (${ph}) AND pg.user_id = ?
+    `).all(...subgoalIds, ownerId) as any[];
     for (const r of rows) subgoalMap[r.id] = r;
   }
 
   const habitMap: Record<string, any> = {};
-  if (habitIds.size > 0) {
+  if (habitIds.size > 0 && ownerId) {
     const ph = [...habitIds].map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title, emoji, type FROM habits WHERE id IN (${ph})`).all(...habitIds) as any[];
+    const rows = db.prepare(`SELECT id, title, emoji, type FROM habits WHERE id IN (${ph}) AND user_id = ?`).all(...habitIds, ownerId) as any[];
     for (const r of rows) habitMap[r.id] = r;
   }
 
   const pomodoroMap: Record<string, any> = {};
-  if (pomodoroIds.size > 0) {
+  if (pomodoroIds.size > 0 && ownerId) {
     const ph = [...pomodoroIds].map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, started_at, duration_minutes FROM pomodoro_sessions WHERE id IN (${ph})`).all(...pomodoroIds) as any[];
+    const rows = db.prepare(`SELECT id, started_at, duration_minutes FROM pomodoro_sessions WHERE id IN (${ph}) AND user_id = ?`).all(...pomodoroIds, ownerId) as any[];
     for (const r of rows) pomodoroMap[r.id] = r;
   }
 
@@ -404,6 +409,20 @@ router.put('/:id', (req: Request, res: Response) => {
 
     const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, percent_done, position, bucket_id, repeat_after, repeat_mode, labels, links, sprint_id, assignee_user_id, assignee_name, task_type } = req.body;
 
+    // Validate ownership of referenced entities
+    if (project_id !== undefined && project_id !== null) {
+      const proj = db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, userId);
+      if (!proj) return fail(res, 400, 'Project not found');
+    }
+    if (sprint_id !== undefined && sprint_id !== null) {
+      const sprint = db.prepare('SELECT s.id FROM sprints s JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.user_id = ?').get(sprint_id, userId);
+      if (!sprint) return fail(res, 400, 'Sprint not found');
+    }
+    if (bucket_id !== undefined && bucket_id !== null) {
+      const bucket = db.prepare('SELECT b.id FROM buckets b JOIN projects p ON b.project_id = p.id WHERE b.id = ? AND p.user_id = ?').get(bucket_id, userId);
+      if (!bucket) return fail(res, 400, 'Bucket not found');
+    }
+
     const now = new Date().toISOString();
     db.prepare(`
       UPDATE tasks SET
@@ -572,6 +591,16 @@ router.post('/:id/links', (req: Request, res: Response) => {
     if (!['goal', 'subgoal', 'habit', 'pomodoro'].includes(target_type)) {
       return fail(res, 400, 'target_type must be goal, subgoal, habit, or pomodoro');
     }
+
+    // Validate ownership of link target
+    const targetQueries: Record<string, string> = {
+      goal: 'SELECT id FROM primary_goals WHERE id = ? AND user_id = ?',
+      subgoal: 'SELECT sg.id FROM sub_goals sg JOIN primary_goals pg ON sg.primary_goal_id = pg.id WHERE sg.id = ? AND pg.user_id = ?',
+      habit: 'SELECT id FROM habits WHERE id = ? AND user_id = ?',
+      pomodoro: 'SELECT id FROM pomodoro_sessions WHERE id = ? AND user_id = ?',
+    };
+    const targetExists = db.prepare(targetQueries[target_type]).get(target_id, userId);
+    if (!targetExists) return fail(res, 400, `${target_type} not found`);
 
     db.prepare('INSERT OR IGNORE INTO task_links (task_id, target_type, target_id) VALUES (?, ?, ?)')
       .run(id, target_type, target_id);

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   useTimer,
   MODE_LABELS,
@@ -7,6 +7,8 @@ import {
 } from '../context/TimerContext';
 import type { TimerMode, FocusItem, HistoryEntry } from '../context/TimerContext';
 import { api } from '../api/client';
+import { useUniversalSearch, type SearchResult } from '../hooks/useUniversalSearch';
+import SearchResultList from '../components/SearchResultList';
 
 type HistoryFilter = 'today' | 'week' | 'month' | 'all';
 
@@ -46,111 +48,34 @@ function isThisMonth(date: Date): boolean {
 
 const isBreakMode = (m: TimerMode) => m === 'shortBreak' || m === 'longBreak';
 
-// ── TYPE_META for inline search ─────────────────────────────────
-const TYPE_META: Record<string, { icon: string; label: string }> = {
-  project: { icon: '📁', label: 'Projects' },
-  sprint: { icon: '🔄', label: 'Sprints' },
-  task: { icon: '☐', label: 'Tasks' },
-  goal: { icon: '🎯', label: 'Goals' },
-  subgoal: { icon: '📌', label: 'Subgoals' },
-  habit: { icon: '✅', label: 'Habits' },
-};
-
-interface SearchResult {
-  id: string;
-  title: string;
-  type: string;
-  color?: string;
-  parentInfo?: string;
-  done?: number;
-}
-
 // ── Inline Focus Search for Timer page ──────────────────────────
 function InlineFocusSearch({ onSelect, selectedIds }: { onSelect: (item: FocusItem) => void; selectedIds: Set<string> }) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Record<string, SearchResult[]>>({});
-  const [loading, setLoading] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const { query, results, loading, error, hasResults, handleQueryChange } = useUniversalSearch(250, ['project', 'sprint', 'task', 'goal', 'subgoal', 'habit']);
 
-  const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults({}); return; }
-    setLoading(true);
-    try {
-      const data = await api.universalSearch(q);
-      const mapped: Record<string, SearchResult[]> = {};
-      for (const type of Object.keys(TYPE_META)) {
-        const items = data[type + 's'] || data[type] || [];
-        if (items.length > 0) {
-          mapped[type] = items.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            type,
-            color: item.hex_color || item.project_color,
-            parentInfo: item.project_title || item.goal_title || undefined,
-            done: item.done,
-          }));
-        }
-      }
-      setResults(mapped);
-    } catch {
-      setResults({});
-    }
-    setLoading(false);
-  }, []);
-
-  const handleChange = (value: string) => {
-    setQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(value), 250);
+  const handleSelect = (item: SearchResult) => {
+    onSelect({ id: item.id, type: item.type as FocusItem['type'], title: item.title, color: item.color, parentInfo: item.parentInfo });
   };
-
-  const hasResults = Object.values(results).some(arr => arr.length > 0);
 
   return (
     <div className="mt-4">
       <input
-        ref={inputRef}
         type="text"
         value={query}
-        onChange={e => handleChange(e.target.value)}
+        onChange={e => handleQueryChange(e.target.value)}
         placeholder="Search projects, tasks, goals, habits..."
         className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
       />
       {query && (
         <div className="mt-2 max-h-56 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
-          {loading && <div className="px-3 py-2 text-xs text-gray-400">Searching...</div>}
-          {!loading && !hasResults && <div className="px-3 py-2 text-xs text-gray-400">No results</div>}
-          {!loading && Object.entries(results).map(([type, items]) => (
-            <div key={type}>
-              <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 dark:bg-gray-900/50 sticky top-0">
-                {TYPE_META[type]?.icon} {TYPE_META[type]?.label}
-              </div>
-              {items.map(item => {
-                const isSelected = selectedIds.has(item.id);
-                return (
-                  <div
-                    key={item.id}
-                    className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600'
-                        : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-900 dark:text-gray-100'
-                    }`}
-                    onClick={() => !isSelected && onSelect({ id: item.id, type: item.type as FocusItem['type'], title: item.title, color: item.color, parentInfo: item.parentInfo })}
-                  >
-                    {item.color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />}
-                    <span className={`text-sm flex-1 truncate ${item.done ? 'line-through opacity-50' : ''}`}>{item.title}</span>
-                    {item.parentInfo && <span className="text-[10px] text-gray-400 truncate max-w-[100px]">{item.parentInfo}</span>}
-                    {isSelected && (
-                      <svg className="w-3 h-3 text-blue-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+          <SearchResultList
+            results={results}
+            loading={loading}
+            error={error}
+            query={query}
+            hasResults={hasResults}
+            selectedIds={selectedIds}
+            onSelect={handleSelect}
+          />
         </div>
       )}
     </div>
@@ -159,42 +84,12 @@ function InlineFocusSearch({ onSelect, selectedIds }: { onSelect: (item: FocusIt
 
 // ── Retroactive Link Modal ──────────────────────────────────────
 function RetroLinkModal({ entry, onClose }: { entry: HistoryEntry; onClose: () => void }) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Record<string, SearchResult[]>>({});
-  const [loading, setLoading] = useState(false);
+  const { query, results, loading, hasResults, handleQueryChange } = useUniversalSearch(250, ['project', 'sprint', 'task', 'goal', 'subgoal', 'habit']);
   const [links, setLinks] = useState<FocusItem[]>(entry.links || []);
   const [saving, setSaving] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
-
-  const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults({}); return; }
-    setLoading(true);
-    try {
-      const data = await api.universalSearch(q);
-      const mapped: Record<string, SearchResult[]> = {};
-      for (const type of Object.keys(TYPE_META)) {
-        const items = data[type + 's'] || data[type] || [];
-        if (items.length > 0) {
-          mapped[type] = items.map((item: any) => ({
-            id: item.id, title: item.title, type,
-            color: item.hex_color || item.project_color,
-            parentInfo: item.project_title || item.goal_title || undefined,
-          }));
-        }
-      }
-      setResults(mapped);
-    } catch { setResults({}); }
-    setLoading(false);
-  }, []);
-
-  const handleChange = (value: string) => {
-    setQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(value), 250);
-  };
 
   const addLink = (item: SearchResult) => {
     if (links.some(l => l.id === item.id)) return;
@@ -219,7 +114,6 @@ function RetroLinkModal({ entry, onClose }: { entry: HistoryEntry; onClose: () =
   };
 
   const linkIds = new Set(links.map(l => l.id));
-  const hasResults = Object.values(results).some(arr => arr.length > 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
@@ -247,38 +141,20 @@ function RetroLinkModal({ entry, onClose }: { entry: HistoryEntry; onClose: () =
           ref={inputRef}
           type="text"
           value={query}
-          onChange={e => handleChange(e.target.value)}
+          onChange={e => handleQueryChange(e.target.value)}
           placeholder="Search to link entities..."
           className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
         />
         {query && (
           <div className="mt-2 max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-            {loading && <div className="px-3 py-2 text-xs text-gray-400">Searching...</div>}
-            {!loading && !hasResults && <div className="px-3 py-2 text-xs text-gray-400">No results</div>}
-            {!loading && Object.entries(results).map(([type, items]) => (
-              <div key={type}>
-                <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 dark:bg-gray-900/50 sticky top-0">
-                  {TYPE_META[type]?.icon} {TYPE_META[type]?.label}
-                </div>
-                {items.map(item => {
-                  const isLinked = linkIds.has(item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors text-sm ${
-                        isLinked ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                      }`}
-                      onClick={() => addLink(item)}
-                    >
-                      {item.color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />}
-                      <span className="flex-1 truncate">{item.title}</span>
-                      {item.parentInfo && <span className="text-[10px] text-gray-400 truncate max-w-[80px]">{item.parentInfo}</span>}
-                      {isLinked && <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+            <SearchResultList
+              results={results}
+              loading={loading}
+              query={query}
+              hasResults={hasResults}
+              selectedIds={linkIds}
+              onSelect={addLink}
+            />
           </div>
         )}
 

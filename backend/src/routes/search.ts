@@ -9,6 +9,7 @@ router.get('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
     const q = (req.query.q as string || '').trim();
+    console.log('[search] q=', JSON.stringify(q), 'userId=', userId);
     if (!q) return ok(res, { projects: [], sprints: [], tasks: [], goals: [], subgoals: [], habits: [] });
 
     const term = `%${q}%`;
@@ -42,7 +43,7 @@ router.get('/', (req: Request, res: Response) => {
 
     const subgoals = db.prepare(`
       SELECT sg.id, sg.title, sg.position, pg.id as goal_id, pg.title as goal_title
-      FROM sub_goals sg JOIN primary_goals pg ON sg.goal_id = pg.id
+      FROM sub_goals sg JOIN primary_goals pg ON sg.primary_goal_id = pg.id
       WHERE pg.user_id = ? AND sg.title LIKE ?
       ORDER BY sg.title ASC LIMIT ?
     `).all(userId, term, limit);
@@ -53,8 +54,16 @@ router.get('/', (req: Request, res: Response) => {
       ORDER BY title ASC LIMIT ?
     `).all(userId, term, limit);
 
-    ok(res, { projects, sprints, tasks, goals, subgoals, habits });
+    const contacts = db.prepare(`
+      SELECT id, name as title, company, email, relationship_type FROM contacts
+      WHERE user_id = ? AND (name LIKE ? OR company LIKE ? OR email LIKE ? OR nickname LIKE ?) AND archived = 0
+      ORDER BY name ASC LIMIT ?
+    `).all(userId, term, term, term, term, limit);
+
+    console.log('[search] results:', { projects: projects.length, sprints: sprints.length, tasks: tasks.length, goals: goals.length, subgoals: subgoals.length, habits: habits.length, contacts: contacts.length });
+    ok(res, { projects, sprints, tasks, goals, subgoals, habits, contacts });
   } catch (error) {
+    console.error('[search] error:', error);
     serverError(res, error);
   }
 });
@@ -95,8 +104,8 @@ router.get('/children', (req: Request, res: Response) => {
       // Goal children: subgoals
       children = db.prepare(`
         SELECT sg.id, sg.title, sg.position, 'subgoal' as entity_type
-        FROM sub_goals sg JOIN primary_goals pg ON sg.goal_id = pg.id
-        WHERE sg.goal_id = ? AND pg.user_id = ?
+        FROM sub_goals sg JOIN primary_goals pg ON sg.primary_goal_id = pg.id
+        WHERE sg.primary_goal_id = ? AND pg.user_id = ?
         ORDER BY sg.position ASC
       `).all(id, userId);
     }

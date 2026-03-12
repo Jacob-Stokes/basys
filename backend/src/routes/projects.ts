@@ -29,7 +29,7 @@ router.get('/', (req: Request, res: Response) => {
         COUNT(CASE WHEN t.done = 0 THEN 1 END) as open_tasks,
         COUNT(CASE WHEN t.done = 1 THEN 1 END) as done_tasks
       FROM projects p
-      LEFT JOIN tasks t ON t.project_id = p.id
+      LEFT JOIN tasks t ON t.project_id = p.id AND t.user_id = p.user_id
       WHERE p.user_id = ?${extraWhere}
       GROUP BY p.id
       ORDER BY p.is_favorite DESC, p.position ASC, p.created_at DESC

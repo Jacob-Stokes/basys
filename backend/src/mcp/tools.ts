@@ -791,12 +791,12 @@ export function createMcpServer(): McpServer {
       const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
       if (!existing) throw new Error('Task not found or access denied');
 
-      // Handle repeating tasks
+      // Handle repeating tasks (repeat_after is in seconds)
       if (!existing.done && existing.repeat_after > 0 && existing.due_date) {
-        const dueDate = new Date(existing.due_date);
-        dueDate.setDate(dueDate.getDate() + existing.repeat_after);
+        const baseDate = new Date(existing.due_date);
+        const nextDate = new Date(baseDate.getTime() + existing.repeat_after * 1000);
         db.prepare(`UPDATE tasks SET due_date = ?, updated_at = datetime('now') WHERE id = ?`)
-          .run(dueDate.toISOString().split('T')[0], args.taskId);
+          .run(nextDate.toISOString().slice(0, 19), args.taskId);
         const rescheduled = db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId) as any;
         return asTextContent({ ...rescheduled, rescheduled: true });
       }

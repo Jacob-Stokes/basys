@@ -317,6 +317,24 @@ export default function Sprints() {
     return () => window.removeEventListener('popstate', handler);
   }, [activeWorkspaceTabId, workspaceTabs, goBackInTab]);
 
+  // Listen for cross-page navigation events (e.g. from GlobalSearch)
+  useEffect(() => {
+    const handleOpenProject = (e: Event) => {
+      const { projectId } = (e as CustomEvent).detail;
+      if (projectId) openProjectInTab(projectId);
+    };
+    const handleOpenSprint = (e: Event) => {
+      const { sprintId, projectId } = (e as CustomEvent).detail;
+      if (sprintId && projectId) openSprintInTab(sprintId, projectId);
+    };
+    window.addEventListener('basys:open-project', handleOpenProject);
+    window.addEventListener('basys:open-sprint', handleOpenSprint);
+    return () => {
+      window.removeEventListener('basys:open-project', handleOpenProject);
+      window.removeEventListener('basys:open-sprint', handleOpenSprint);
+    };
+  }, [openProjectInTab, openSprintInTab]);
+
   // Project-level tasks (sprint_id = NULL)
   const [projectTasks, setProjectTasks] = useState<any[]>([]);
   const [newProjectTaskTitle, setNewProjectTaskTitle] = useState('');

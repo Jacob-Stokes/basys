@@ -7,6 +7,7 @@ import { useChatSidebar } from '../context/ChatSidebarContext';
 import { useLeftPanel } from '../context/LeftPanelContext';
 import LogoGrid from './LogoGrid';
 import QuickCreateMenu from './QuickCreateMenu';
+import GlobalSearch from './GlobalSearch';
 
 export default function NavBar() {
   const { t } = useTranslation();
@@ -17,8 +18,21 @@ export default function NavBar() {
   const { toggle: toggleLeftPanel, isOpen: leftPanelOpen } = useLeftPanel();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [username, setUsername] = useState<string>('');
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Global Cmd+K / Ctrl+K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(open => !open);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   useEffect(() => {
     api.getMe().then((u: any) => setUsername(u?.username || '')).catch(() => {});
@@ -104,6 +118,15 @@ export default function NavBar() {
         <div className="hidden sm:flex items-center gap-1 relative" ref={userMenuRef}>
           <QuickCreateMenu />
           <button
+            onClick={() => setSearchOpen(true)}
+            className="p-1.5 rounded transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            title="Search (⌘K)"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+          </button>
+          <button
             onClick={() => window.dispatchEvent(new CustomEvent('basys:show-shortcuts'))}
             className="p-1.5 rounded transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
             title="Keyboard shortcuts (⌥/)"
@@ -180,6 +203,15 @@ export default function NavBar() {
             </svg>
           </button>
           <QuickCreateMenu compact />
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="p-2 rounded transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+            title="Search"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+          </button>
           <button
             onClick={toggleChat}
             className={`p-2 rounded transition-colors ${
@@ -294,6 +326,7 @@ export default function NavBar() {
           </div>
         </div>
       </div>
+      {searchOpen && <GlobalSearch onClose={() => setSearchOpen(false)} />}
     </nav>
   );
 }

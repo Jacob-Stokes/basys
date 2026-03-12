@@ -660,6 +660,15 @@ registerTool('manage_task', (args, userId) => {
     if (!args.taskId) throw new Error('taskId is required');
     const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
     if (!existing) throw new Error('Task not found');
+    // Handle repeating tasks (repeat_after is in seconds)
+    if (!existing.done && existing.repeat_after > 0 && existing.due_date) {
+      const baseDate = new Date(existing.due_date);
+      const nextDate = new Date(baseDate.getTime() + existing.repeat_after * 1000);
+      db.prepare("UPDATE tasks SET due_date = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(nextDate.toISOString().slice(0, 19), args.taskId);
+      const rescheduled = db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId) as any;
+      return { ...rescheduled, rescheduled: true };
+    }
     db.prepare("UPDATE tasks SET done = ?, done_at = ?, updated_at = datetime('now') WHERE id = ?").run(existing.done ? 0 : 1, existing.done ? null : new Date().toISOString(), args.taskId);
     return db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId);
   }

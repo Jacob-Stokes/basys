@@ -112,11 +112,11 @@ function insertPomoLinks(pomoId: string, links: { target_type: string; target_id
   if (subgoalLinks.length > 0) {
     const sgIds = subgoalLinks.map(l => l.target_id);
     const ph = sgIds.map(() => '?').join(',');
-    const sgs = db.prepare(`SELECT id, goal_id FROM sub_goals WHERE id IN (${ph})`).all(...sgIds) as any[];
+    const sgs = db.prepare(`SELECT id, primary_goal_id FROM sub_goals WHERE id IN (${ph})`).all(...sgIds) as any[];
     for (const sg of sgs) {
-      if (sg.goal_id && !existingTypes.has(`goal:${sg.goal_id}`)) {
-        stmt.run(pomoId, 'goal', sg.goal_id);
-        existingTypes.add(`goal:${sg.goal_id}`);
+      if (sg.primary_goal_id && !existingTypes.has(`goal:${sg.primary_goal_id}`)) {
+        stmt.run(pomoId, 'goal', sg.primary_goal_id);
+        existingTypes.add(`goal:${sg.primary_goal_id}`);
       }
     }
   }

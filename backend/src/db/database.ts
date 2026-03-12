@@ -560,6 +560,68 @@ CREATE TABLE IF NOT EXISTS task_checklist_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_checklist_task ON task_checklist_items(task_id);
+
+-- Personal CRM: Contacts
+CREATE TABLE IF NOT EXISTS contacts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  nickname TEXT,
+  company TEXT,
+  job_title TEXT,
+  email TEXT,
+  phone TEXT,
+  website TEXT,
+  location TEXT,
+  birthday TEXT,
+  how_met TEXT,
+  notes TEXT,
+  relationship_type TEXT DEFAULT 'acquaintance',
+  contact_frequency_days INTEGER,
+  last_contacted_at TEXT,
+  is_favorite INTEGER DEFAULT 0,
+  archived INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
+
+-- Contact interaction log
+CREATE TABLE IF NOT EXISTS contact_interactions (
+  id TEXT PRIMARY KEY,
+  contact_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  title TEXT,
+  description TEXT,
+  interaction_date TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_contact_interactions_contact ON contact_interactions(contact_id);
+CREATE INDEX IF NOT EXISTS idx_contact_interactions_user ON contact_interactions(user_id);
+
+-- Contact tags (many-to-many)
+CREATE TABLE IF NOT EXISTS contact_tags (
+  contact_id TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  PRIMARY KEY (contact_id, tag),
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+
+-- Contact custom fields (flexible key-value)
+CREATE TABLE IF NOT EXISTS contact_field_values (
+  id TEXT PRIMARY KEY,
+  contact_id TEXT NOT NULL,
+  field_group TEXT NOT NULL,
+  field_label TEXT NOT NULL,
+  field_value TEXT NOT NULL,
+  position INTEGER DEFAULT 0,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_contact_fields_contact ON contact_field_values(contact_id);
 `;
 
 // Initialize schema
@@ -1055,4 +1117,47 @@ export interface GoogleCalendarEvent {
   last_synced_at: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Contact {
+  id: string;
+  user_id: string;
+  name: string;
+  nickname: string | null;
+  company: string | null;
+  job_title: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  location: string | null;
+  birthday: string | null;
+  how_met: string | null;
+  notes: string | null;
+  relationship_type: string;
+  contact_frequency_days: number | null;
+  last_contacted_at: string | null;
+  is_favorite: number;
+  archived: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactInteraction {
+  id: string;
+  contact_id: string;
+  user_id: string;
+  type: string;
+  title: string | null;
+  description: string | null;
+  interaction_date: string;
+  created_at: string;
+}
+
+export interface ContactFieldValue {
+  id: string;
+  contact_id: string;
+  field_group: string;
+  field_label: string;
+  field_value: string;
+  position: number;
 }
