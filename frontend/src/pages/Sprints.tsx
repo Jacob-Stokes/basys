@@ -637,27 +637,47 @@ export default function Sprints() {
                       >
                         {task.title}
                       </span>
-                      {hasChecklist && !isTaskExpanded && (
-                        <span className={`text-[10px] ${
-                          task.checklist_count.done === task.checklist_count.total ? 'text-green-500' : 'text-gray-400'
-                        }`}>☑ {task.checklist_count.done}/{task.checklist_count.total}</span>
-                      )}
-                      {task.bucket_title && !task.done && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${
-                          task.bucket_title.toLowerCase().includes('progress') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' :
-                          task.bucket_title.toLowerCase().includes('review') ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300' :
-                          task.bucket_title.toLowerCase().includes('done') || task.bucket_title.toLowerCase().includes('complete') ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
-                          'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                        }`}>{task.bucket_title}</span>
-                      )}
-                      {task.priority > 0 && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${
-                          task.priority >= 4 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
-                          task.priority >= 3 ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300' :
-                          task.priority >= 2 ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' :
-                          'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                        }`}>P{task.priority}</span>
-                      )}
+                      {/* Right-aligned pills */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                        {hasChecklist && !isTaskExpanded && (
+                          <span className={`text-[10px] ${
+                            task.checklist_count.done === task.checklist_count.total ? 'text-green-500' : 'text-gray-400'
+                          }`}>☑ {task.checklist_count.done}/{task.checklist_count.total}</span>
+                        )}
+                        {task.task_type && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            task.task_type === 'bug' ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
+                            task.task_type === 'feature' ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
+                            task.task_type === 'story' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300' :
+                            'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                          }`}>{task.task_type}</span>
+                        )}
+                        {task.bucket_title && !task.done && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            task.bucket_title.toLowerCase().includes('progress') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' :
+                            task.bucket_title.toLowerCase().includes('review') ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300' :
+                            task.bucket_title.toLowerCase().includes('done') || task.bucket_title.toLowerCase().includes('complete') ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
+                            'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                          }`}>{task.bucket_title}</span>
+                        )}
+                        {(task.assignee_name || task.assignee_username) && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{task.assignee_username || task.assignee_name}</span>
+                        )}
+                        {task.due_date && !task.done && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                            new Date(task.due_date) < new Date() ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
+                            'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                          }`}>{new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        )}
+                        {task.priority > 0 && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            task.priority >= 4 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
+                            task.priority >= 3 ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300' :
+                            task.priority >= 2 ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' :
+                            'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                          }`}>P{task.priority}</span>
+                        )}
+                      </div>
                     </div>
                     {/* Inline checklist items for sprint task */}
                     {isTaskExpanded && task.checklist_items?.length > 0 && (
@@ -1006,21 +1026,49 @@ export default function Sprints() {
                     >
                       {task.title}
                     </span>
-                    {hasChecklist && !isTaskExpanded && (
-                      <span className={`text-[10px] px-1 rounded ${
-                        task.checklist_count.done === task.checklist_count.total
-                          ? 'bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400'
-                          : 'text-gray-400 dark:text-gray-500'
-                      }`}>☑ {task.checklist_count.done}/{task.checklist_count.total}</span>
-                    )}
-                    {task.priority > 0 && (
-                      <span className={`text-[10px] px-1 rounded font-medium ${
-                        task.priority >= 4 ? 'bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400' :
-                        task.priority >= 3 ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/50 dark:text-orange-400' :
-                        task.priority >= 2 ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/50 dark:text-yellow-400' :
-                        'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                      }`}>P{task.priority}</span>
-                    )}
+                    {/* Right-aligned pills */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                      {hasChecklist && !isTaskExpanded && (
+                        <span className={`text-[10px] px-1 rounded ${
+                          task.checklist_count.done === task.checklist_count.total
+                            ? 'bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400'
+                            : 'text-gray-400 dark:text-gray-500'
+                        }`}>☑ {task.checklist_count.done}/{task.checklist_count.total}</span>
+                      )}
+                      {task.task_type && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          task.task_type === 'bug' ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
+                          task.task_type === 'feature' ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
+                          task.task_type === 'story' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300' :
+                          'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>{task.task_type}</span>
+                      )}
+                      {task.bucket_title && !task.done && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          task.bucket_title.toLowerCase().includes('progress') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' :
+                          task.bucket_title.toLowerCase().includes('review') ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300' :
+                          task.bucket_title.toLowerCase().includes('done') || task.bucket_title.toLowerCase().includes('complete') ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
+                          'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>{task.bucket_title}</span>
+                      )}
+                      {(task.assignee_name || task.assignee_username) && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{task.assignee_username || task.assignee_name}</span>
+                      )}
+                      {task.due_date && !task.done && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                          new Date(task.due_date) < new Date() ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
+                          'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>{new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                      )}
+                      {task.priority > 0 && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          task.priority >= 4 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
+                          task.priority >= 3 ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300' :
+                          task.priority >= 2 ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' :
+                          'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>P{task.priority}</span>
+                      )}
+                    </div>
                     <button
                       onClick={() => handleDeleteProjectTask(task.id)}
                       className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"

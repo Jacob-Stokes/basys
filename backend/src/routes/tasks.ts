@@ -215,10 +215,12 @@ function enrichTask(t: any, labels: any[], links: any[], relations?: any[], chec
 const TASK_SELECT = `
   SELECT t.*,
     p.title as project_title, p.hex_color as project_color,
-    b.title as bucket_title
+    b.title as bucket_title,
+    u.username as assignee_username
   FROM tasks t
   LEFT JOIN projects p ON t.project_id = p.id
   LEFT JOIN buckets b ON t.bucket_id = b.id
+  LEFT JOIN users u ON t.assignee_user_id = u.id
 `;
 
 // GET / — List tasks with filters
