@@ -9,13 +9,14 @@ export default function TimerFooter() {
   const { mode, timeLeft, running, start, stop, reset, switchMode, focusItems, removeFocusItem } = useTimer();
   const [showSearch, setShowSearch] = useState(false);
 
+  const isBreak = mode === 'shortBreak' || mode === 'longBreak';
   const MAX_VISIBLE_PILLS = 2;
   const visibleItems = focusItems.slice(0, MAX_VISIBLE_PILLS);
   const overflowCount = focusItems.length - MAX_VISIBLE_PILLS;
 
   return (
     <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 z-30 relative">
-      {showSearch && <FocusSearch onClose={() => setShowSearch(false)} />}
+      {showSearch && !isBreak && <FocusSearch onClose={() => setShowSearch(false)} />}
 
       <div className="container mx-auto px-4 sm:px-16 flex items-center justify-between h-14 gap-3">
         {/* Left: mode selector */}
@@ -38,43 +39,45 @@ export default function TimerFooter() {
 
         {/* Center: Focus area + countdown */}
         <div className="flex items-center gap-3 flex-1 justify-center min-w-0">
-          {/* Focus button + pills */}
-          <div className="flex items-center gap-1.5 min-w-0">
-            <button
-              onClick={() => setShowSearch(!showSearch)}
-              className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors flex-shrink-0 ${
-                focusItems.length > 0
-                  ? 'border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                  : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
-              title="Focus on..."
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-              </svg>
-              {focusItems.length === 0 && <span>Focus</span>}
-            </button>
-            {visibleItems.map(item => (
-              <span
-                key={item.id}
-                className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 max-w-[120px] flex-shrink-0"
+          {/* Focus button + pills — hidden for breaks */}
+          {!isBreak && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <button
+                onClick={() => setShowSearch(!showSearch)}
+                className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors flex-shrink-0 ${
+                  focusItems.length > 0
+                    ? 'border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+                title="Focus on..."
               >
-                {item.color && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />}
-                <span className="truncate">{item.title}</span>
-                <button
-                  onClick={e => { e.stopPropagation(); removeFocusItem(item.id); }}
-                  className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200 flex-shrink-0"
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                {focusItems.length === 0 && <span>Focus</span>}
+              </button>
+              {visibleItems.map(item => (
+                <span
+                  key={item.id}
+                  className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 max-w-[120px] flex-shrink-0"
                 >
-                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </span>
-            ))}
-            {overflowCount > 0 && (
-              <span className="text-[10px] text-gray-400 flex-shrink-0">+{overflowCount}</span>
-            )}
-          </div>
+                  {item.color && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />}
+                  <span className="truncate">{item.title}</span>
+                  <button
+                    onClick={e => { e.stopPropagation(); removeFocusItem(item.id); }}
+                    className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200 flex-shrink-0"
+                  >
+                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+              {overflowCount > 0 && (
+                <span className="text-[10px] text-gray-400 flex-shrink-0">+{overflowCount}</span>
+              )}
+            </div>
+          )}
 
           {/* Countdown */}
           <div className="flex items-center gap-2 flex-shrink-0">

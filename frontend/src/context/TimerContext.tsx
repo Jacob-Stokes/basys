@@ -152,6 +152,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
             id: l.target_id,
             type: l.target_type,
             title: l.target_title || 'Unknown',
+            color: l.target_color || undefined,
           })),
           synced: true,
         }));
@@ -176,6 +177,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     api.createPomodoro({
       duration_minutes: Math.round(durationSecs / 60),
       links: items.map(f => ({ target_type: f.type, target_id: f.id })),
+    }).then((session: any) => {
+      // Immediately mark as completed
+      if (session?.id) api.completePomodoro(session.id).catch(() => {});
     }).catch((err: unknown) => console.error('Failed to sync pomo:', err));
   }, []);
 

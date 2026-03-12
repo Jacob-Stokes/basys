@@ -35,11 +35,15 @@ function enrichPomoLinks(links: any[]): any[] {
     const rows = db.prepare(`SELECT id, title FROM tasks WHERE id IN (${ph})`).all(...ids) as any[];
     for (const r of rows) titleMap[`task:${r.id}`] = r.title;
   }
+  const colorMap: Record<string, string> = {};
   if (byType.project?.size) {
     const ids = Array.from(byType.project);
     const ph = ids.map(() => '?').join(',');
-    const rows = db.prepare(`SELECT id, title FROM projects WHERE id IN (${ph})`).all(...ids) as any[];
-    for (const r of rows) titleMap[`project:${r.id}`] = r.title;
+    const rows = db.prepare(`SELECT id, title, hex_color FROM projects WHERE id IN (${ph})`).all(...ids) as any[];
+    for (const r of rows) {
+      titleMap[`project:${r.id}`] = r.title;
+      if (r.hex_color) colorMap[`project:${r.id}`] = r.hex_color;
+    }
   }
   if (byType.sprint?.size) {
     const ids = Array.from(byType.sprint);
@@ -69,13 +73,52 @@ function enrichPomoLinks(links: any[]): any[] {
   return links.map(link => ({
     ...link,
     target_title: titleMap[`${link.target_type}:${link.target_id}`] || 'Unknown',
+    target_color: colorMap[`${link.target_type}:${link.target_id}`] || undefined,
   }));
 }
 
 function insertPomoLinks(pomoId: string, links: { target_type: string; target_id: string }[]) {
   const stmt = db.prepare('INSERT OR IGNORE INTO pomodoro_links (pomodoro_id, target_type, target_id) VALUES (?, ?, ?)');
+  const existingTypes = new Set(links.map(l => `${l.target_type}:${l.target_id}`));
+
   for (const link of links) {
     stmt.run(pomoId, link.target_type, link.target_id);
+  }
+
+  // Auto-associate parent entities for tasks
+  const taskLinks = links.filter(l => l.target_type === 'task');
+  if (taskLinks.length > 0) {
+    const taskIds = taskLinks.map(l => l.target_id);
+    const ph = taskIds.map(() => '?').join(',');
+    const tasks = db.prepare(`SELECT id, project_id, sprint_id FROM tasks WHERE id IN (${ph})`).all(...taskIds) as any[];
+    const projectIds = new Set<string>();
+    const sprintIds = new Set<string>();
+    for (const t of tasks) {
+      if (t.project_id && !existingTypes.has(`project:${t.project_id}`)) {
+        projectIds.add(t.project_id);
+        existingTypes.add(`project:${t.project_id}`);
+      }
+      if (t.sprint_id && !existingTypes.has(`sprint:${t.sprint_id}`)) {
+        sprintIds.add(t.sprint_id);
+        existingTypes.add(`sprint:${t.sprint_id}`);
+      }
+    }
+    for (const pid of projectIds) stmt.run(pomoId, 'project', pid);
+    for (const sid of sprintIds) stmt.run(pomoId, 'sprint', sid);
+  }
+
+  // Auto-associate parent goal for subgoals
+  const subgoalLinks = links.filter(l => l.target_type === 'subgoal');
+  if (subgoalLinks.length > 0) {
+    const sgIds = subgoalLinks.map(l => l.target_id);
+    const ph = sgIds.map(() => '?').join(',');
+    const sgs = db.prepare(`SELECT id, goal_id FROM sub_goals WHERE id IN (${ph})`).all(...sgIds) as any[];
+    for (const sg of sgs) {
+      if (sg.goal_id && !existingTypes.has(`goal:${sg.goal_id}`)) {
+        stmt.run(pomoId, 'goal', sg.goal_id);
+        existingTypes.add(`goal:${sg.goal_id}`);
+      }
+    }
   }
 }
 

@@ -889,6 +889,14 @@ export default function Sprints() {
                           }`}>P{task.priority}</span>
                         )}
                       </div>
+                      <StartPomoButton
+                        focusItems={[
+                          { id: task.id, type: 'task', title: task.title, parentInfo: sprint.title },
+                          { id: sprint.id, type: 'sprint', title: sprint.title },
+                          ...(project ? [{ id: project.id, type: 'project' as const, title: project.title, color: project.hex_color }] : []),
+                        ]}
+                        className="opacity-0 group-hover:opacity-100"
+                      />
                     </div>
                     {/* Inline checklist items for sprint task */}
                     {isTaskExpanded && task.checklist_items?.length > 0 && (
@@ -1280,6 +1288,14 @@ export default function Sprints() {
                         }`}>P{task.priority}</span>
                       )}
                     </div>
+                    <StartPomoButton
+                      focusItems={[
+                        { id: task.id, type: 'task', title: task.title, parentInfo: project?.title },
+                        ...(project ? [{ id: project.id, type: 'project' as const, title: project.title, color: project.hex_color }] : []),
+                        ...(task.sprint_id && task.sprint_title ? [{ id: task.sprint_id, type: 'sprint' as const, title: task.sprint_title }] : []),
+                      ]}
+                      className="opacity-0 group-hover:opacity-100"
+                    />
                     <button
                       onClick={() => handleDeleteProjectTask(task.id)}
                       className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
