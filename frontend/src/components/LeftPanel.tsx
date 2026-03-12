@@ -52,7 +52,7 @@ export default function LeftPanel() {
 
   return (
     <div
-      className={`fixed top-14 ${side} bottom-14 w-full sm:w-[300px] bg-white dark:bg-gray-800 ${border} border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
+      className={`fixed top-14 ${side} bottom-0 w-full sm:w-[300px] bg-white dark:bg-gray-800 ${border} border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
         isOpen ? 'translate-x-0' : `${hiddenTranslate} pointer-events-none`
       }`}
     >
