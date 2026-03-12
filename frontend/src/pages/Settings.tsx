@@ -34,7 +34,11 @@ export default function Settings() {
   const [confirmDeleteKeyId, setConfirmDeleteKeyId] = useState<{ id: string; name: string } | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
   const [allowQueryParamAuth, setAllowQueryParamAuth] = useState(true);
-  const [activeTab, setActiveTab] = useState<'account' | 'api' | 'display' | 'data' | 'etiquette' | 'admin'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'api' | 'display' | 'data' | 'etiquette' | 'integrations' | 'admin'>('account');
+  const [obsidianVaultName, setObsidianVaultName] = useState('');
+  const [obsidianEnabled, setObsidianEnabled] = useState(false);
+  const [obsidianNotice, setObsidianNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [savingObsidian, setSavingObsidian] = useState(false);
   const [apiSubTab, setApiSubTab] = useState<'keys' | 'security' | 'docs'>('keys');
   const [displaySubTab, setDisplaySubTab] = useState<'general' | 'goals'>('general');
 
@@ -366,6 +370,8 @@ export default function Settings() {
         setTemperatureUnit(data.data.temperature_unit ?? 'celsius');
         const hidden = data.data.todo_hidden_project_types || 'dev';
         setTodoHiddenTypes(hidden.split(',').map((t: string) => t.trim()).filter(Boolean));
+        setObsidianVaultName(data.data.obsidian_vault_name ?? '');
+        setObsidianEnabled(!!data.data.obsidian_enabled);
       }
     } catch {}
   };
@@ -878,6 +884,16 @@ export default function Settings() {
             }`}
           >
             {t('settings.tabEtiquette')}
+          </button>
+          <button
+            onClick={() => setActiveTab('integrations')}
+            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+              activeTab === 'integrations'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            Integrations
           </button>
           {currentUser?.is_admin && (
             <button
@@ -2286,6 +2302,67 @@ curl -X POST "$API_URL/api/guestbook" \\
           </div>
         )}
       </div>
+
+      {/* Integrations Tab */}
+        {activeTab === 'integrations' && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Obsidian</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              When enabled, basys auto-generates Obsidian markdown documents for new projects and sprints in a shared vault.
+            </p>
+
+            {obsidianNotice && (
+              <div className={`mb-4 px-4 py-2 rounded text-sm ${
+                obsidianNotice.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+              }`}>
+                {obsidianNotice.message}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={obsidianEnabled}
+                  onChange={(e) => setObsidianEnabled(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Obsidian integration</span>
+              </label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vault name</label>
+                <input
+                  type="text"
+                  value={obsidianVaultName}
+                  onChange={(e) => setObsidianVaultName(e.target.value)}
+                  placeholder="basys"
+                  className="w-full max-w-sm px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Must match the vault name in your Obsidian app for deep links to work.</p>
+              </div>
+
+              <button
+                onClick={async () => {
+                  setSavingObsidian(true);
+                  setObsidianNotice(null);
+                  try {
+                    await api.updateProfile({ obsidian_vault_name: obsidianVaultName || null, obsidian_enabled: obsidianEnabled });
+                    setObsidianNotice({ type: 'success', message: 'Obsidian settings saved.' });
+                  } catch {
+                    setObsidianNotice({ type: 'error', message: 'Failed to save settings.' });
+                  } finally {
+                    setSavingObsidian(false);
+                  }
+                }}
+                disabled={savingObsidian}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {savingObsidian ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
 
       {/* Admin Tab */}
         {activeTab === 'admin' && currentUser?.is_admin && (

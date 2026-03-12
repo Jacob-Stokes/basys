@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useChatSidebar } from '../../context/ChatSidebarContext';
+import { usePanelSwap } from '../../hooks/usePanelSwap';
 import { useChatStream, ChatMessage, ToolCall } from '../../hooks/useChatStream';
 import { api } from '../../api/client';
 import ChatMessageList from './ChatMessageList';
@@ -156,11 +157,17 @@ export default function ChatSidebar() {
   }, [setActiveConversationId]);
 
   const activeTitle = conversations.find(c => c.id === activeConversationId)?.title || 'New conversation';
+  const swapped = usePanelSwap();
+
+  // When swapped, chat sidebar lives on the left side
+  const side = swapped ? 'left-0' : 'right-0';
+  const border = swapped ? 'border-r' : 'border-l';
+  const hiddenTranslate = swapped ? '-translate-x-full' : 'translate-x-full';
 
   return (
     <div
-      className={`fixed top-14 right-0 bottom-14 w-full sm:w-[300px] bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
-        isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
+      className={`fixed top-14 ${side} bottom-14 w-full sm:w-[300px] bg-white dark:bg-gray-800 ${border} border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
+        isOpen ? 'translate-x-0' : `${hiddenTranslate} pointer-events-none`
       }`}
     >
       {/* Header */}

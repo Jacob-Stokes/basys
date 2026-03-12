@@ -28,6 +28,7 @@ const GROUPS: ShortcutGroup[] = [
     shortcuts: [
       { keys: `${MOD_LABEL}[`, description: 'Toggle left panel' },
       { keys: `${MOD_LABEL}]`, description: 'Toggle chat sidebar' },
+      { keys: `${MOD_LABEL}\\`, description: 'Swap panel sides' },
     ],
   },
   {

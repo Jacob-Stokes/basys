@@ -3,13 +3,14 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useChatSidebarSafe } from '../context/ChatSidebarContext';
 import { useLeftPanelSafe } from '../context/LeftPanelContext';
 import { useTimer } from '../context/TimerContext';
+import { swapPanels } from './usePanelSwap';
 
 /**
  * Global keyboard shortcuts using Option (Alt) as modifier.
  * All combos are suppressed when focus is inside an input/textarea/contenteditable.
  *
  * Navigation:    ⌥1–8 = tabs, ⌥, = settings
- * Panels:        ⌥[ = left panel, ⌥] = chat sidebar
+ * Panels:        ⌥[ = left panel, ⌥] = chat sidebar, ⌥\ = swap panel sides
  * Quick actions:  ⌥N = quick create, ⌥/ = show shortcuts help
  * Timer (on /timer only): ⌥S = start/stop, ⌥R = reset
  */
@@ -55,9 +56,10 @@ export function useKeyboardShortcuts() {
         case 'Digit7': navigate('/terminal');  break;
         case 'Comma':  navigate('/settings');  break;
 
-        // ── Panels: ⌥[ / ⌥] ─────────────────────────────
+        // ── Panels: ⌥[ / ⌥] / ⌥\ ────────────────────────
         case 'BracketLeft':  leftPanel?.toggle();    break;
         case 'BracketRight': chatSidebar?.toggle();  break;
+        case 'Backslash':    swapPanels();           break;
 
         // ── Quick actions ────────────────────────────────
         case 'KeyN':

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { ok, fail, serverError } from '../utils/response';
+import { generateSprintDoc } from '../utils/vault';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.get('/projects/:projectId/sprints', (req: Request, res: Response) => {
 router.post('/projects/:projectId/sprints', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const projectId = req.params.projectId;
+    const projectId = req.params.projectId as string;
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(projectId, userId);
     if (!project) return fail(res, 404, 'Project not found');
@@ -86,6 +87,19 @@ router.post('/projects/:projectId/sprints', (req: Request, res: Response) => {
     const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)');
     for (const col of columnsToCreate) {
       insertBucket.run(uuidv4(), projectId, id, col.title, col.position, col.is_done_column);
+    }
+
+    // Generate Obsidian vault doc if enabled
+    const obsSettings = db.prepare('SELECT obsidian_vault_name, obsidian_enabled FROM users WHERE id = ?').get(userId) as any;
+    if (obsSettings?.obsidian_enabled && obsSettings.obsidian_vault_name) {
+      const result = generateSprintDoc(
+        { id, title: title.trim(), description: description || null, project_id: projectId, sprint_number: sprintNumber, start_date: start_date || null, end_date: end_date || null },
+        (project as any).title,
+        obsSettings.obsidian_vault_name
+      );
+      if (result) {
+        db.prepare('UPDATE sprints SET obsidian_path = ? WHERE id = ?').run(result.obsidian_path, id);
+      }
     }
 
     const sprint = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id);

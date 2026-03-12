@@ -23,6 +23,7 @@ import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import { ChatSidebarProvider, useChatSidebarSafe } from './context/ChatSidebarContext';
 import { LeftPanelProvider, useLeftPanelSafe } from './context/LeftPanelContext';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { usePanelSwap } from './hooks/usePanelSwap';
 import { api } from './api/client';
 
 // Protected Route Component
@@ -77,13 +78,18 @@ function MainContent() {
   const agentState = sidebar?.agentState ?? 'idle';
   const leftPanel = useLeftPanelSafe();
   const leftPanelOpen = leftPanel?.isOpen ?? false;
+  const swapped = usePanelSwap();
 
   useKeyboardShortcuts();
+
+  // When swapped: left panel is on the right, chat sidebar is on the left
+  const chatMargin = sidebarOpen ? (swapped ? 'sm:ml-[300px]' : 'sm:mr-[300px]') : '';
+  const leftMargin = leftPanelOpen ? (swapped ? 'sm:mr-[300px]' : 'sm:ml-[300px]') : '';
 
   return (
     <>
       <div
-        className={`transition-[margin] duration-200 ease-in-out ${sidebarOpen ? 'sm:mr-[300px]' : ''} ${leftPanelOpen ? 'sm:ml-[300px]' : ''}`}
+        className={`transition-[margin] duration-200 ease-in-out ${chatMargin} ${leftMargin}`}
       >
         <NavBar />
         <div className="pb-14">
@@ -95,7 +101,7 @@ function MainContent() {
       <ChatSidebar />
       <KeyboardShortcutsModal />
       {sidebarOpen && (
-        <div className="fixed top-0 right-0 w-[400px] h-14 hidden sm:flex items-end justify-center pb-0 z-40 pointer-events-none">
+        <div className={`fixed top-0 ${swapped ? 'left-0' : 'right-0'} w-[400px] h-14 hidden sm:flex items-end justify-center pb-0 z-40 pointer-events-none`}>
           <PixelMan state={agentState} />
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useLeftPanel } from '../context/LeftPanelContext';
+import { usePanelSwap } from '../hooks/usePanelSwap';
 import QuickNotes from './QuickNotes';
 
 type PanelTab = 'tab1' | 'tab2' | 'tab3';
@@ -42,11 +43,17 @@ function Tab3() {
 export default function LeftPanel() {
   const { isOpen, close } = useLeftPanel();
   const [activeTab, setActiveTab] = useState<PanelTab>('tab1');
+  const swapped = usePanelSwap();
+
+  // When swapped, this panel lives on the right side
+  const side = swapped ? 'right-0' : 'left-0';
+  const border = swapped ? 'border-l' : 'border-r';
+  const hiddenTranslate = swapped ? 'translate-x-full' : '-translate-x-full';
 
   return (
     <div
-      className={`fixed top-14 left-0 bottom-14 w-full sm:w-[300px] bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
-        isOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+      className={`fixed top-14 ${side} bottom-14 w-full sm:w-[300px] bg-white dark:bg-gray-800 ${border} border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
+        isOpen ? 'translate-x-0' : `${hiddenTranslate} pointer-events-none`
       }`}
     >
       {/* Header — mirrors ChatSidebar style */}

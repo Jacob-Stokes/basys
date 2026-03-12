@@ -6,6 +6,7 @@ import TaskEditModal from '../components/TaskEditModal';
 import StartPomoButton from '../components/StartPomoButton';
 import type { FocusItem } from '../context/TimerContext';
 import { SprintBoardContent } from './SprintBoard';
+import { buildObsidianUri } from '../utils/obsidian';
 
 interface Project {
   id: string;
@@ -19,6 +20,7 @@ interface Project {
   is_favorite: number;
   archived: number;
   parent_project_id: string | null;
+  obsidian_path: string | null;
 }
 
 interface Sprint {
@@ -31,6 +33,7 @@ interface Sprint {
   end_date: string | null;
   open_tasks: number;
   done_tasks: number;
+  obsidian_path: string | null;
 }
 
 interface SprintForm {
@@ -83,6 +86,7 @@ export default function Sprints() {
   const [activeTab, setActiveTab] = useState('home');
   const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [obsidianVaultName, setObsidianVaultName] = useState<string | null>(null);
 
   // View preferences (persisted in localStorage)
   const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>(() =>
@@ -414,6 +418,15 @@ export default function Sprints() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Load Obsidian vault name for deep links
+  useEffect(() => {
+    api.getMe().then((u: any) => {
+      if (u?.obsidian_enabled && u?.obsidian_vault_name) {
+        setObsidianVaultName(u.obsidian_vault_name);
+      }
+    }).catch(() => {});
+  }, []);
 
   // ── Sprint Modal ───────────────────────────────────────────────
 
@@ -768,6 +781,16 @@ export default function Sprints() {
               }}>
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{sprint.title}</span>
+                  {obsidianVaultName && sprint.obsidian_path && (
+                    <a
+                      href={buildObsidianUri(obsidianVaultName, sprint.obsidian_path)}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Open in Obsidian"
+                      className="text-purple-400 hover:text-purple-300 transition-colors shrink-0"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                    </a>
+                  )}
                   {!isSimple && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase flex-shrink-0 ${statusColors[sprint.status] || statusColors.planned}`}>
                       {sprint.status}
@@ -1142,6 +1165,15 @@ export default function Sprints() {
                 ) : null;
               })()}
               <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{project.title}</h1>
+              {obsidianVaultName && project.obsidian_path && (
+                <a
+                  href={buildObsidianUri(obsidianVaultName, project.obsidian_path)}
+                  title="Open in Obsidian"
+                  className="ml-1 text-purple-400 hover:text-purple-300 transition-colors shrink-0"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                </a>
+              )}
             </div>
             {project.type && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase">{project.type}</span>

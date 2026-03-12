@@ -43,6 +43,8 @@ export const api = {
     use_browser_time?: boolean;
     temperature_unit?: string;
     todo_hidden_project_types?: string;
+    obsidian_vault_name?: string | null;
+    obsidian_enabled?: boolean;
   }) => apiRequest<any>('/api/auth/me', { method: 'PATCH', body: JSON.stringify(data) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     apiRequest<any>('/api/auth/password', {

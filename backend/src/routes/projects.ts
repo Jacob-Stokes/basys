@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { ok, fail, serverError } from '../utils/response';
+import { generateProjectDoc } from '../utils/vault';
 
 const router = Router();
 
@@ -59,6 +60,18 @@ router.post('/', (req: Request, res: Response) => {
       INSERT INTO projects (id, user_id, title, description, hex_color, parent_project_id, type, project_mode, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, userId, title.trim(), description || null, hex_color || '', parent_project_id || null, type || 'personal', project_mode || 'simple', now, now);
+
+    // Generate Obsidian vault doc if enabled
+    const obsSettings = db.prepare('SELECT obsidian_vault_name, obsidian_enabled FROM users WHERE id = ?').get(userId) as any;
+    if (obsSettings?.obsidian_enabled && obsSettings.obsidian_vault_name) {
+      const result = generateProjectDoc(
+        { id, title: title.trim(), description: description || null, hex_color: hex_color || '', type: type || 'personal' },
+        obsSettings.obsidian_vault_name
+      );
+      if (result) {
+        db.prepare('UPDATE projects SET obsidian_path = ? WHERE id = ?').run(result.obsidian_path, id);
+      }
+    }
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     ok(res, project, 201);

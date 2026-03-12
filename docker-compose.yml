@@ -9,12 +9,14 @@ services:
       - ./data:/app/data
       - .:/workspace:ro
       - ~/.claude:/root/.claude
+      - vault_data:/vault
     environment:
       - DATABASE_URL=file:/app/data/harada.db
       - NODE_ENV=production
       - PORT=3001
       - SESSION_SECRET=change-me-to-something-secure
       - TERMINAL_SHARED_SECRET=basys-terminal-secret-change-me
+      - VAULT_PATH=/vault
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:4000/api/google-calendar/callback}
@@ -35,3 +37,16 @@ services:
     depends_on:
       - basys
     restart: unless-stopped
+
+  obsidian:
+    build: ./obsidian
+    volumes:
+      - vault_data:/vault
+    environment:
+      - OBSIDIAN_EMAIL=${OBSIDIAN_EMAIL:-}
+      - OBSIDIAN_PASSWORD=${OBSIDIAN_PASSWORD:-}
+      - OBSIDIAN_VAULT_NAME=${OBSIDIAN_VAULT_NAME:-basys}
+    restart: unless-stopped
+
+volumes:
+  vault_data:

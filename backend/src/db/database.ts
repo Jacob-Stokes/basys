@@ -856,6 +856,40 @@ export function initDatabase() {
     console.log('Migration check (projects default_columns):', err);
   }
 
+  // Migration: Add Obsidian integration columns to users
+  try {
+    const userCols8 = db.prepare("PRAGMA table_info(users)").all() as any[];
+    if (!userCols8.some((col: any) => col.name === 'obsidian_vault_name')) {
+      db.exec(`ALTER TABLE users ADD COLUMN obsidian_vault_name TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE users ADD COLUMN obsidian_enabled INTEGER DEFAULT 0`);
+      console.log('Added Obsidian integration columns to users table');
+    }
+  } catch (err) {
+    console.log('Migration check (obsidian users):', err);
+  }
+
+  // Migration: Add obsidian_path to projects
+  try {
+    const projCols4 = db.prepare("PRAGMA table_info(projects)").all() as any[];
+    if (!projCols4.some((col: any) => col.name === 'obsidian_path')) {
+      db.exec(`ALTER TABLE projects ADD COLUMN obsidian_path TEXT DEFAULT NULL`);
+      console.log('Added obsidian_path column to projects table');
+    }
+  } catch (err) {
+    console.log('Migration check (projects obsidian_path):', err);
+  }
+
+  // Migration: Add obsidian_path to sprints
+  try {
+    const sprintCols = db.prepare("PRAGMA table_info(sprints)").all() as any[];
+    if (!sprintCols.some((col: any) => col.name === 'obsidian_path')) {
+      db.exec(`ALTER TABLE sprints ADD COLUMN obsidian_path TEXT DEFAULT NULL`);
+      console.log('Added obsidian_path column to sprints table');
+    }
+  } catch (err) {
+    console.log('Migration check (sprints obsidian_path):', err);
+  }
+
   console.log('Database initialized at:', DB_PATH);
 }
 

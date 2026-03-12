@@ -21,6 +21,8 @@ export function createTestDb() {
       use_browser_time INTEGER DEFAULT 1,
       temperature_unit TEXT DEFAULT 'celsius',
       todo_hidden_project_types TEXT DEFAULT 'dev',
+      obsidian_vault_name TEXT DEFAULT NULL,
+      obsidian_enabled INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -169,6 +171,7 @@ export function createTestDb() {
       type TEXT DEFAULT 'personal',
       project_mode TEXT DEFAULT 'simple',
       default_columns TEXT DEFAULT NULL,
+      obsidian_path TEXT DEFAULT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -246,6 +249,7 @@ export function createTestDb() {
       status TEXT DEFAULT 'planned' CHECK(status IN ('planned', 'active', 'completed')),
       start_date TEXT,
       end_date TEXT,
+      obsidian_path TEXT DEFAULT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
