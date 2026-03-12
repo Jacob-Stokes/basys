@@ -31,7 +31,7 @@
     "@types/node": "^25.3.3",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^9.0.7",
-    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "supertest": "^6.3.3",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
