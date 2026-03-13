@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useDisplaySettings, sortTabs } from '../context/DisplaySettingsContext';
 import Terminal from './Terminal';
 import Settings from './Settings';
+import Wiki from './Wiki';
 
 type AdminTab = 'terminal' | 'settings' | 'wiki';
 
@@ -12,27 +13,11 @@ const tabs: { key: AdminTab; label: string }[] = [
   { key: 'wiki', label: 'Wiki' },
 ];
 
-function WikiPlaceholder() {
-  return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-      <div className="container mx-auto px-4 sm:px-16 pt-16 pb-8">
-        <div className="max-w-md mx-auto text-center">
-          <div className="text-5xl mb-4">📖</div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Wiki</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Documentation for Thesys — how things work, keyboard shortcuts, data model, and more. Coming soon.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function renderTab(tab: AdminTab) {
   switch (tab) {
     case 'terminal': return <Terminal />;
     case 'settings': return <Settings />;
-    case 'wiki': return <WikiPlaceholder />;
+    case 'wiki': return <Wiki />;
   }
 }
 
