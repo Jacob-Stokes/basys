@@ -336,6 +336,7 @@ export default function TaskEditModal({
       data.bucket_id = bucketId || null;
     }
     onSave(data);
+    onClose();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
