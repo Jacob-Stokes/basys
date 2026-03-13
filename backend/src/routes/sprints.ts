@@ -216,7 +216,7 @@ router.delete('/sprints/:id', (req: Request, res: Response) => {
         db.prepare(`DELETE FROM task_labels WHERE task_id IN (${placeholders})`).run(...taskIds);
         db.prepare(`DELETE FROM task_links WHERE task_id IN (${placeholders})`).run(...taskIds);
         db.prepare(`DELETE FROM task_relations WHERE task_id IN (${placeholders}) OR related_task_id IN (${placeholders})`).run(...taskIds, ...taskIds);
-        db.prepare(`DELETE FROM task_checklist WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM task_checklist_items WHERE task_id IN (${placeholders})`).run(...taskIds);
         db.prepare(`DELETE FROM task_comments WHERE task_id IN (${placeholders})`).run(...taskIds);
         db.prepare(`DELETE FROM tasks WHERE sprint_id = ?`).run(id);
       }
