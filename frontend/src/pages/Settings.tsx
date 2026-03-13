@@ -825,7 +825,7 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto px-4 sm:px-16 py-4">
         <header className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">{t('settings.title')}</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
