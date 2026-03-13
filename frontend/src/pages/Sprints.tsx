@@ -737,7 +737,7 @@ export default function Sprints() {
 
   const handleMoveToBucket = async (task: any, sprintId?: string) => {
     if (!task.sprint_buckets || task.sprint_buckets.length === 0) return;
-    const cycleable = task.sprint_buckets.filter((b: any) => !b.is_done_column && b.show_inline && b.emoji);
+    const cycleable = task.sprint_buckets.filter((b: any) => !b.is_done_column && b.show_inline);
     if (cycleable.length <= 1) return;
     const curIdx = cycleable.findIndex((b: any) => b.id === task.bucket_id);
     const nextIdx = (curIdx + 1) % cycleable.length;

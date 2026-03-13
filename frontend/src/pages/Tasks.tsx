@@ -529,7 +529,7 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite, isExpande
                 bucketLabel.toLowerCase().includes('done') || bucketLabel.toLowerCase().includes('complete') ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
                 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400';
               // Cycle through non-done, show_inline buckets only
-              const cycleable = task.sprint_buckets!.filter(b => !b.is_done_column && b.show_inline && b.emoji);
+              const cycleable = task.sprint_buckets!.filter(b => !b.is_done_column && b.show_inline);
               const canCycle = cycleable.length > 1;
               return (
                 <button
@@ -1228,6 +1228,12 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   // Weather + time
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [weatherData, setWeatherData] = useState<{ temp: number; code: number; description: string } | null>(null);
+  const [weatherForecast, setWeatherForecast] = useState<{
+    high: number; low: number;
+    precipitation_probability_max: number;
+    hourly: { time: string; temp: number; code: number; precipitation_probability: number }[];
+  } | null>(null);
+  const [showWeatherExpanded, setShowWeatherExpanded] = useState(false);
 
   // Calendar + Events state
   const calendarCardRef = useRef<HTMLDivElement>(null);
@@ -1531,8 +1537,9 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
   // Weather fetch — on load + every 30 min
   const fetchWeather = async (lat: number, lon: number, unit: string) => {
     try {
+      const tempUnit = unit === 'fahrenheit' ? 'fahrenheit' : 'celsius';
       const resp = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&temperature_unit=${unit === 'fahrenheit' ? 'fahrenheit' : 'celsius'}`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&hourly=temperature_2m,weather_code,precipitation_probability&temperature_unit=${tempUnit}&forecast_days=1&timezone=auto`
       );
       const data = await resp.json();
       if (data.current) {
@@ -1540,6 +1547,20 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
           temp: Math.round(data.current.temperature_2m),
           code: data.current.weather_code,
           description: getWeatherDescription(data.current.weather_code),
+        });
+      }
+      if (data.daily && data.hourly) {
+        const hourly = (data.hourly.time as string[]).map((t: string, i: number) => ({
+          time: t,
+          temp: Math.round(data.hourly.temperature_2m[i]),
+          code: data.hourly.weather_code[i],
+          precipitation_probability: data.hourly.precipitation_probability[i] ?? 0,
+        }));
+        setWeatherForecast({
+          high: Math.round(data.daily.temperature_2m_max[0]),
+          low: Math.round(data.daily.temperature_2m_min[0]),
+          precipitation_probability_max: data.daily.precipitation_probability_max?.[0] ?? 0,
+          hourly,
         });
       }
     } catch (err) {
@@ -2000,19 +2021,87 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
             {/* Time + Weather */}
             <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
               {weatherData && (
-                <div className="flex items-center gap-1.5" title={weatherData.description}>
+                <button
+                  onClick={() => setShowWeatherExpanded(v => !v)}
+                  className="flex items-center gap-1.5 hover:opacity-70 transition-opacity cursor-pointer"
+                  title={`${weatherData.description} — click for details`}
+                >
                   {getWeatherIcon(weatherData.code)}
                   <span className="text-sm font-medium">{weatherData.temp}°{currentUser?.temperature_unit === 'fahrenheit' ? 'F' : 'C'}</span>
-                  {currentUser?.weather_location_name && (
-                    <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">
-                      {currentUser.weather_location_name}
+                  {weatherForecast && (
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 hidden sm:inline">
+                      H:{weatherForecast.high}° L:{weatherForecast.low}°
                     </span>
                   )}
-                </div>
+                  {weatherForecast && weatherForecast.precipitation_probability_max > 0 && (
+                    <span className="text-[10px] text-blue-400 hidden sm:inline">
+                      💧{weatherForecast.precipitation_probability_max}%
+                    </span>
+                  )}
+                  <svg className={`w-3 h-3 text-gray-400 transition-transform ${showWeatherExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               )}
               <span className="text-sm font-medium tabular-nums">{formatTime()}</span>
             </div>
           </div>
+          {/* Expanded weather panel */}
+          {showWeatherExpanded && weatherForecast && (
+            <div className="px-6 pb-4 pt-2 border-t border-gray-100 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    {weatherData?.description}
+                  </span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    High {weatherForecast.high}° · Low {weatherForecast.low}°
+                  </span>
+                  {weatherForecast.precipitation_probability_max > 0 && (
+                    <span className="text-xs text-blue-400">
+                      💧 {weatherForecast.precipitation_probability_max}% chance of rain
+                    </span>
+                  )}
+                </div>
+                {currentUser?.weather_location_name && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    {currentUser.weather_location_name}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-0 overflow-x-auto pb-1 -mx-1">
+                {weatherForecast.hourly
+                  .filter((_, i) => i % 2 === 0)
+                  .map((h, i) => {
+                    const hour = new Date(h.time).getHours();
+                    const now = new Date().getHours();
+                    const isPast = hour < now;
+                    const isCurrent = hour === now || hour === now + 1;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex flex-col items-center px-1.5 py-1 rounded min-w-[3rem] ${
+                          isCurrent ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                        } ${isPast ? 'opacity-40' : ''}`}
+                      >
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                          {hour === 0 ? '12a' : hour < 12 ? `${hour}a` : hour === 12 ? '12p' : `${hour - 12}p`}
+                        </span>
+                        <span className="my-0.5">{getWeatherIcon(h.code)}</span>
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 tabular-nums">
+                          {h.temp}°
+                        </span>
+                        {h.precipitation_probability > 0 && (
+                          <span className="text-[9px] text-blue-400 tabular-nums">
+                            {h.precipitation_probability}%
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-6" />

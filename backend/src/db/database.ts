@@ -924,6 +924,25 @@ export function initDatabase() {
     console.log('Migration check (buckets emoji):', err);
   }
 
+  // Migration: Backfill emoji on existing buckets that have none
+  try {
+    const nullEmojiCount = (db.prepare(`SELECT COUNT(*) as c FROM buckets WHERE emoji IS NULL`).get() as any).c;
+    if (nullEmojiCount > 0) {
+      db.exec(`UPDATE buckets SET emoji = '📋' WHERE emoji IS NULL AND title LIKE '%To Do%' AND is_done_column = 0`);
+      db.exec(`UPDATE buckets SET emoji = '📥' WHERE emoji IS NULL AND title LIKE '%Backlog%' AND is_done_column = 0`);
+      db.exec(`UPDATE buckets SET emoji = '🔨' WHERE emoji IS NULL AND title LIKE '%Progress%' AND is_done_column = 0`);
+      db.exec(`UPDATE buckets SET emoji = '👀' WHERE emoji IS NULL AND title LIKE '%Review%' AND is_done_column = 0`);
+      db.exec(`UPDATE buckets SET emoji = '🎨' WHERE emoji IS NULL AND title LIKE '%Design%' AND is_done_column = 0`);
+      db.exec(`UPDATE buckets SET emoji = '💻' WHERE emoji IS NULL AND title LIKE '%Development%' AND is_done_column = 0`);
+      db.exec(`UPDATE buckets SET emoji = '🧪' WHERE emoji IS NULL AND title LIKE '%Test%' AND is_done_column = 0`);
+      db.exec(`UPDATE buckets SET emoji = '✅' WHERE emoji IS NULL AND is_done_column = 1`);
+      db.exec(`UPDATE buckets SET emoji = '📌' WHERE emoji IS NULL`);
+      console.log(`Backfilled emoji on ${nullEmojiCount} buckets`);
+    }
+  } catch (err) {
+    console.log('Migration check (buckets emoji backfill):', err);
+  }
+
   // ── Triggers: enforce bucket belongs to same project as task ──────────
   // A task's bucket must always belong to the same project. This catches
   // bugs where a raw UPDATE or code path bypasses route-level validation.
