@@ -34,6 +34,7 @@ interface Sprint {
   open_tasks: number;
   done_tasks: number;
   obsidian_path: string | null;
+  archived?: number;
 }
 
 interface SprintForm {
@@ -118,6 +119,12 @@ export default function Sprints() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [projectForm, setProjectForm] = useState<ProjectForm>(emptyProjectForm);
   const [savingProject, setSavingProject] = useState(false);
+
+  // Delete confirmation state
+  const [deleteProjectTarget, setDeleteProjectTarget] = useState<{ id: string; title: string; taskCount: number } | null>(null);
+  const [deleteProjectWithTasks, setDeleteProjectWithTasks] = useState(true);
+  const [deleteSprintTarget, setDeleteSprintTarget] = useState<{ id: string; title: string; taskCount: number; projectId?: string } | null>(null);
+  const [deleteSprintWithTasks, setDeleteSprintWithTasks] = useState(true);
 
   // ── Workspace tabs (multiple project views) ─────────────────
   interface TabHistoryEntry { projectId: string | null; sprintId: string | null; statusFilter: string; }
@@ -550,23 +557,40 @@ export default function Sprints() {
     }
   };
 
-  const handleDeleteSprint = async (sprintId: string, projectId?: string) => {
+  const promptDeleteSprint = (sprintId: string, projectId?: string) => {
     const proj = projectId ? projects.find(p => p.id === projectId) : undefined;
-    const label = modeLabel((proj?.project_mode || 'simple')).toLowerCase();
-    if (!confirm(`Delete this ${label}? Tasks will be moved back to the backlog.`)) return;
+    const sprints = sprintsByProject[projectId || ''] || [];
+    const sprint = sprints.find(s => s.id === sprintId);
+    const taskCount = sprint ? (sprint.open_tasks || 0) + (sprint.done_tasks || 0) : 0;
+    setDeleteSprintWithTasks(true);
+    setDeleteSprintTarget({ id: sprintId, title: sprint?.title || modeLabel(proj?.project_mode || 'simple'), taskCount, projectId });
+  };
+
+  const confirmDeleteSprint = async () => {
+    if (!deleteSprintTarget) return;
     try {
-      await api.deleteSprint(sprintId);
+      await api.deleteSprint(deleteSprintTarget.id, deleteSprintWithTasks);
+      setDeleteSprintTarget(null);
       await loadData();
     } catch (err) {
       setError((err as Error).message);
     }
   };
 
-  const handleDeleteProject = async (projectId: string) => {
-    if (!confirm('Delete this project? Tasks will be unlinked but not deleted.')) return;
+  const promptDeleteProject = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    const sprints = sprintsByProject[projectId] || [];
+    const taskCount = sprints.reduce((sum, s) => sum + (s.open_tasks || 0) + (s.done_tasks || 0), 0);
+    setDeleteProjectWithTasks(true);
+    setDeleteProjectTarget({ id: projectId, title: project?.title || 'Project', taskCount });
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!deleteProjectTarget) return;
     try {
-      await api.deleteProject(projectId);
-      if (selectedProject === projectId) setSelectedProject(null);
+      await api.deleteProject(deleteProjectTarget.id, deleteProjectWithTasks);
+      if (selectedProject === deleteProjectTarget.id) setSelectedProject(null);
+      setDeleteProjectTarget(null);
       await loadData();
     } catch (err) {
       setError((err as Error).message);
@@ -576,6 +600,15 @@ export default function Sprints() {
   const handleToggleArchive = async (projectId: string) => {
     try {
       await api.toggleProjectArchive(projectId);
+      await loadData();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleToggleSprintArchive = async (sprintId: string) => {
+    try {
+      await api.toggleSprintArchive(sprintId);
       await loadData();
     } catch (err) {
       setError((err as Error).message);
@@ -725,7 +758,8 @@ export default function Sprints() {
 
   // Get smart sprint summary for a project
   const getSmartSprints = (projectId: string) => {
-    const sprints = sprintsByProject[projectId] || [];
+    const allSprints = sprintsByProject[projectId] || [];
+    const sprints = showArchived ? allSprints : allSprints.filter(s => !s.archived);
     const active = sprints.find(s => s.status === 'active');
     const completedSorted = sprints.filter(s => s.status === 'completed').sort((a, b) => b.sprint_number - a.sprint_number);
     const plannedSorted = sprints.filter(s => s.status === 'planned').sort((a, b) => a.sprint_number - b.sprint_number);
@@ -837,7 +871,12 @@ export default function Sprints() {
               {!isSimple && sprint.status === 'completed' && (
                 <button onClick={() => handleStatusChange(sprint.id, 'active')} className="text-xs text-green-600 hover:text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded hover:bg-green-50 dark:hover:bg-green-900/20">Reopen</button>
               )}
-              <button onClick={() => handleDeleteSprint(sprint.id, projectId)} className="text-xs text-red-400 hover:text-red-600 p-1" title={`Delete ${modeLabel(project?.project_mode || 'simple').toLowerCase()}`}>
+              <button onClick={() => handleToggleSprintArchive(sprint.id)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1" title={sprint.archived ? 'Unarchive' : 'Archive'}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+                </svg>
+              </button>
+              <button onClick={() => promptDeleteSprint(sprint.id, projectId)} className="text-xs text-red-400 hover:text-red-600 p-1" title={`Delete ${modeLabel(project?.project_mode || 'simple').toLowerCase()}`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                 </svg>
@@ -1187,7 +1226,7 @@ export default function Sprints() {
             >
               {project.archived ? 'Unarchive' : 'Archive'}
             </button>
-            <button onClick={() => handleDeleteProject(project.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">Delete</button>
+            <button onClick={() => promptDeleteProject(project.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">Delete</button>
             {!project.archived && (
               <>
                 <button onClick={() => { setShowProjectTaskInput(true); setTimeout(() => document.getElementById('project-task-input')?.focus(), 50); }} className="text-xs px-2.5 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700">+ Task</button>
@@ -1780,6 +1819,94 @@ export default function Sprints() {
               <button onClick={closeProjectModal} className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 rounded">Cancel</button>
               <button onClick={handleSaveProject} disabled={!projectForm.title.trim() || savingProject} className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 {savingProject ? 'Saving...' : editingProject ? 'Update Project' : 'Create Project'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Project Confirmation Modal */}
+      {deleteProjectTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Delete Project</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Are you sure you want to delete &ldquo;{deleteProjectTarget.title}&rdquo;?
+            </p>
+            {deleteProjectTarget.taskCount > 0 && (
+              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteProjectWithTasks}
+                  onChange={(e) => setDeleteProjectWithTasks(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Also delete all tasks ({deleteProjectTarget.taskCount})
+                </span>
+              </label>
+            )}
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
+              {deleteProjectWithTasks
+                ? 'All tasks, sprints, and related data will be permanently deleted.'
+                : 'Tasks will be kept in your backlog without a project.'}
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteProjectTarget(null)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteProject}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Sprint Confirmation Modal */}
+      {deleteSprintTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Delete {modeLabel(projects.find(p => p.id === deleteSprintTarget.projectId)?.project_mode || 'simple')}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Are you sure you want to delete &ldquo;{deleteSprintTarget.title}&rdquo;?
+            </p>
+            {deleteSprintTarget.taskCount > 0 && (
+              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteSprintWithTasks}
+                  onChange={(e) => setDeleteSprintWithTasks(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Also delete all tasks ({deleteSprintTarget.taskCount})
+                </span>
+              </label>
+            )}
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
+              {deleteSprintWithTasks
+                ? 'All tasks and related data will be permanently deleted.'
+                : 'Tasks will be moved back to the backlog.'}
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteSprintTarget(null)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteSprint}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
+              >
+                Delete
               </button>
             </div>
           </div>

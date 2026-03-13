@@ -194,7 +194,7 @@ router.put('/sprints/:id', (req: Request, res: Response) => {
   }
 });
 
-// DELETE /sprints/:id — Delete sprint (tasks revert to backlog)
+// DELETE /sprints/:id — Delete sprint (?deleteTasks=true deletes tasks, false reverts to backlog)
 router.delete('/sprints/:id', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
@@ -207,14 +207,55 @@ router.delete('/sprints/:id', (req: Request, res: Response) => {
     `).get(id, userId);
     if (!sprint) return fail(res, 404, 'Sprint not found');
 
-    // Revert tasks to backlog
-    db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(id);
-    // Delete sprint columns
+    const deleteTasks = req.query.deleteTasks !== 'false'; // default true
+
+    if (deleteTasks) {
+      const taskIds = (db.prepare('SELECT id FROM tasks WHERE sprint_id = ?').all(id) as any[]).map(t => t.id);
+      if (taskIds.length > 0) {
+        const placeholders = taskIds.map(() => '?').join(',');
+        db.prepare(`DELETE FROM task_labels WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM task_links WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM task_relations WHERE task_id IN (${placeholders}) OR related_task_id IN (${placeholders})`).run(...taskIds, ...taskIds);
+        db.prepare(`DELETE FROM task_checklist WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM task_comments WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM tasks WHERE sprint_id = ?`).run(id);
+      }
+    } else {
+      // Revert tasks to backlog
+      db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(id);
+    }
+
+    // Delete sprint columns then sprint
     db.prepare('DELETE FROM buckets WHERE sprint_id = ?').run(id);
-    // Delete sprint
     db.prepare('DELETE FROM sprints WHERE id = ?').run(id);
 
     ok(res, { deleted: true });
+  } catch (error) {
+    serverError(res, error);
+  }
+});
+
+// PATCH /sprints/:id/archive — Toggle archived (cascades to tasks)
+router.patch('/sprints/:id/archive', (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user!.id;
+    const id = req.params.id;
+
+    const sprint = db.prepare(`
+      SELECT s.* FROM sprints s
+      JOIN projects p ON s.project_id = p.id
+      WHERE s.id = ? AND p.user_id = ?
+    `).get(id, userId) as any;
+    if (!sprint) return fail(res, 404, 'Sprint not found');
+
+    const newArchived = sprint.archived ? 0 : 1;
+    const now = new Date().toISOString();
+    db.prepare('UPDATE sprints SET archived = ?, updated_at = ? WHERE id = ?').run(newArchived, now, id);
+    // Cascade to tasks in this sprint
+    db.prepare('UPDATE tasks SET archived = ? WHERE sprint_id = ?').run(newArchived, id);
+
+    const updated = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id);
+    ok(res, updated);
   } catch (error) {
     serverError(res, error);
   }

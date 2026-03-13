@@ -890,6 +890,28 @@ export function initDatabase() {
     console.log('Migration check (sprints obsidian_path):', err);
   }
 
+  // Migration: Add archived column to sprints
+  try {
+    const sprintCols2 = db.prepare("PRAGMA table_info(sprints)").all() as any[];
+    if (!sprintCols2.some((col: any) => col.name === 'archived')) {
+      db.exec(`ALTER TABLE sprints ADD COLUMN archived INTEGER DEFAULT 0`);
+      console.log('Added archived column to sprints table');
+    }
+  } catch (err) {
+    console.log('Migration check (sprints archived):', err);
+  }
+
+  // Migration: Add archived column to tasks
+  try {
+    const taskCols = db.prepare("PRAGMA table_info(tasks)").all() as any[];
+    if (!taskCols.some((col: any) => col.name === 'archived')) {
+      db.exec(`ALTER TABLE tasks ADD COLUMN archived INTEGER DEFAULT 0`);
+      console.log('Added archived column to tasks table');
+    }
+  } catch (err) {
+    console.log('Migration check (tasks archived):', err);
+  }
+
   console.log('Database initialized at:', DB_PATH);
 }
 

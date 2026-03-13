@@ -173,7 +173,7 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 });
 
-// DELETE /:id — Delete project (tasks get project_id = NULL)
+// DELETE /:id — Delete project (?deleteTasks=true deletes tasks, false unlinks them)
 router.delete('/:id', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
@@ -181,8 +181,28 @@ router.delete('/:id', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, userId);
     if (!existing) return fail(res, 404, 'Project not found');
 
-    // Unlink tasks before deleting
-    db.prepare('UPDATE tasks SET project_id = NULL WHERE project_id = ?').run(id);
+    const deleteTasks = req.query.deleteTasks !== 'false'; // default true
+
+    if (deleteTasks) {
+      // Delete all task-related records then tasks themselves
+      const taskIds = (db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(id) as any[]).map(t => t.id);
+      if (taskIds.length > 0) {
+        const placeholders = taskIds.map(() => '?').join(',');
+        db.prepare(`DELETE FROM task_labels WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM task_links WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM task_relations WHERE task_id IN (${placeholders}) OR related_task_id IN (${placeholders})`).run(...taskIds, ...taskIds);
+        db.prepare(`DELETE FROM task_checklist WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM task_comments WHERE task_id IN (${placeholders})`).run(...taskIds);
+        db.prepare(`DELETE FROM tasks WHERE project_id = ?`).run(id);
+      }
+    } else {
+      // Unlink tasks — keep them in backlog
+      db.prepare('UPDATE tasks SET project_id = NULL, sprint_id = NULL, bucket_id = NULL WHERE project_id = ?').run(id);
+    }
+
+    // Delete buckets, sprints, then project
+    db.prepare('DELETE FROM buckets WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM sprints WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM projects WHERE id = ?').run(id);
     ok(res, { deleted: true });
   } catch (error) {
@@ -208,7 +228,7 @@ router.patch('/:id/favorite', (req: Request, res: Response) => {
   }
 });
 
-// PATCH /:id/archive — Toggle archived
+// PATCH /:id/archive — Toggle archived (cascades to sprints + tasks)
 router.patch('/:id/archive', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
@@ -216,9 +236,13 @@ router.patch('/:id/archive', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, userId) as any;
     if (!existing) return fail(res, 404, 'Project not found');
 
+    const newArchived = existing.archived ? 0 : 1;
     const now = new Date().toISOString();
     db.prepare('UPDATE projects SET archived = ?, updated_at = ? WHERE id = ?')
-      .run(existing.archived ? 0 : 1, now, id);
+      .run(newArchived, now, id);
+    // Cascade to sprints and tasks
+    db.prepare('UPDATE sprints SET archived = ? WHERE project_id = ?').run(newArchived, id);
+    db.prepare('UPDATE tasks SET archived = ? WHERE project_id = ?').run(newArchived, id);
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     ok(res, project);
   } catch (error) {

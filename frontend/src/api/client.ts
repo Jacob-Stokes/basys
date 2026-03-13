@@ -239,8 +239,8 @@ export const api = {
   getProject: (id: string) => apiRequest<any>(`/api/projects/${id}`),
   updateProject: (id: string, data: any) =>
     apiRequest<any>(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteProject: (id: string) =>
-    apiRequest<any>(`/api/projects/${id}`, { method: 'DELETE' }),
+  deleteProject: (id: string, deleteTasks = true) =>
+    apiRequest<any>(`/api/projects/${id}?deleteTasks=${deleteTasks}`, { method: 'DELETE' }),
   toggleProjectFavorite: (id: string) =>
     apiRequest<any>(`/api/projects/${id}/favorite`, { method: 'PATCH' }),
   toggleProjectArchive: (id: string) =>
@@ -255,8 +255,10 @@ export const api = {
     apiRequest<any>(`/api/sprints/${id}`),
   updateSprint: (id: string, data: any) =>
     apiRequest<any>(`/api/sprints/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteSprint: (id: string) =>
-    apiRequest<any>(`/api/sprints/${id}`, { method: 'DELETE' }),
+  deleteSprint: (id: string, deleteTasks = true) =>
+    apiRequest<any>(`/api/sprints/${id}?deleteTasks=${deleteTasks}`, { method: 'DELETE' }),
+  toggleSprintArchive: (id: string) =>
+    apiRequest<any>(`/api/sprints/${id}/archive`, { method: 'PATCH' }),
   updateSprintStatus: (id: string, status: string) =>
     apiRequest<any>(`/api/sprints/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   getSprintColumns: (sprintId: string) =>

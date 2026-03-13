@@ -282,11 +282,16 @@ const TASK_SELECT = `
 router.get('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const { project_id, done, priority, label, due_before, due_after, search, favorite, linked_to, project_type, sprint_id, exclude_dev, exclude_types, include_checklist } = req.query;
+    const { project_id, done, priority, label, due_before, due_after, search, favorite, linked_to, project_type, sprint_id, exclude_dev, exclude_types, include_checklist, include_archived } = req.query;
 
     let sql = TASK_SELECT;
     const conditions: string[] = ['t.user_id = ?'];
     const params: any[] = [userId];
+
+    // Exclude archived tasks by default
+    if (include_archived !== 'true' && include_archived !== '1') {
+      conditions.push('(t.archived IS NULL OR t.archived = 0)');
+    }
 
     if (project_id) {
       conditions.push('t.project_id = ?');
