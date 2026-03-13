@@ -78,7 +78,6 @@ function clockTime(tz: string): string {
 function clockDay(tz: string): string {
   const d = new Date().toLocaleDateString('en-GB', { timeZone: tz, weekday: 'short' });
   // Compare with local day to show +1/-1 indicator
-  const local = new Date().toLocaleDateString('en-GB', { weekday: 'short' });
   const tzDate = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
   const localDate = new Date().toLocaleDateString('en-CA');
   const diff = (new Date(tzDate).getTime() - new Date(localDate).getTime()) / 86400000;
@@ -236,7 +235,6 @@ export default function PanelWidget() {
     setMode(MODES[i]);
   }, []);
 
-  const showWeather = mode === 'weather' && hasLocation;
   const effectiveMode: WidgetMode = (mode === 'weather' && !hasLocation) ? 'clocks' : mode;
 
   return (
