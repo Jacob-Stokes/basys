@@ -39,6 +39,9 @@ RUN npm install --omit=dev && apk del python3 make g++
 # Runtime deps for Claude Agent SDK (spawns subprocess, needs bash/git)
 RUN apk add --no-cache libgcc libstdc++ bash git
 
+# Install Claude CLI (required by Claude Agent SDK to spawn claude subprocess)
+RUN npm install -g @anthropic-ai/claude-code
+
 # Copy compiled TypeScript output
 COPY --from=backend-builder /app/backend/dist ./dist
 

@@ -7,6 +7,7 @@ import Tasks from './pages/Tasks';
 import Phonebook from './pages/Phonebook';
 import Journal from './pages/Journal';
 import Terminal from './pages/Terminal';
+import Admin from './pages/Admin';
 import GoalGrid from './pages/GoalGrid';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
@@ -128,11 +129,12 @@ function App() {
           <Route path="/habits" element={<Navigate to="/life?tab=habits" replace />} />
           <Route path="/phonebook" element={<Phonebook />} />
           <Route path="/journal" element={<Journal />} />
-          <Route path="/terminal" element={<Terminal />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/terminal" element={<Navigate to="/admin" replace />} />
+          <Route path="/settings" element={<Navigate to="/admin?tab=settings" replace />} />
           <Route path="/goal/:goalId" element={<GoalGrid />} />
           <Route path="/sprints" element={<Sprints />} />
           <Route path="/sprints/:sprintId" element={<SprintBoard />} />
-          <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>

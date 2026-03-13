@@ -36,6 +36,13 @@ RUN apk add --no-cache curl libgcc libstdc++ ripgrep bash git \
     && mkdir -p /root/.claude \
     && echo '{"env":{"USE_BUILTIN_RIPGREP":"0"}}' > /root/.claude/settings.json
 
+# Useful terminal utilities
+RUN apk add --no-cache \
+    sudo nano vim emacs htop wget jq zip unzip \
+    openssh-client rsync tree file less \
+    postgresql-client sqlite \
+    iputils bind-tools netcat-openbsd
+
 # Ensure claude is in PATH
 ENV PATH="/root/.local/bin:${PATH}"
 
