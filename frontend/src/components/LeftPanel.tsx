@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLeftPanel } from '../context/LeftPanelContext';
 import { usePanelSwap } from '../hooks/usePanelSwap';
 import QuickNotes from './QuickNotes';
+import PanelWidget from './PanelWidget';
 
 type PanelTab = 'tab1' | 'tab2' | 'tab3';
 
@@ -69,6 +70,9 @@ export default function LeftPanel() {
           </svg>
         </button>
       </div>
+
+      {/* Widget — only when panel is open */}
+      {isOpen && <PanelWidget />}
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 dark:border-gray-700 shrink-0">
