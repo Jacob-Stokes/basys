@@ -20,6 +20,11 @@ code {
     monospace;
 }
 
+/* Default theme: lighten main background from gray-100 to gray-50 */
+.bg-gray-100 {
+  background-color: #f9fafb !important; /* Tailwind gray-50 */
+}
+
 /* Academia theme — Tufte-inspired */
 .academia body,
 .academia #root {
