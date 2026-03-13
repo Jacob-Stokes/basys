@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 export type ViewMode = 'list' | 'compact' | 'full';
 export type CenterLayout = 'single' | 'radial';
 export type CenterBackdrop = 'page' | 'card';
-export type AppThemeName = 'default' | 'academia' | 'academia-2026' | 'academia-mono' | 'arc' | 'custom-theme';
+export type AppThemeName = 'default' | 'default-glass' | 'academia' | 'academia-2026' | 'academia-mono' | 'arc' | 'custom-theme';
 
 export interface PaletteDefinition {
   label: string;
@@ -15,6 +15,11 @@ export const appThemeOptions: Record<AppThemeName, { label: string; description:
   default: {
     label: 'Default',
     description: 'Clean sans-serif, neutral grays',
+    defaultPalette: 'classic',
+  },
+  'default-glass': {
+    label: 'Default Glass',
+    description: 'Apple liquid glass navbar — frosted blur, light refraction, sliding pill',
     defaultPalette: 'classic',
   },
   academia: {

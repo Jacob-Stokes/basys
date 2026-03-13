@@ -808,3 +808,112 @@ code {
   background: rgba(20,23,36,0.88) !important;
   border-color: rgba(55,60,90,0.5) !important;
 }
+
+/* ============================================================
+   DEFAULT GLASS — Apple Liquid Glass navbar
+   ============================================================ */
+
+/* ------ Navbar glass shell ------ */
+.default-glass nav.bg-white,
+.default-glass nav.bg-gray-800,
+.default-glass nav[class*="sticky"] {
+  background: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(50px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(50px) saturate(200%) !important;
+  border-bottom: none !important;
+  box-shadow:
+    0 20px 60px -15px rgba(0, 0, 0, 0.08),
+    0 4px 16px -4px rgba(0, 0, 0, 0.06),
+    inset 0 2px 3px -1px rgba(255, 255, 255, 0.8),
+    inset 0 -2px 4px -1px rgba(255, 255, 255, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Aqua reflection — curved highlight on top half */
+.default-glass nav.bg-white::before,
+.default-glass nav.bg-gray-800::before,
+.default-glass nav[class*="sticky"]::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 50%;
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.0) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ------ Glare layer (mouse-tracking) ------ */
+.default-glass .nav-glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(circle 120px at var(--glare-x, 50%) var(--glare-y, 50%), rgba(255,255,255,0.45) 0%, transparent 100%);
+  mix-blend-mode: overlay;
+}
+.default-glass nav:hover .nav-glare {
+  opacity: 1;
+}
+
+/* ------ Sliding pill for active tab ------ */
+.default-glass .nav-pill {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04), inset 0 1px 1px rgba(255,255,255,0.8);
+  transition: transform 0.5s cubic-bezier(0.34, 1.2, 0.64, 1),
+              width 0.5s cubic-bezier(0.34, 1.2, 0.64, 1);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Make active tab bg transparent so pill shows through */
+.default-glass .nav-tabs-glass a {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+}
+.default-glass .nav-tabs-glass a:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+.default-glass .nav-tabs-glass a.glass-active {
+  background: transparent !important;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+/* ------ Dark mode ------ */
+.default-glass.dark nav.bg-white,
+.default-glass.dark nav.bg-gray-800,
+.default-glass.dark nav[class*="sticky"] {
+  background: rgba(30, 30, 35, 0.45) !important;
+  box-shadow:
+    0 20px 60px -15px rgba(0, 0, 0, 0.5),
+    0 4px 16px -4px rgba(0, 0, 0, 0.3),
+    inset 0 2px 3px -1px rgba(255, 255, 255, 0.2),
+    inset 0 -2px 4px -1px rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+}
+.default-glass.dark nav.bg-white::before,
+.default-glass.dark nav.bg-gray-800::before,
+.default-glass.dark nav[class*="sticky"]::before {
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.0) 100%);
+}
+.default-glass.dark .nav-glare {
+  background: radial-gradient(circle 120px at var(--glare-x, 50%) var(--glare-y, 50%), rgba(255,255,255,0.12) 0%, transparent 100%);
+}
+.default-glass.dark .nav-pill {
+  background: rgba(60, 60, 65, 0.75);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.15);
+}
+.default-glass.dark .nav-tabs-glass a:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+.default-glass.dark .nav-tabs-glass a.glass-active {
+  background: transparent !important;
+  color: #ffffff;
+}

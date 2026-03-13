@@ -7,6 +7,11 @@ const themeColors: Record<AppThemeName, string[]> = {
     'hsl(120, 100%, 75%)', 'hsl(180, 100%, 75%)', 'hsl(210, 100%, 75%)',
     'hsl(240, 100%, 75%)', 'hsl(270, 100%, 75%)', 'hsl(300, 100%, 75%)',
   ],
+  'default-glass': [
+    'hsl(0, 100%, 75%)', 'hsl(30, 100%, 75%)', 'hsl(60, 100%, 75%)',
+    'hsl(120, 100%, 75%)', 'hsl(180, 100%, 75%)', 'hsl(210, 100%, 75%)',
+    'hsl(240, 100%, 75%)', 'hsl(270, 100%, 75%)', 'hsl(300, 100%, 75%)',
+  ],
   academia: [
     '#d4c5a9', '#c8b898', '#bfae8a',
     '#b5a47d', '#c2b48f', '#cabf9e',
@@ -36,6 +41,7 @@ const themeColors: Record<AppThemeName, string[]> = {
 
 const themeStrokes: Record<AppThemeName, string> = {
   default: 'white',
+  'default-glass': 'white',
   academia: '#fffff8',
   'academia-2026': 'rgba(253,250,244,0.6)',
   'academia-mono': '#ffffff',

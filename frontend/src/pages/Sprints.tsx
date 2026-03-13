@@ -80,7 +80,7 @@ type CardSize = typeof CARD_SIZES[number]['id'];
 // ProjectTaskEditModal replaced by shared TaskEditModal component
 
 export default function Sprints() {
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [sprintsByProject, setSprintsByProject] = useState<Record<string, Sprint[]>>({});
   const [loading, setLoading] = useState(true);
@@ -121,10 +121,8 @@ export default function Sprints() {
   const [savingProject, setSavingProject] = useState(false);
 
   // Delete confirmation state
-  const [deleteProjectTarget, setDeleteProjectTarget] = useState<{ id: string; title: string; taskCount: number } | null>(null);
-  const [deleteProjectWithTasks, setDeleteProjectWithTasks] = useState(true);
-  const [deleteSprintTarget, setDeleteSprintTarget] = useState<{ id: string; title: string; taskCount: number; projectId?: string } | null>(null);
-  const [deleteSprintWithTasks, setDeleteSprintWithTasks] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'project' | 'sprint'; id: string; title: string; taskCount: number; projectId?: string } | null>(null);
+  const [deleteWithTasks, setDeleteWithTasks] = useState(true);
 
   // ── Workspace tabs (multiple project views) ─────────────────
   interface TabHistoryEntry { projectId: string | null; sprintId: string | null; statusFilter: string; }
@@ -351,6 +349,8 @@ export default function Sprints() {
   const [newProjectTaskTitle, setNewProjectTaskTitle] = useState('');
   const [showProjectTaskInput, setShowProjectTaskInput] = useState(false);
   const [editingProjectTask, setEditingProjectTask] = useState<any | null>(null);
+  const [showProjectBucketSettings, setShowProjectBucketSettings] = useState(false);
+  const [projectBuckets, setProjectBuckets] = useState<any[]>([]);
 
   // Expand/collapse state
   const [collapsedProjectTasks, setCollapsedProjectTasks] = useState<Set<string>>(new Set());
@@ -425,6 +425,23 @@ export default function Sprints() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Handle deep links from URL search params (e.g. /sprints?project=xxx&sprint=yyy)
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (loading || deepLinkHandled.current) return;
+    const projectId = searchParams.get('project');
+    const sprintId = searchParams.get('sprint');
+    if (sprintId && projectId) {
+      deepLinkHandled.current = true;
+      openSprintInTab(sprintId, projectId);
+      setSearchParams({}, { replace: true });
+    } else if (projectId) {
+      deepLinkHandled.current = true;
+      openProjectInTab(projectId);
+      setSearchParams({}, { replace: true });
+    }
+  }, [loading, searchParams, setSearchParams, openProjectInTab, openSprintInTab]);
 
   // Load Obsidian vault name for deep links
   useEffect(() => {
@@ -562,35 +579,28 @@ export default function Sprints() {
     const sprints = sprintsByProject[projectId || ''] || [];
     const sprint = sprints.find(s => s.id === sprintId);
     const taskCount = sprint ? (sprint.open_tasks || 0) + (sprint.done_tasks || 0) : 0;
-    setDeleteSprintWithTasks(true);
-    setDeleteSprintTarget({ id: sprintId, title: sprint?.title || modeLabel(proj?.project_mode || 'simple'), taskCount, projectId });
-  };
-
-  const confirmDeleteSprint = async () => {
-    if (!deleteSprintTarget) return;
-    try {
-      await api.deleteSprint(deleteSprintTarget.id, deleteSprintWithTasks);
-      setDeleteSprintTarget(null);
-      await loadData();
-    } catch (err) {
-      setError((err as Error).message);
-    }
+    setDeleteWithTasks(true);
+    setDeleteTarget({ type: 'sprint', id: sprintId, title: sprint?.title || modeLabel(proj?.project_mode || 'simple'), taskCount, projectId });
   };
 
   const promptDeleteProject = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
     const sprints = sprintsByProject[projectId] || [];
     const taskCount = sprints.reduce((sum, s) => sum + (s.open_tasks || 0) + (s.done_tasks || 0), 0);
-    setDeleteProjectWithTasks(true);
-    setDeleteProjectTarget({ id: projectId, title: project?.title || 'Project', taskCount });
+    setDeleteWithTasks(true);
+    setDeleteTarget({ type: 'project', id: projectId, title: project?.title || 'Project', taskCount });
   };
 
-  const confirmDeleteProject = async () => {
-    if (!deleteProjectTarget) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.deleteProject(deleteProjectTarget.id, deleteProjectWithTasks);
-      if (selectedProject === deleteProjectTarget.id) setSelectedProject(null);
-      setDeleteProjectTarget(null);
+      if (deleteTarget.type === 'project') {
+        await api.deleteProject(deleteTarget.id, deleteWithTasks);
+        if (selectedProject === deleteTarget.id) setSelectedProject(null);
+      } else {
+        await api.deleteSprint(deleteTarget.id, deleteWithTasks);
+      }
+      setDeleteTarget(null);
       await loadData();
     } catch (err) {
       setError((err as Error).message);
@@ -626,15 +636,59 @@ export default function Sprints() {
     }
   }, []);
 
+  const loadProjectBucketsData = useCallback(async (projectId: string) => {
+    try {
+      const buckets = await api.getProjectBuckets(projectId);
+      setProjectBuckets(buckets.filter((b: any) => !b.sprint_id));
+    } catch {
+      setProjectBuckets([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedProject) {
       loadProjectTasks(selectedProject);
+      loadProjectBucketsData(selectedProject);
       setShowProjectTaskInput(false);
       setNewProjectTaskTitle('');
     } else {
       setProjectTasks([]);
+      setProjectBuckets([]);
+      setShowProjectBucketSettings(false);
     }
-  }, [selectedProject, loadProjectTasks]);
+  }, [selectedProject, loadProjectTasks, loadProjectBucketsData]);
+
+  const handleUpdateProjectBucket = async (bucketId: string, data: any) => {
+    if (!selectedProject) return;
+    try {
+      await api.updateProjectBucket(selectedProject, bucketId, data);
+      await loadProjectBucketsData(selectedProject);
+      await loadProjectTasks(selectedProject);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleDeleteProjectBucket = async (bucketId: string) => {
+    if (!selectedProject) return;
+    try {
+      await api.deleteProjectBucket(selectedProject, bucketId);
+      await loadProjectBucketsData(selectedProject);
+      await loadProjectTasks(selectedProject);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleAddProjectBucket = async () => {
+    if (!selectedProject) return;
+    try {
+      await api.createProjectBucket(selectedProject, { title: 'New Stage' });
+      await loadProjectBucketsData(selectedProject);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
 
   const handleAddProjectTask = async () => {
     if (!newProjectTaskTitle.trim() || !selectedProject) return;
@@ -676,6 +730,26 @@ export default function Sprints() {
       setEditingProjectTask(null);
       if (selectedProject) await loadProjectTasks(selectedProject);
       await loadData();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleMoveToBucket = async (task: any, sprintId?: string) => {
+    if (!task.sprint_buckets || task.sprint_buckets.length === 0) return;
+    const cycleable = task.sprint_buckets.filter((b: any) => !b.is_done_column && b.show_inline && b.emoji);
+    if (cycleable.length <= 1) return;
+    const curIdx = cycleable.findIndex((b: any) => b.id === task.bucket_id);
+    const nextIdx = (curIdx + 1) % cycleable.length;
+    const next = cycleable[nextIdx];
+    if (!next || next.id === task.bucket_id) return;
+    try {
+      await api.updateTask(task.id, { bucket_id: next.id });
+      if (sprintId) {
+        const tasks = await api.getTasks({ sprint_id: sprintId, include_checklist: '1' });
+        setSprintTasks(prev => ({ ...prev, [sprintId]: tasks }));
+      }
+      if (selectedProject) await loadProjectTasks(selectedProject);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -944,12 +1018,14 @@ export default function Sprints() {
                           }`}>{task.task_type}</span>
                         )}
                         {task.bucket_title && !task.done && (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleMoveToBucket(task, sprint.id); }}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium cursor-pointer hover:opacity-80 transition-opacity ${
                             task.bucket_title.toLowerCase().includes('progress') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' :
                             task.bucket_title.toLowerCase().includes('review') ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300' :
                             task.bucket_title.toLowerCase().includes('done') || task.bucket_title.toLowerCase().includes('complete') ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
                             'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                          }`}>{task.bucket_title}</span>
+                          }`} title={`Stage: ${task.bucket_title} (click to cycle)`}>{task.bucket_emoji ? `${task.bucket_emoji} ` : ''}{task.bucket_title}</button>
                         )}
                         {(task.assignee_name || task.assignee_username) && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{task.assignee_username || task.assignee_name}</span>
@@ -1290,9 +1366,80 @@ export default function Sprints() {
         {(projectTasks.length > 0 || showProjectTaskInput) && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden mb-4">
             <div className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Project Tasks</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Project Tasks</h3>
+                <button
+                  onClick={() => setShowProjectBucketSettings(v => !v)}
+                  className={`p-0.5 rounded transition-colors ${showProjectBucketSettings ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                  title="Manage stages"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              </div>
               <span className="text-[10px] text-gray-400">{projectTasks.filter(t => !t.done).length} open · {projectTasks.filter(t => t.done).length} done</span>
             </div>
+            {showProjectBucketSettings && (
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase">Stages</span>
+                  <button onClick={handleAddProjectBucket} className="text-[10px] text-blue-500 hover:text-blue-600 font-medium">+ Add</button>
+                </div>
+                {projectBuckets.map((bucket: any) => (
+                  <div key={bucket.id} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="text"
+                      value={bucket.emoji || ''}
+                      onChange={(e) => handleUpdateProjectBucket(bucket.id, { emoji: e.target.value.slice(0, 4) || null })}
+                      className="w-8 text-center bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-0.5 py-0.5 text-sm"
+                      placeholder="🔹"
+                      title="Emoji"
+                    />
+                    <input
+                      type="text"
+                      defaultValue={bucket.title}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val && val !== bucket.title) handleUpdateProjectBucket(bucket.id, { title: val });
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      className="flex-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-800 dark:text-gray-200"
+                    />
+                    <label className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 cursor-pointer" title="Show inline in task list">
+                      <input
+                        type="checkbox"
+                        checked={!!bucket.show_inline}
+                        onChange={() => handleUpdateProjectBucket(bucket.id, { show_inline: !bucket.show_inline })}
+                        className="w-3 h-3 rounded"
+                      />
+                      inline
+                    </label>
+                    <label className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 cursor-pointer" title="Mark as done column">
+                      <input
+                        type="checkbox"
+                        checked={!!bucket.is_done_column}
+                        onChange={() => handleUpdateProjectBucket(bucket.id, { is_done_column: !bucket.is_done_column })}
+                        className="w-3 h-3 rounded"
+                      />
+                      done
+                    </label>
+                    {!bucket.is_done_column && (
+                      <button
+                        onClick={() => { if (confirm('Delete this stage? Tasks will be unassigned.')) handleDeleteProjectBucket(bucket.id); }}
+                        className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Delete stage"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             {projectTasks.map((task: any) => {
               const hasChecklist = (task.checklist_count?.total || 0) > 0;
               const isTaskExpanded = hasChecklist && !collapsedProjectTasks.has(task.id);
@@ -1352,12 +1499,14 @@ export default function Sprints() {
                         }`}>{task.task_type}</span>
                       )}
                       {task.bucket_title && !task.done && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMoveToBucket(task); }}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium cursor-pointer hover:opacity-80 transition-opacity ${
                           task.bucket_title.toLowerCase().includes('progress') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' :
                           task.bucket_title.toLowerCase().includes('review') ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300' :
                           task.bucket_title.toLowerCase().includes('done') || task.bucket_title.toLowerCase().includes('complete') ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
                           'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                        }`}>{task.bucket_title}</span>
+                        }`} title={`Stage: ${task.bucket_title} (click to cycle)`}>{task.bucket_emoji ? `${task.bucket_emoji} ` : ''}{task.bucket_title}</button>
                       )}
                       {(task.assignee_name || task.assignee_username) && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{task.assignee_username || task.assignee_name}</span>
@@ -1720,8 +1869,10 @@ export default function Sprints() {
       {editingProjectTask && (
         <TaskEditModal
           task={editingProjectTask}
+          columns={editingProjectTask?.sprint_buckets ? editingProjectTask.sprint_buckets.map((b: any) => ({ id: b.id, title: b.title })) : []}
           onSave={(data: any) => { handleSaveProjectTask(data); }}
           onClose={() => setEditingProjectTask(null)}
+          showColumnSelector={!!(editingProjectTask?.sprint_buckets?.length)}
           showRelations
           showDates
           showChecklist
@@ -1825,85 +1976,47 @@ export default function Sprints() {
         </div>
       )}
 
-      {/* Delete Project Confirmation Modal */}
-      {deleteProjectTarget && (
+      {/* Delete Confirmation Modal (project or sprint) */}
+      {deleteTarget && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Delete Project</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              Delete {deleteTarget.type === 'project' ? 'Project' : modeLabel(projects.find(p => p.id === deleteTarget.projectId)?.project_mode || 'simple')}
+            </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Are you sure you want to delete &ldquo;{deleteProjectTarget.title}&rdquo;?
+              Are you sure you want to delete &ldquo;{deleteTarget.title}&rdquo;?
             </p>
-            {deleteProjectTarget.taskCount > 0 && (
+            {deleteTarget.taskCount > 0 && (
               <label className="flex items-center gap-2 mb-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={deleteProjectWithTasks}
-                  onChange={(e) => setDeleteProjectWithTasks(e.target.checked)}
+                  checked={deleteWithTasks}
+                  onChange={(e) => setDeleteWithTasks(e.target.checked)}
                   className="rounded border-gray-300 dark:border-gray-600"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">
-                  Also delete all tasks ({deleteProjectTarget.taskCount})
+                  Also delete all tasks ({deleteTarget.taskCount})
                 </span>
               </label>
             )}
             <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
-              {deleteProjectWithTasks
-                ? 'All tasks, sprints, and related data will be permanently deleted.'
-                : 'Tasks will be kept in your backlog without a project.'}
+              {deleteWithTasks
+                ? deleteTarget.type === 'project'
+                  ? 'All tasks, sprints, and related data will be permanently deleted.'
+                  : 'All tasks and related data will be permanently deleted.'
+                : deleteTarget.type === 'project'
+                  ? 'Tasks will be kept in your backlog without a project.'
+                  : 'Tasks will be moved back to the backlog.'}
             </p>
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setDeleteProjectTarget(null)}
+                onClick={() => setDeleteTarget(null)}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={confirmDeleteProject}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Sprint Confirmation Modal */}
-      {deleteSprintTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Delete {modeLabel(projects.find(p => p.id === deleteSprintTarget.projectId)?.project_mode || 'simple')}</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Are you sure you want to delete &ldquo;{deleteSprintTarget.title}&rdquo;?
-            </p>
-            {deleteSprintTarget.taskCount > 0 && (
-              <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={deleteSprintWithTasks}
-                  onChange={(e) => setDeleteSprintWithTasks(e.target.checked)}
-                  className="rounded border-gray-300 dark:border-gray-600"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  Also delete all tasks ({deleteSprintTarget.taskCount})
-                </span>
-              </label>
-            )}
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
-              {deleteSprintWithTasks
-                ? 'All tasks and related data will be permanently deleted.'
-                : 'Tasks will be moved back to the backlog.'}
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteSprintTarget(null)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDeleteSprint}
+                onClick={confirmDelete}
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
               >
                 Delete

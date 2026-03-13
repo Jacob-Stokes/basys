@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
 import { useModKeySubmit } from '../hooks/useModKeySubmit';
@@ -53,6 +54,15 @@ interface EventItem {
   origin?: 'thesys' | 'google';
 }
 
+interface SprintBucket {
+  id: string;
+  title: string;
+  emoji: string | null;
+  position: number;
+  is_done_column: number;
+  show_inline: number;
+}
+
 interface TaskItem {
   id: string;
   title: string;
@@ -65,7 +75,14 @@ interface TaskItem {
   repeat_after: number;
   repeat_mode: number;
   project_id: string | null;
+  sprint_id: string | null;
+  bucket_id: string | null;
+  bucket_emoji: string | null;
+  bucket_is_done_column: number;
+  sprint_buckets: SprintBucket[] | null;
+  task_type: string | null;
   project: { id: string; title: string; hex_color: string } | null;
+  sprint: { id: string; title: string } | null;
   labels: LabelItem[];
   links: TaskLinkItem[];
   relations: TaskRelationItem[];
@@ -196,7 +213,13 @@ function getWeatherDescription(code: number): string {
 // ── Helpers ────────────────────────────────────────────────────────
 
 function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function toLocalDate(isoStr: string): string {
+  const d = new Date(isoStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // Extract just the YYYY-MM-DD part from a due_date (handles both date-only and datetime strings)
@@ -431,7 +454,7 @@ function QuickAddBar({ value, onChange, onSubmit, placeholder, inputRef }: {
 
 // ── TaskRow ────────────────────────────────────────────────────────
 
-function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite, isExpanded, onToggleExpand, onToggleCheckItem }: {
+function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite, isExpanded, onToggleExpand, onToggleCheckItem, onMoveToBucket }: {
   task: TaskItem;
   onToggle: () => void;
   onEdit: () => void;
@@ -440,7 +463,9 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite, isExpande
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   onToggleCheckItem?: (itemId: string, currentDone: number) => void;
+  onMoveToBucket?: (bucketId: string, isDoneColumn: boolean) => void;
 }) {
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const isOverdue = task.due_date && !task.done && datePart(task.due_date) < todayStr();
   const hasChecklist = (task.checklist_count?.total || 0) > 0;
@@ -495,16 +520,70 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite, isExpande
             {task.repeat_after > 0 && (
               <span className="text-xs text-teal-500 dark:text-teal-400" title="Repeating task">↻</span>
             )}
+            {!task.done && task.sprint_buckets && task.sprint_buckets.length > 0 && task.bucket_id && (() => {
+              const current = task.sprint_buckets!.find(b => b.id === task.bucket_id);
+              if (!current) return null;
+              const bucketLabel = current.title;
+              const pillClass = bucketLabel.toLowerCase().includes('progress') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' :
+                bucketLabel.toLowerCase().includes('review') ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300' :
+                bucketLabel.toLowerCase().includes('done') || bucketLabel.toLowerCase().includes('complete') ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
+                'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400';
+              // Cycle through non-done, show_inline buckets only
+              const cycleable = task.sprint_buckets!.filter(b => !b.is_done_column && b.show_inline && b.emoji);
+              const canCycle = cycleable.length > 1;
+              return (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!canCycle) return;
+                    const curIdx = cycleable.findIndex(b => b.id === task.bucket_id);
+                    const nextIdx = (curIdx + 1) % cycleable.length;
+                    const next = cycleable[nextIdx];
+                    if (next && next.id !== task.bucket_id) {
+                      onMoveToBucket?.(next.id, false);
+                    }
+                  }}
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${canCycle ? 'cursor-pointer hover:opacity-80' : 'cursor-default'} transition-opacity ${pillClass}`}
+                  title={canCycle ? `Stage: ${bucketLabel} (click to cycle)` : `Stage: ${bucketLabel}`}
+                >
+                  {current.emoji ? `${current.emoji} ` : ''}{bucketLabel}
+                </button>
+              );
+            })()}
             {task.project && (
-              <span
-                className="text-xs px-1.5 py-0.5 rounded"
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/sprints?project=${task.project!.id}`);
+                }}
+                className="text-xs px-1.5 py-0.5 rounded border-l-[3px] hover:opacity-80 transition-opacity cursor-pointer"
                 style={{
-                  backgroundColor: task.project.hex_color ? task.project.hex_color + '20' : '#e2e8f020',
+                  backgroundColor: task.project.hex_color ? task.project.hex_color + '15' : '#e2e8f015',
                   color: task.project.hex_color || '#6b7280',
+                  borderLeftColor: task.project.hex_color || '#6b7280',
                 }}
               >
                 {task.project.title}
-              </span>
+              </button>
+            )}
+            {task.sprint && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/sprints?project=${task.project?.id || ''}&sprint=${task.sprint!.id}`);
+                }}
+                className="text-xs px-1.5 py-0.5 rounded border-l-[3px] border-l-indigo-400 dark:border-l-indigo-500 hover:opacity-80 transition-opacity cursor-pointer bg-indigo-50/60 text-indigo-500 dark:bg-indigo-900/20 dark:text-indigo-400"
+              >
+                {task.sprint.title}
+              </button>
+            )}
+            {task.task_type && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                task.task_type === 'bug' ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' :
+                task.task_type === 'feature' ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' :
+                task.task_type === 'story' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300' :
+                'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              }`}>{task.task_type}</span>
             )}
             {task.labels.map(l => <LabelPill key={l.id} label={l} small />)}
             {task.links?.map(link => (
@@ -1113,6 +1192,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
   // Task state
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('home');
+  const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
   const [editingTask, setEditingTask] = useState<TaskItem | null | 'new'>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'task' | 'project' | 'label'; id: string; title: string } | null>(null);
   const [quickAdd, setQuickAdd] = useState('');
@@ -1554,6 +1634,16 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     }
   };
 
+  const handleMoveToBucket = async (taskId: string, bucketId: string, isDoneColumn: boolean) => {
+    try {
+      await api.updateTask(taskId, { bucket_id: bucketId, done: isDoneColumn ? 1 : 0 });
+      loadTasks();
+      loadProjects();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const handleToggleCheckItem = async (taskId: string, itemId: string, currentDone: number) => {
     // Optimistic update
     setTasks(prev => prev.map(t => {
@@ -1651,7 +1741,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
     // For home view, only show open tasks + tasks completed today
     const visibleTasks = taskFilter === 'home'
-      ? tasks.filter(t => !t.done || (t.done && t.done_at && t.done_at.startsWith(today)))
+      ? tasks.filter(t => !t.done || (t.done && t.done_at && toLocalDate(t.done_at) === today))
       : tasks;
 
     // Group tasks by due status, sorted by priority descending within each group
@@ -1660,17 +1750,22 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
     const dueToday = visibleTasks.filter(t => t.due_date && datePart(t.due_date) === today && !t.done).sort(byPriority);
     const upcoming = visibleTasks.filter(t => t.due_date && datePart(t.due_date) > today && !t.done).sort(byPriority);
     const noDue = visibleTasks.filter(t => !t.due_date && !t.done).sort(byPriority);
-    const doneToday = visibleTasks.filter(t => t.done && t.done_at && t.done_at.startsWith(today));
+    const doneToday = visibleTasks.filter(t => t.done && t.done_at && toLocalDate(t.done_at) === today);
     const done = visibleTasks.filter(t => t.done);
 
-    const renderSection = (title: string, items: TaskItem[], className?: string) => {
+    const PAGE_SIZE = 10;
+
+    const renderSection = (title: string, items: TaskItem[], className?: string, paginate?: boolean) => {
       if (items.length === 0) return null;
+      const page = sectionPages[title] || 1;
+      const display = paginate ? items.slice(0, page * PAGE_SIZE) : items;
+      const hasMore = paginate && display.length < items.length;
       return (
         <div className="mb-4">
           <h3 className={`text-xs font-semibold uppercase tracking-wider mb-1 px-3 ${className || 'text-gray-400 dark:text-gray-500'}`}>
             {title} ({items.length})
           </h3>
-          {items.map(t => (
+          {display.map(t => (
             <TaskRow
               key={t.id}
               task={t}
@@ -1681,8 +1776,17 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
               isExpanded={!allChecklistsCollapsed && !collapsedTasks.has(t.id) && (t.checklist_count?.total || 0) > 0}
               onToggleExpand={() => toggleTaskExpand(t.id)}
               onToggleCheckItem={(itemId, done) => handleToggleCheckItem(t.id, itemId, done)}
+              onMoveToBucket={(bucketId, isDone) => handleMoveToBucket(t.id, bucketId, isDone)}
             />
           ))}
+          {hasMore && (
+            <button
+              onClick={() => setSectionPages(prev => ({ ...prev, [title]: page + 1 }))}
+              className="w-full py-2 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              Show more ({items.length - display.length} remaining)
+            </button>
+          )}
         </div>
       );
     };
@@ -1705,7 +1809,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
               {renderSection('Today', dueToday, 'text-blue-500')}
               {renderSection('Upcoming', upcoming)}
               {renderSection('No due date', noDue)}
-              {renderSection('Completed today', doneToday)}
+              {renderSection('Completed today', doneToday, undefined, true)}
             </>
           ) : taskFilter === 'all' || taskFilter === 'open' ? (
             <>
@@ -1713,10 +1817,10 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
               {renderSection('Today', dueToday, 'text-blue-500')}
               {renderSection('Upcoming', upcoming)}
               {renderSection('No due date', noDue)}
-              {taskFilter === 'all' && renderSection('Done', done)}
+              {taskFilter === 'all' && renderSection('Done', done, undefined, true)}
             </>
           ) : taskFilter === 'done' ? (
-            renderSection('Completed', done)
+            renderSection('Completed', done, undefined, true)
           ) : taskFilter === 'favorites' ? (
             tasks.length > 0 ? tasks.map(t => (
               <TaskRow
@@ -1729,6 +1833,7 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
                 isExpanded={!allChecklistsCollapsed && !collapsedTasks.has(t.id) && (t.checklist_count?.total || 0) > 0}
                 onToggleExpand={() => toggleTaskExpand(t.id)}
                 onToggleCheckItem={(itemId, done) => handleToggleCheckItem(t.id, itemId, done)}
+                onMoveToBucket={(bucketId, isDone) => handleMoveToBucket(t.id, bucketId, isDone)}
               />
             )) : null
           ) : null}
@@ -2213,9 +2318,11 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
           task={editingTask === 'new' ? null : editingTask}
           projects={projects.map(p => ({ id: p.id, title: p.title, hex_color: p.hex_color }))}
           labels={labels}
+          columns={editingTask !== 'new' && editingTask?.sprint_buckets ? editingTask.sprint_buckets.map((b: any) => ({ id: b.id, title: b.title })) : []}
           onSave={handleSaveTask}
           onClose={() => setEditingTask(null)}
           showProjectSelector
+          showColumnSelector={!!(editingTask !== 'new' && editingTask?.sprint_buckets?.length)}
           showLabels
           showLinks
           showRelations

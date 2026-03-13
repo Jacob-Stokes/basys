@@ -912,6 +912,50 @@ export function initDatabase() {
     console.log('Migration check (tasks archived):', err);
   }
 
+  // Migration: Add emoji and show_inline columns to buckets
+  try {
+    const bucketCols = db.prepare("PRAGMA table_info(buckets)").all() as any[];
+    if (!bucketCols.some((col: any) => col.name === 'emoji')) {
+      db.exec(`ALTER TABLE buckets ADD COLUMN emoji TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE buckets ADD COLUMN show_inline INTEGER DEFAULT 1`);
+      console.log('Added emoji and show_inline columns to buckets table');
+    }
+  } catch (err) {
+    console.log('Migration check (buckets emoji):', err);
+  }
+
+  // ── Triggers: enforce bucket belongs to same project as task ──────────
+  // A task's bucket must always belong to the same project. This catches
+  // bugs where a raw UPDATE or code path bypasses route-level validation.
+  // Sprint-level scoping (bucket.sprint_id = task.sprint_id) is still
+  // enforced in application code since NULLs make composite FKs impractical.
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_task_bucket_project_insert
+    BEFORE INSERT ON tasks
+    WHEN NEW.bucket_id IS NOT NULL
+    BEGIN
+      SELECT RAISE(ABORT, 'Bucket does not belong to task project')
+      WHERE NOT EXISTS (
+        SELECT 1 FROM buckets
+        WHERE id = NEW.bucket_id
+        AND project_id = NEW.project_id
+      );
+    END
+  `);
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_task_bucket_project_update
+    BEFORE UPDATE OF bucket_id, project_id ON tasks
+    WHEN NEW.bucket_id IS NOT NULL
+    BEGIN
+      SELECT RAISE(ABORT, 'Bucket does not belong to task project')
+      WHERE NOT EXISTS (
+        SELECT 1 FROM buckets
+        WHERE id = NEW.bucket_id
+        AND project_id = NEW.project_id
+      );
+    END
+  `);
+
   console.log('Database initialized at:', DB_PATH);
 }
 

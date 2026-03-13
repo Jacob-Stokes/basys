@@ -3,14 +3,15 @@ import { db } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { ok, fail, serverError } from '../utils/response';
 import { generateSprintDoc } from '../utils/vault';
+import { deleteTasksCascade } from '../utils/taskCascade';
 
 const router = Router();
 
 const DEFAULT_COLUMNS = [
-  { title: 'To Do', position: 0, is_done_column: 0 },
-  { title: 'In Progress', position: 1, is_done_column: 0 },
-  { title: 'Review', position: 2, is_done_column: 0 },
-  { title: 'Done', position: 3, is_done_column: 1 },
+  { title: 'To Do', position: 0, is_done_column: 0, emoji: '📋', show_inline: 1 },
+  { title: 'In Progress', position: 1, is_done_column: 0, emoji: '🔨', show_inline: 1 },
+  { title: 'Review', position: 2, is_done_column: 0, emoji: '👀', show_inline: 1 },
+  { title: 'Done', position: 3, is_done_column: 1, emoji: '✅', show_inline: 1 },
 ];
 
 // GET /projects/:projectId/sprints — List sprints for a project
@@ -80,13 +81,15 @@ router.post('/projects/:projectId/sprints', (req: Request, res: Response) => {
             title: c.title || `Column ${i + 1}`,
             position: c.position ?? i,
             is_done_column: c.is_done_column ?? 0,
+            emoji: c.emoji ?? null,
+            show_inline: c.show_inline ?? 1,
           }));
         }
       } catch { /* ignore parse errors, use defaults */ }
     }
-    const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)');
+    const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column, emoji, show_inline) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     for (const col of columnsToCreate) {
-      insertBucket.run(uuidv4(), projectId, id, col.title, col.position, col.is_done_column);
+      insertBucket.run(uuidv4(), projectId, id, col.title, col.position, col.is_done_column, col.emoji ?? null, col.show_inline ?? 1);
     }
 
     // Generate Obsidian vault doc if enabled
@@ -209,25 +212,18 @@ router.delete('/sprints/:id', (req: Request, res: Response) => {
 
     const deleteTasks = req.query.deleteTasks !== 'false'; // default true
 
-    if (deleteTasks) {
-      const taskIds = (db.prepare('SELECT id FROM tasks WHERE sprint_id = ?').all(id) as any[]).map(t => t.id);
-      if (taskIds.length > 0) {
-        const placeholders = taskIds.map(() => '?').join(',');
-        db.prepare(`DELETE FROM task_labels WHERE task_id IN (${placeholders})`).run(...taskIds);
-        db.prepare(`DELETE FROM task_links WHERE task_id IN (${placeholders})`).run(...taskIds);
-        db.prepare(`DELETE FROM task_relations WHERE task_id IN (${placeholders}) OR related_task_id IN (${placeholders})`).run(...taskIds, ...taskIds);
-        db.prepare(`DELETE FROM task_checklist_items WHERE task_id IN (${placeholders})`).run(...taskIds);
-        db.prepare(`DELETE FROM task_comments WHERE task_id IN (${placeholders})`).run(...taskIds);
-        db.prepare(`DELETE FROM tasks WHERE sprint_id = ?`).run(id);
+    const deleteAll = db.transaction(() => {
+      if (deleteTasks) {
+        const taskIds = (db.prepare('SELECT id FROM tasks WHERE sprint_id = ?').all(id) as any[]).map(t => t.id);
+        deleteTasksCascade(taskIds);
+        if (taskIds.length > 0) db.prepare('DELETE FROM tasks WHERE sprint_id = ?').run(id);
+      } else {
+        db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(id);
       }
-    } else {
-      // Revert tasks to backlog
-      db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(id);
-    }
-
-    // Delete sprint columns then sprint
-    db.prepare('DELETE FROM buckets WHERE sprint_id = ?').run(id);
-    db.prepare('DELETE FROM sprints WHERE id = ?').run(id);
+      db.prepare('DELETE FROM buckets WHERE sprint_id = ?').run(id);
+      db.prepare('DELETE FROM sprints WHERE id = ?').run(id);
+    });
+    deleteAll();
 
     ok(res, { deleted: true });
   } catch (error) {
@@ -250,9 +246,11 @@ router.patch('/sprints/:id/archive', (req: Request, res: Response) => {
 
     const newArchived = sprint.archived ? 0 : 1;
     const now = new Date().toISOString();
-    db.prepare('UPDATE sprints SET archived = ?, updated_at = ? WHERE id = ?').run(newArchived, now, id);
-    // Cascade to tasks in this sprint
-    db.prepare('UPDATE tasks SET archived = ? WHERE sprint_id = ?').run(newArchived, id);
+    const archiveCascade = db.transaction(() => {
+      db.prepare('UPDATE sprints SET archived = ?, updated_at = ? WHERE id = ?').run(newArchived, now, id);
+      db.prepare('UPDATE tasks SET archived = ? WHERE sprint_id = ?').run(newArchived, id);
+    });
+    archiveCascade();
 
     const updated = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id);
     ok(res, updated);
@@ -330,15 +328,15 @@ router.post('/sprints/:id/columns', (req: Request, res: Response) => {
     `).get(id, userId);
     if (!sprint) return fail(res, 404, 'Sprint not found');
 
-    const { title, is_done_column } = req.body;
+    const { title, is_done_column, emoji, show_inline } = req.body;
     if (!title?.trim()) return fail(res, 400, 'Title is required');
 
     const maxPos = db.prepare('SELECT MAX(position) as max FROM buckets WHERE sprint_id = ?').get(id) as any;
     const position = (maxPos?.max ?? 0) + 1;
 
     const bucketId = uuidv4();
-    db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(bucketId, (sprint as any).project_id, id, title.trim(), position, is_done_column ? 1 : 0);
+    db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column, emoji, show_inline) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(bucketId, (sprint as any).project_id, id, title.trim(), position, is_done_column ? 1 : 0, emoji || null, show_inline !== undefined ? (show_inline ? 1 : 0) : 1);
 
     const bucket = db.prepare('SELECT * FROM buckets WHERE id = ?').get(bucketId);
     ok(res, bucket, 201);
@@ -364,9 +362,18 @@ router.put('/sprints/:id/columns/:columnId', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(columnId, id);
     if (!existing) return fail(res, 404, 'Column not found');
 
-    const { title, position, is_done_column } = req.body;
-    db.prepare('UPDATE buckets SET title = COALESCE(?, title), position = COALESCE(?, position), is_done_column = COALESCE(?, is_done_column) WHERE id = ?')
-      .run(title?.trim() || null, position ?? null, is_done_column !== undefined ? (is_done_column ? 1 : 0) : null, columnId);
+    const { title, position, is_done_column, emoji, show_inline } = req.body;
+    const updates: string[] = [];
+    const params: any[] = [];
+    if (title?.trim()) { updates.push('title = ?'); params.push(title.trim()); }
+    if (position !== undefined && position !== null) { updates.push('position = ?'); params.push(position); }
+    if (is_done_column !== undefined) { updates.push('is_done_column = ?'); params.push(is_done_column ? 1 : 0); }
+    if (emoji !== undefined) { updates.push('emoji = ?'); params.push(emoji || null); }
+    if (show_inline !== undefined) { updates.push('show_inline = ?'); params.push(show_inline ? 1 : 0); }
+    if (updates.length > 0) {
+      params.push(columnId);
+      db.prepare(`UPDATE buckets SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    }
 
     const bucket = db.prepare('SELECT * FROM buckets WHERE id = ?').get(columnId);
     ok(res, bucket);

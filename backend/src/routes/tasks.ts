@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { ok, fail, serverError } from '../utils/response';
+import { ensureProjectBuckets } from '../utils/buckets';
 
 const router = Router();
 
@@ -48,11 +49,11 @@ function getOwnedSprint(userId: string, sprintId: string | null | undefined) {
 function getOwnedBucket(userId: string, bucketId: string | null | undefined) {
   if (!bucketId) return null;
   return db.prepare(`
-    SELECT b.id, b.project_id, b.sprint_id
+    SELECT b.id, b.project_id, b.sprint_id, b.is_done_column
     FROM buckets b
     JOIN projects p ON b.project_id = p.id
     WHERE b.id = ? AND p.user_id = ?
-  `).get(bucketId, userId) as { id: string; project_id: string; sprint_id: string | null } | undefined;
+  `).get(bucketId, userId) as { id: string; project_id: string; sprint_id: string | null; is_done_column: number } | undefined;
 }
 
 // Helper: load labels for a set of task IDs (batch query)
@@ -252,16 +253,71 @@ function loadChecklistItems(taskIds: string[]): Record<string, any[]> {
   return map;
 }
 
-function enrichTask(t: any, labels: any[], links: any[], relations?: any[], checklistCount?: { total: number; done: number }, checklistItems?: any[]) {
+function loadSprintBuckets(sprintIds: string[]): Record<string, any[]> {
+  const map: Record<string, any[]> = {};
+  if (sprintIds.length === 0) return map;
+  const unique = [...new Set(sprintIds)];
+  const ph = unique.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT id, sprint_id, title, emoji, position, is_done_column, show_inline FROM buckets WHERE sprint_id IN (${ph}) ORDER BY position ASC`
+  ).all(...unique) as any[];
+  for (const row of rows) {
+    if (!map[row.sprint_id]) map[row.sprint_id] = [];
+    map[row.sprint_id].push({ id: row.id, title: row.title, emoji: row.emoji, position: row.position, is_done_column: row.is_done_column, show_inline: row.show_inline });
+  }
+  return map;
+}
+
+function loadProjectBuckets(projectIds: string[]): Record<string, any[]> {
+  const map: Record<string, any[]> = {};
+  if (projectIds.length === 0) return map;
+  const unique = [...new Set(projectIds)];
+  // Lazily create default buckets for projects that don't have them yet
+  for (const pid of unique) {
+    ensureProjectBuckets(pid);
+  }
+  const ph = unique.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT id, project_id, title, emoji, position, is_done_column, show_inline FROM buckets WHERE project_id IN (${ph}) AND sprint_id IS NULL ORDER BY position ASC`
+  ).all(...unique) as any[];
+  for (const row of rows) {
+    if (!map[row.project_id]) map[row.project_id] = [];
+    map[row.project_id].push({ id: row.id, title: row.title, emoji: row.emoji, position: row.position, is_done_column: row.is_done_column, show_inline: row.show_inline });
+  }
+  return map;
+}
+
+function enrichTask(t: any, labels: any[], links: any[], relations?: any[], checklistCount?: { total: number; done: number }, checklistItems?: any[], sprintBuckets?: any[], projectBuckets?: any[]) {
+  // Use sprint buckets if task is in a sprint, otherwise project-level buckets
+  const buckets = sprintBuckets || projectBuckets || null;
+
+  // Auto-assign bucket_id for project tasks that don't have one yet
+  let effectiveBucketId = t.bucket_id;
+  if (!effectiveBucketId && !t.sprint_id && projectBuckets && projectBuckets.length > 0) {
+    const defaultBucket = t.done
+      ? projectBuckets.find((b: any) => b.is_done_column)
+      : projectBuckets.find((b: any) => !b.is_done_column);
+    if (defaultBucket) {
+      effectiveBucketId = defaultBucket.id;
+      // Persist the assignment
+      db.prepare('UPDATE tasks SET bucket_id = ? WHERE id = ?').run(defaultBucket.id, t.id);
+    }
+  }
+
   return {
     ...t,
+    bucket_id: effectiveBucketId,
     labels,
     links,
     relations: relations || [],
     checklist_count: checklistCount || { total: 0, done: 0 },
     ...(checklistItems !== undefined ? { checklist_items: checklistItems } : {}),
+    sprint_buckets: buckets,
     project: t.project_id ? {
       id: t.project_id, title: t.project_title, hex_color: t.project_color,
+    } : null,
+    sprint: t.sprint_id ? {
+      id: t.sprint_id, title: t.sprint_title,
     } : null,
   };
 }
@@ -270,10 +326,12 @@ function enrichTask(t: any, labels: any[], links: any[], relations?: any[], chec
 const TASK_SELECT = `
   SELECT t.*,
     p.title as project_title, p.hex_color as project_color,
-    b.title as bucket_title,
+    s.title as sprint_title,
+    b.title as bucket_title, b.emoji as bucket_emoji, b.is_done_column as bucket_is_done_column,
     u.username as assignee_username
   FROM tasks t
   LEFT JOIN projects p ON t.project_id = p.id AND p.user_id = t.user_id
+  LEFT JOIN sprints s ON t.sprint_id = s.id
   LEFT JOIN buckets b ON t.bucket_id = b.id
   LEFT JOIN users u ON t.assignee_user_id = u.id
 `;
@@ -368,9 +426,16 @@ router.get('/', (req: Request, res: Response) => {
     const relationsMap = loadTaskRelations(ids);
     const checklistMap = loadChecklistCounts(ids);
     const checklistItemsMap = include_checklist ? loadChecklistItems(ids) : {};
+    const sprintIds = rows.filter(r => r.sprint_id).map(r => r.sprint_id);
+    const sprintBucketsMap = loadSprintBuckets(sprintIds);
+    // Load project-level buckets for tasks without a sprint but with a project
+    const projectIdsForBuckets = rows.filter(r => r.project_id && !r.sprint_id).map(r => r.project_id);
+    const projectBucketsMap = loadProjectBuckets(projectIdsForBuckets);
     const tasks = rows.map(t => enrichTask(
       t, labelsMap[t.id] || [], linksMap[t.id] || [], relationsMap[t.id] || [],
-      checklistMap[t.id], include_checklist ? (checklistItemsMap[t.id] || []) : undefined
+      checklistMap[t.id], include_checklist ? (checklistItemsMap[t.id] || []) : undefined,
+      t.sprint_id ? sprintBucketsMap[t.sprint_id] || [] : undefined,
+      !t.sprint_id && t.project_id ? projectBucketsMap[t.project_id] || [] : undefined
     ));
 
     ok(res, tasks);
@@ -455,7 +520,9 @@ router.post('/', (req: Request, res: Response) => {
     const taskLinks = loadTaskLinks([id]);
     const taskRelations = loadTaskRelations([id]);
     const taskChecklist = loadChecklistCounts([id]);
-    ok(res, enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id]), 201);
+    const newSprintBuckets = task.sprint_id ? loadSprintBuckets([task.sprint_id])[task.sprint_id] || [] : undefined;
+    const newProjectBuckets = !task.sprint_id && task.project_id ? loadProjectBuckets([task.project_id])[task.project_id] || [] : undefined;
+    ok(res, enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, newSprintBuckets, newProjectBuckets), 201);
   } catch (error) {
     serverError(res, error);
   }
@@ -475,8 +542,10 @@ router.get('/:id', (req: Request, res: Response) => {
     const taskRelations = loadTaskRelations([id]);
     const taskChecklist = loadChecklistCounts([id]);
     const comments = db.prepare('SELECT * FROM task_comments WHERE task_id = ? ORDER BY created_at ASC').all(id);
+    const sprintBuckets = task.sprint_id ? loadSprintBuckets([task.sprint_id])[task.sprint_id] || [] : undefined;
+    const projBuckets = !task.sprint_id && task.project_id ? loadProjectBuckets([task.project_id])[task.project_id] || [] : undefined;
 
-    ok(res, { ...enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id]), comments });
+    ok(res, { ...enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, sprintBuckets, projBuckets), comments });
   } catch (error) {
     serverError(res, error);
   }
@@ -490,7 +559,7 @@ router.put('/:id', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(id, userId) as any;
     if (!existing) return fail(res, 404, 'Task not found');
 
-    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, percent_done, position, bucket_id, repeat_after, repeat_mode, labels, links, sprint_id, assignee_user_id, assignee_name, task_type } = req.body;
+    const { title, description, project_id, due_date, start_date, end_date, priority, hex_color, percent_done, position, bucket_id, repeat_after, repeat_mode, labels, links, sprint_id, assignee_user_id, assignee_name, task_type, done } = req.body;
 
     const requestedProjectId = project_id !== undefined ? project_id : existing.project_id;
     const requestedSprintId = sprint_id !== undefined ? sprint_id : existing.sprint_id;
@@ -530,6 +599,15 @@ router.put('/:id', (req: Request, res: Response) => {
     }
 
     const now = new Date().toISOString();
+
+    // Auto-sync done flag when bucket changes
+    let resolvedDone = done !== undefined ? (done ? 1 : 0) : existing.done;
+    if (bucket && bucket.id !== existing.bucket_id) {
+      if (bucket.is_done_column && !resolvedDone) resolvedDone = 1;
+      if (!bucket.is_done_column && resolvedDone) resolvedDone = 0;
+    }
+    const resolvedDoneAt = resolvedDone ? (existing.done ? existing.done_at : now) : null;
+
     db.prepare(`
       UPDATE tasks SET
         title = COALESCE(?, title),
@@ -549,6 +627,8 @@ router.put('/:id', (req: Request, res: Response) => {
         assignee_user_id = ?,
         assignee_name = ?,
         task_type = COALESCE(?, task_type),
+        done = ?,
+        done_at = ?,
         updated_at = ?
       WHERE id = ?
     `).run(
@@ -569,6 +649,7 @@ router.put('/:id', (req: Request, res: Response) => {
       assignee_user_id !== undefined ? assignee_user_id : existing.assignee_user_id,
       assignee_name !== undefined ? assignee_name : existing.assignee_name,
       task_type || null,
+      resolvedDone, resolvedDoneAt,
       now, id
     );
 
@@ -597,7 +678,9 @@ router.put('/:id', (req: Request, res: Response) => {
     const taskLinks = loadTaskLinks([id]);
     const taskRelations = loadTaskRelations([id]);
     const taskChecklist = loadChecklistCounts([id]);
-    ok(res, enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id]));
+    const updatedSprintBuckets = task.sprint_id ? loadSprintBuckets([task.sprint_id])[task.sprint_id] || [] : undefined;
+    const updatedProjectBuckets = !task.sprint_id && task.project_id ? loadProjectBuckets([task.project_id])[task.project_id] || [] : undefined;
+    ok(res, enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, updatedSprintBuckets, updatedProjectBuckets));
   } catch (error) {
     serverError(res, error);
   }
@@ -639,8 +722,28 @@ router.patch('/:id/done', (req: Request, res: Response) => {
       return ok(res, task);
     }
 
-    db.prepare('UPDATE tasks SET done = ?, done_at = ?, updated_at = ? WHERE id = ?')
-      .run(newDone, newDone ? now : null, now, id);
+    // Auto-sync bucket when toggling done — move to done bucket or back to first non-done bucket
+    let newBucketId = existing.bucket_id;
+    // Check sprint-level buckets first, then project-level buckets
+    const bucketQuery = existing.sprint_id
+      ? 'SELECT id, is_done_column, position FROM buckets WHERE sprint_id = ? ORDER BY position ASC'
+      : existing.project_id
+        ? 'SELECT id, is_done_column, position FROM buckets WHERE project_id = ? AND sprint_id IS NULL ORDER BY position ASC'
+        : null;
+    const bucketParam = existing.sprint_id || existing.project_id;
+    if (bucketQuery && bucketParam) {
+      const buckets = db.prepare(bucketQuery).all(bucketParam) as any[];
+      if (newDone) {
+        const doneBucket = buckets.find(b => b.is_done_column);
+        if (doneBucket) newBucketId = doneBucket.id;
+      } else {
+        const firstNonDone = buckets.find(b => !b.is_done_column);
+        if (firstNonDone) newBucketId = firstNonDone.id;
+      }
+    }
+
+    db.prepare('UPDATE tasks SET done = ?, done_at = ?, bucket_id = ?, updated_at = ? WHERE id = ?')
+      .run(newDone, newDone ? now : null, newBucketId, now, id);
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     ok(res, task);

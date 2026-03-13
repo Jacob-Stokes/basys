@@ -16,6 +16,8 @@ interface Column {
   title: string;
   position: number;
   is_done_column: number;
+  emoji: string | null;
+  show_inline: number;
 }
 
 interface Task {
@@ -112,7 +114,7 @@ function TaskCard({ task, onDragStart, onClick }: {
 
 // ── KanbanColumn ───────────────────────────────────────────────────
 
-function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTask, onRenameColumn, onDeleteColumn, onToggleDoneColumn }: {
+function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTask, onRenameColumn, onDeleteColumn, onToggleDoneColumn, onUpdateColumn }: {
   column: Column;
   tasks: Task[];
   onDragStart: (e: React.DragEvent, taskId: string) => void;
@@ -122,6 +124,7 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
   onRenameColumn?: (columnId: string, title: string) => void;
   onDeleteColumn?: (columnId: string) => void;
   onToggleDoneColumn?: (columnId: string, isDone: boolean) => void;
+  onUpdateColumn?: (columnId: string, data: Partial<Column>) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
@@ -129,8 +132,11 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
   const [renaming, setRenaming] = useState(false);
   const [renameTitle, setRenameTitle] = useState(column.title);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingEmoji, setEditingEmoji] = useState(false);
+  const [emojiValue, setEmojiValue] = useState(column.emoji || '');
   const inputRef = useRef<HTMLInputElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
+  const emojiRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (addingTask && inputRef.current) inputRef.current.focus();
@@ -139,6 +145,15 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
   useEffect(() => {
     if (renaming && renameRef.current) { renameRef.current.focus(); renameRef.current.select(); }
   }, [renaming]);
+
+  useEffect(() => {
+    if (editingEmoji && emojiRef.current) { emojiRef.current.focus(); emojiRef.current.select(); }
+  }, [editingEmoji]);
+
+  const handleEmojiSave = () => {
+    onUpdateColumn?.(column.id, { emoji: emojiValue.trim() || null } as any);
+    setEditingEmoji(false);
+  };
 
   const handleSubmit = () => {
     if (newTitle.trim()) {
@@ -183,6 +198,7 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
               onDoubleClick={() => { setRenaming(true); setRenameTitle(column.title); }}
               title="Double-click to rename"
             >
+              {column.emoji && <span className="mr-1">{column.emoji}</span>}
               {column.title}
               {column.is_done_column ? ' ✓' : ''}
             </span>
@@ -217,6 +233,12 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
                   <button onClick={() => { onToggleDoneColumn?.(column.id, !column.is_done_column); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
                     {column.is_done_column ? 'Unmark as Done column' : 'Mark as Done column'}
                   </button>
+                  <button onClick={() => { setEditingEmoji(true); setEmojiValue(column.emoji || ''); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                    {column.emoji ? `Change Emoji (${column.emoji})` : 'Set Emoji'}
+                  </button>
+                  <button onClick={() => { onUpdateColumn?.(column.id, { show_inline: column.show_inline ? 0 : 1 } as any); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                    {column.show_inline ? '✓ Show Inline' : 'Show Inline'}
+                  </button>
                   <button onClick={() => { if (confirm(`Delete column "${column.title}"? Tasks will be unassigned.`)) { onDeleteColumn?.(column.id); } setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
                     Delete Column
                   </button>
@@ -226,6 +248,24 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
           </div>
         </div>
       </div>
+
+      {/* Emoji edit inline */}
+      {editingEmoji && (
+        <div className="px-3 pb-2 flex items-center gap-1">
+          <input
+            ref={emojiRef}
+            type="text"
+            value={emojiValue}
+            onChange={e => setEmojiValue(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleEmojiSave(); if (e.key === 'Escape') setEditingEmoji(false); }}
+            onBlur={handleEmojiSave}
+            placeholder="emoji"
+            className="w-12 text-center text-lg bg-white dark:bg-gray-800 border border-blue-400 rounded px-1 py-0.5 outline-none"
+            maxLength={2}
+          />
+          <span className="text-xs text-gray-400">Enter to save</span>
+        </div>
+      )}
 
       {/* Cards */}
       <div className="px-2 pb-2 flex-1 overflow-y-auto space-y-2 min-h-[100px]">
@@ -298,6 +338,7 @@ function ListSection({ column, tasks, onTaskClick, onToggleTask, onAddTask }: {
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
+          {column.emoji && <span>{column.emoji}</span>}
           <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{column.title}</span>
           <span className="text-xs text-gray-400">{tasks.length}</span>
         </button>
@@ -440,13 +481,17 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
     const prevTasks = [...tasks];
     const prevBacklog = [...backlog];
 
+    // Sync done flag with target column's is_done_column
+    const targetCol = columns.find(c => c.id === columnId);
+    const newDone = targetCol?.is_done_column ? 1 : 0;
+
     if (backlog.find(t => t.id === draggedTaskId)) {
       // Moving from backlog to sprint
       setBacklog(prev => prev.filter(t => t.id !== draggedTaskId));
-      setTasks(prev => [...prev, { ...task, bucket_id: columnId, sprint_id: sprintId } as any]);
+      setTasks(prev => [...prev, { ...task, bucket_id: columnId, sprint_id: sprintId, done: newDone } as any]);
     } else {
       // Moving between columns
-      setTasks(prev => prev.map(t => t.id === draggedTaskId ? { ...t, bucket_id: columnId } : t));
+      setTasks(prev => prev.map(t => t.id === draggedTaskId ? { ...t, bucket_id: columnId, done: newDone } : t));
     }
 
     setDraggedTaskId(null);
@@ -536,6 +581,14 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
     } catch (err) { setError((err as Error).message); }
   };
 
+  const handleUpdateColumn = async (columnId: string, data: Partial<Column>) => {
+    if (!sprintId) return;
+    try {
+      await api.updateSprintColumn(sprintId, columnId, data);
+      await loadSprint();
+    } catch (err) { setError((err as Error).message); }
+  };
+
   const handleAddColumn = async () => {
     if (!sprintId) return;
     const title = prompt('New column name:');
@@ -548,7 +601,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
 
   const handleSaveColumnsAsDefault = async () => {
     if (!sprint) return;
-    const defaultCols = columns.map(c => ({ title: c.title, position: c.position, is_done_column: c.is_done_column }));
+    const defaultCols = columns.map(c => ({ title: c.title, position: c.position, is_done_column: c.is_done_column, emoji: c.emoji, show_inline: c.show_inline }));
     try {
       await api.updateProject(sprint.project_id, { default_columns: defaultCols });
       alert('Columns saved as default for this project. New sprints/sections will use these columns.');
@@ -732,6 +785,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
               onRenameColumn={handleRenameColumn}
               onDeleteColumn={handleDeleteColumn}
               onToggleDoneColumn={handleToggleDoneColumn}
+              onUpdateColumn={handleUpdateColumn}
             />
           ))}
 
@@ -814,7 +868,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
             ))}
             {unassignedTasks.length > 0 && (
               <ListSection
-                column={{ id: '__unassigned', title: (sprint.project_mode || 'simple') === 'simple' ? 'Tasks' : 'Unassigned', position: -1, is_done_column: 0 }}
+                column={{ id: '__unassigned', title: (sprint.project_mode || 'simple') === 'simple' ? 'Tasks' : 'Unassigned', position: -1, is_done_column: 0, emoji: null, show_inline: 0 }}
                 tasks={unassignedTasks}
                 onTaskClick={t => setEditingTask(t)}
                 onToggleTask={handleToggleTask}
@@ -826,7 +880,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
           {/* Backlog in list view */}
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg mx-4 mb-4 overflow-hidden">
             <ListSection
-              column={{ id: '__backlog', title: `Backlog`, position: -2, is_done_column: 0 }}
+              column={{ id: '__backlog', title: `Backlog`, position: -2, is_done_column: 0, emoji: null, show_inline: 0 }}
               tasks={backlog}
               onTaskClick={t => setEditingTask(t)}
               onToggleTask={handleToggleTask}

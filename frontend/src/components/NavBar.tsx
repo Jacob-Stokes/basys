@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api, API_URL } from '../api/client';
@@ -33,6 +33,10 @@ export default function NavBar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [username, setUsername] = useState<string>('');
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const isGlass = displaySettings.appTheme === 'default-glass';
+  const [pillStyle, setPillStyle] = useState<{ transform: string; width: string }>({ transform: 'translateX(0)', width: '0px' });
 
   // Global Cmd+K / Ctrl+K shortcut
   useEffect(() => {
@@ -49,6 +53,37 @@ export default function NavBar() {
   useEffect(() => {
     api.getMe().then((u: any) => setUsername(u?.username || '')).catch(() => {});
   }, []);
+
+  // Glass pill: track active tab position
+  const updatePill = useCallback(() => {
+    if (!isGlass || !tabsRef.current) return;
+    const activeLink = tabsRef.current.querySelector('.glass-active') as HTMLElement;
+    if (activeLink) {
+      setPillStyle({
+        transform: `translateX(${activeLink.offsetLeft}px)`,
+        width: `${activeLink.offsetWidth}px`,
+      });
+    }
+  }, [isGlass, location.pathname]);
+
+  useEffect(() => {
+    if (!isGlass) return;
+    // Small delay to let DOM settle after route change
+    const timer = setTimeout(updatePill, 50);
+    window.addEventListener('resize', updatePill);
+    return () => { clearTimeout(timer); window.removeEventListener('resize', updatePill); };
+  }, [isGlass, updatePill]);
+
+  // Glass glare: track mouse position on nav
+  const handleNavMouseMove = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    if (!isGlass || !navRef.current) return;
+    const rect = navRef.current.getBoundingClientRect();
+    const glare = navRef.current.querySelector('.nav-glare') as HTMLElement;
+    if (glare) {
+      glare.style.setProperty('--glare-x', `${e.clientX - rect.left}px`);
+      glare.style.setProperty('--glare-y', `${e.clientY - rect.top}px`);
+    }
+  }, [isGlass]);
 
   const handleLogout = async () => {
     try {
@@ -69,16 +104,26 @@ export default function NavBar() {
     return location.pathname === path;
   };
 
-  const linkClass = (path: string) =>
-    `px-3 py-1.5 text-sm rounded transition-colors ${
-      isActive(path)
+  const linkClass = (path: string) => {
+    const active = isActive(path);
+    if (isGlass) {
+      return `px-3 py-1.5 text-sm rounded-full transition-colors ${
+        active
+          ? 'glass-active font-medium text-gray-900 dark:text-gray-100'
+          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+      }`;
+    }
+    return `px-3 py-1.5 text-sm rounded transition-colors ${
+      active
         ? 'font-medium text-gray-900 dark:text-gray-100 bg-gray-200 dark:bg-gray-700'
         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
     }`;
+  };
 
   return (
-    <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
-      <div className="container mx-auto px-4 sm:px-16 flex items-center justify-between h-14">
+    <nav ref={navRef} onMouseMove={handleNavMouseMove} className={`bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30${isGlass ? ' relative' : ''}`}>
+      {isGlass && <div className="nav-glare" />}
+      <div className="container mx-auto px-4 sm:px-16 flex items-center justify-between h-14 relative z-[1]">
         {/* Left: Logo + panel toggle (left-panel button normally; chat button when swapped) */}
         <div className="flex items-center gap-1 shrink-0">
           <Link to="/" className="flex items-center">
@@ -116,7 +161,8 @@ export default function NavBar() {
         </div>
 
         {/* Center: nav links (desktop) */}
-        <div className="hidden sm:flex items-center gap-1">
+        <div ref={tabsRef} className={`hidden sm:flex items-center gap-1 relative${isGlass ? ' nav-tabs-glass' : ''}`}>
+          {isGlass && <div className="nav-pill" style={pillStyle} />}
           {sortedNavTabs.map(tab => (
             <Link key={tab.key} to={tab.path} className={linkClass(tab.path)}>
               {tab.label}

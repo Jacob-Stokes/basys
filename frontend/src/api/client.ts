@@ -246,6 +246,16 @@ export const api = {
   toggleProjectArchive: (id: string) =>
     apiRequest<any>(`/api/projects/${id}/archive`, { method: 'PATCH' }),
 
+  // Project Buckets
+  getProjectBuckets: (projectId: string) =>
+    apiRequest<any[]>(`/api/projects/${projectId}/buckets`),
+  updateProjectBucket: (projectId: string, bucketId: string, data: any) =>
+    apiRequest<any>(`/api/projects/${projectId}/buckets/${bucketId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  createProjectBucket: (projectId: string, data: any) =>
+    apiRequest<any>(`/api/projects/${projectId}/buckets`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteProjectBucket: (projectId: string, bucketId: string) =>
+    apiRequest<any>(`/api/projects/${projectId}/buckets/${bucketId}`, { method: 'DELETE' }),
+
   // Sprints
   getSprints: (projectId: string) =>
     apiRequest<any[]>(`/api/projects/${projectId}/sprints`),
