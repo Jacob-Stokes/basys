@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTimer, MODE_LABELS, MODE_COLORS, formatTime } from '../context/TimerContext';
 import type { TimerMode } from '../context/TimerContext';
 import FocusSearch from './FocusSearch';
@@ -19,8 +20,15 @@ export default function TimerFooter() {
       {showSearch && !isBreak && <FocusSearch onClose={() => setShowSearch(false)} />}
 
       <div className="container mx-auto px-4 sm:px-16 flex items-center justify-between h-14 gap-3">
-        {/* Left: mode selector */}
+        {/* Left: tomato link + mode selector */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Link
+            to="/timer"
+            className="text-base leading-none hover:scale-110 transition-transform flex-shrink-0"
+            title="Open Pomodoro"
+          >
+            🍅
+          </Link>
           {MODES.map(m => (
             <button
               key={m}

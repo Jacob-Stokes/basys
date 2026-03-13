@@ -30,9 +30,9 @@ export const DURATIONS: Record<TimerMode, number> = {
 };
 
 export const MODE_LABELS: Record<TimerMode, string> = {
-  pomodoro: 'Pomodoro',
-  shortBreak: 'Short Break',
-  longBreak: 'Long Break',
+  pomodoro: 'Pomo',
+  shortBreak: 'Short',
+  longBreak: 'Long',
 };
 
 export const MODE_COLORS: Record<TimerMode, string> = {
