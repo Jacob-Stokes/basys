@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useDisplaySettings, sortTabs } from '../context/DisplaySettingsContext';
 import Terminal from './Terminal';
 import Settings from './Settings';
 
@@ -39,6 +40,8 @@ export default function Admin() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as AdminTab) || 'terminal';
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
+  const { settings } = useDisplaySettings();
+  const sortedTabs = sortTabs(tabs, settings.tabOrder?.adminTabs ?? [], t => t.key);
 
   const switchTab = (tab: AdminTab) => {
     setActiveTab(tab);
@@ -50,7 +53,7 @@ export default function Admin() {
       {/* Subtab bar */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="container mx-auto px-4 sm:px-16 flex items-center gap-0.5 h-9 overflow-x-auto">
-          {tabs.map(tab => (
+          {sortedTabs.map(tab => (
             <button
               key={tab.key}
               onClick={() => switchTab(tab.key)}

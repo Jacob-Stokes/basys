@@ -69,6 +69,25 @@ export const builtInPalettes: Record<string, PaletteDefinition> = {
 
 export const DEFAULT_FALLBACK_COLOR = '#22c55e';
 
+export interface TabOrder {
+  navbar: string[];
+  lifeTabs: string[];
+  adminTabs: string[];
+  panelTabs: string[];
+}
+
+export const DEFAULT_TAB_ORDER: TabOrder = {
+  navbar: ['todo', 'sprints', 'life', 'journal', 'phonebook', 'admin'],
+  lifeTabs: ['goals', 'habits', 'recipes', 'bookshelf'],
+  adminTabs: ['terminal', 'settings', 'wiki'],
+  panelTabs: ['tab1', 'tab2', 'tab3'],
+};
+
+export function sortTabs<T>(defs: T[], order: string[], keyFn: (t: T) => string): T[] {
+  const idx = new Map(order.map((k, i) => [k, i]));
+  return [...defs].sort((a, b) => (idx.get(keyFn(a)) ?? 999) - (idx.get(keyFn(b)) ?? 999));
+}
+
 export interface DisplaySettings {
   defaultView: ViewMode;
   appTheme: AppThemeName;
@@ -85,6 +104,7 @@ export interface DisplaySettings {
   darkMode: boolean;
   showHeaderBranding: boolean;
   customCSS: string;
+  tabOrder: TabOrder;
 }
 
 export interface GoalTheme {
@@ -146,6 +166,7 @@ const defaultSettings: DisplaySettings = {
   darkMode: false,
   showHeaderBranding: false,
   customCSS: '',
+  tabOrder: DEFAULT_TAB_ORDER,
 };
 
 interface DisplaySettingsContextValue {

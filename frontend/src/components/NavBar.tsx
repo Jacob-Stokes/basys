@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api, API_URL } from '../api/client';
-import { useDisplaySettings } from '../context/DisplaySettingsContext';
+import { useDisplaySettings, sortTabs } from '../context/DisplaySettingsContext';
 import { useChatSidebar } from '../context/ChatSidebarContext';
 import { useLeftPanel } from '../context/LeftPanelContext';
 import { usePanelSwap } from '../hooks/usePanelSwap';
@@ -10,11 +10,21 @@ import LogoGrid from './LogoGrid';
 import QuickCreateMenu from './QuickCreateMenu';
 import GlobalSearch from './GlobalSearch';
 
+const NAV_TABS = [
+  { key: 'todo', label: 'Todo', path: '/' },
+  { key: 'sprints', label: 'Projects', path: '/sprints' },
+  { key: 'life', label: 'Life', path: '/life' },
+  { key: 'journal', label: 'Journal', path: '/journal' },
+  { key: 'phonebook', label: 'Phonebook', path: '/phonebook' },
+  { key: 'admin', label: 'Admin', path: '/admin' },
+];
+
 export default function NavBar() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const { settings: displaySettings } = useDisplaySettings();
+  const sortedNavTabs = sortTabs(NAV_TABS, displaySettings.tabOrder?.navbar ?? [], t => t.key);
   const { toggle: toggleChat, isOpen: chatOpen } = useChatSidebar();
   const { toggle: toggleLeftPanel, isOpen: leftPanelOpen } = useLeftPanel();
   const swapped = usePanelSwap();
@@ -107,24 +117,11 @@ export default function NavBar() {
 
         {/* Center: nav links (desktop) */}
         <div className="hidden sm:flex items-center gap-1">
-          <Link to="/" className={linkClass('/')}>
-            Todo
-          </Link>
-          <Link to="/sprints" className={linkClass('/sprints')}>
-            Projects
-          </Link>
-          <Link to="/life" className={linkClass('/life')}>
-            Life
-          </Link>
-          <Link to="/journal" className={linkClass('/journal')}>
-            Journal
-          </Link>
-          <Link to="/phonebook" className={linkClass('/phonebook')}>
-            Phonebook
-          </Link>
-          <Link to="/admin" className={linkClass('/admin')}>
-            Admin
-          </Link>
+          {sortedNavTabs.map(tab => (
+            <Link key={tab.key} to={tab.path} className={linkClass(tab.path)}>
+              {tab.label}
+            </Link>
+          ))}
         </div>
 
         {/* Right: quick create + shortcuts + chat toggle + username dropdown (desktop) */}
@@ -267,48 +264,16 @@ export default function NavBar() {
                     <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
                   </>
                 )}
-                <Link
-                  to="/"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  Todo
-                </Link>
-                <Link
-                  to="/sprints"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  Projects
-                </Link>
-                <Link
-                  to="/life"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  Life
-                </Link>
-                <Link
-                  to="/journal"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  Journal
-                </Link>
-                <Link
-                  to="/phonebook"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  Phonebook
-                </Link>
-                <Link
-                  to="/admin"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  Admin
-                </Link>
+                {sortedNavTabs.map(tab => (
+                  <Link
+                    key={tab.key}
+                    to={tab.path}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                  >
+                    {tab.label}
+                  </Link>
+                ))}
                 <button
                   onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
                   className="w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"

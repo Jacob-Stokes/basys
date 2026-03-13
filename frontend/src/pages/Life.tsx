@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useDisplaySettings, sortTabs } from '../context/DisplaySettingsContext';
 import Home from './Home';
 import Habits from './Habits';
 
@@ -39,6 +40,8 @@ export default function Life() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as LifeTab) || 'goals';
   const [activeTab, setActiveTab] = useState<LifeTab>(initialTab);
+  const { settings } = useDisplaySettings();
+  const sortedTabs = sortTabs(tabs, settings.tabOrder?.lifeTabs ?? [], t => t.key);
 
   const switchTab = (tab: LifeTab) => {
     setActiveTab(tab);
@@ -50,7 +53,7 @@ export default function Life() {
       {/* Subtab bar */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="container mx-auto px-4 sm:px-16 flex items-center gap-0.5 h-9 overflow-x-auto">
-          {tabs.map(tab => (
+          {sortedTabs.map(tab => (
             <button
               key={tab.key}
               onClick={() => switchTab(tab.key)}

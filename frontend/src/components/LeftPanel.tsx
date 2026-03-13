@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useLeftPanel } from '../context/LeftPanelContext';
+import { useDisplaySettings, sortTabs } from '../context/DisplaySettingsContext';
 import { usePanelSwap } from '../hooks/usePanelSwap';
 import QuickNotes from './QuickNotes';
 import CornerWidget from './CornerWidget';
@@ -45,6 +46,8 @@ export default function LeftPanel() {
   const { isOpen } = useLeftPanel();
   const [activeTab, setActiveTab] = useState<PanelTab>('tab1');
   const swapped = usePanelSwap();
+  const { settings } = useDisplaySettings();
+  const sortedTabs = sortTabs(TABS, settings.tabOrder?.panelTabs ?? [], t => t.id);
 
   // When swapped, this panel lives on the right side
   const side = swapped ? 'right-0' : 'left-0';
@@ -68,7 +71,7 @@ export default function LeftPanel() {
     >
       {/* Tabs — border-t joins with the corner strip above */}
       <div className="flex border-t border-b border-gray-200 dark:border-gray-700 shrink-0">
-        {TABS.map(tab => (
+        {sortedTabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}

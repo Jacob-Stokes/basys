@@ -4,7 +4,7 @@ import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import i18n from '../i18n';
 import ConfirmModal from '../components/ConfirmModal';
 import { API_URL, api } from '../api/client';
-import { useDisplaySettings, getAllPalettes, appThemeOptions, AppThemeName, DEFAULT_FALLBACK_COLOR } from '../context/DisplaySettingsContext';
+import { useDisplaySettings, getAllPalettes, appThemeOptions, AppThemeName, DEFAULT_FALLBACK_COLOR, DEFAULT_TAB_ORDER, TabOrder } from '../context/DisplaySettingsContext';
 import { lightenColor } from '../utils/color';
 
 interface ApiKey {
@@ -40,7 +40,7 @@ export default function Settings() {
   const [obsidianNotice, setObsidianNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [savingObsidian, setSavingObsidian] = useState(false);
   const [apiSubTab, setApiSubTab] = useState<'keys' | 'security' | 'docs'>('keys');
-  const [displaySubTab, setDisplaySubTab] = useState<'general' | 'goals'>('general');
+  const [displaySubTab, setDisplaySubTab] = useState<'general' | 'goals' | 'navigation'>('general');
 
   // Password change state
   const [currentPasswordField, setCurrentPasswordField] = useState('');
@@ -1429,7 +1429,7 @@ curl -X POST "$API_URL/api/guestbook" \\
 
             {/* Display sub-tabs */}
             <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 -mt-4">
-              {(['general', 'goals'] as const).map((sub) => (
+              {(['general', 'goals', 'navigation'] as const).map((sub) => (
                 <button
                   key={sub}
                   onClick={() => setDisplaySubTab(sub)}
@@ -2087,6 +2087,69 @@ curl -X POST "$API_URL/api/guestbook" \\
                   </button>
                 ))}
               </div>
+            </section>
+            </>}
+
+            {/* Navigation sub-tab */}
+            {displaySubTab === 'navigation' && <>
+            <section>
+              <h3 className="text-lg font-semibold mb-2">Tab Order</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Drag tabs up and down to reorder them across the app. Changes are saved automatically.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {([
+                  { key: 'navbar' as const, title: 'Navbar', labels: { todo: 'Todo', sprints: 'Projects', life: 'Life', journal: 'Journal', phonebook: 'Phonebook', admin: 'Admin' } },
+                  { key: 'lifeTabs' as const, title: 'Life Subtabs', labels: { goals: 'Goals', habits: 'Habits', recipes: 'Recipes', bookshelf: 'Bookshelf' } },
+                  { key: 'adminTabs' as const, title: 'Admin Subtabs', labels: { terminal: 'Terminal', settings: 'Settings', wiki: 'Wiki' } },
+                  { key: 'panelTabs' as const, title: 'Side Panel', labels: { tab1: 'Notes', tab2: 'Tab 2', tab3: 'Tab 3' } },
+                ] as { key: keyof TabOrder; title: string; labels: Record<string, string> }[]).map(group => {
+                  const order = displaySettings.tabOrder?.[group.key] ?? DEFAULT_TAB_ORDER[group.key];
+                  const moveItem = (idx: number, dir: -1 | 1) => {
+                    const newOrder = [...order];
+                    const target = idx + dir;
+                    if (target < 0 || target >= newOrder.length) return;
+                    [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
+                    updateDisplaySettings({ tabOrder: { ...(displaySettings.tabOrder ?? DEFAULT_TAB_ORDER), [group.key]: newOrder } });
+                  };
+                  return (
+                    <div key={group.key}>
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{group.title}</h4>
+                      <div className="space-y-1">
+                        {order.map((key, idx) => (
+                          <div key={key} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
+                            <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">{group.labels[key] ?? key}</span>
+                            <button
+                              onClick={() => moveItem(idx, -1)}
+                              disabled={idx === 0}
+                              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                              aria-label="Move up"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
+                            </button>
+                            <button
+                              onClick={() => moveItem(idx, 1)}
+                              disabled={idx === order.length - 1}
+                              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                              aria-label="Move down"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => updateDisplaySettings({ tabOrder: DEFAULT_TAB_ORDER })}
+                className="mt-6 text-sm text-blue-600 hover:underline"
+              >
+                Reset to defaults
+              </button>
             </section>
             </>}
           </div>
