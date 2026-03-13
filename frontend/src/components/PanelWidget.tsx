@@ -144,7 +144,7 @@ function ClocksWidget() {
   }, []);
 
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-1 px-3 py-1.5 h-full content-center">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-3 py-1 h-full content-center">
       {WORLD_CLOCKS.map(c => (
         <div key={c.tz} className="flex items-baseline justify-between">
           <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate mr-1">{c.label}</span>
@@ -176,7 +176,7 @@ function NewsWidget() {
   );
 
   return (
-    <div className="flex flex-col gap-1 px-2 py-1.5 h-full overflow-hidden">
+    <div className="flex flex-col gap-0.5 px-2 py-1 h-full overflow-hidden justify-center">
       {items.map((item, i) => (
         <a
           key={i}
@@ -198,7 +198,7 @@ const MODES: WidgetMode[] = ['weather', 'clocks', 'news'];
 const MODE_LABELS: Record<WidgetMode, string> = { weather: '7-day forecast', clocks: 'World clocks', news: 'Headlines' };
 const ROTATE_MS = 8000;
 
-export default function PanelWidget() {
+export default function PanelWidget({ compact = false }: { compact?: boolean }) {
   const [mode, setMode] = useState<WidgetMode>('weather');
   const [modeIdx, setModeIdx] = useState(0);
   const [userLat, setUserLat] = useState<number | null>(null);
@@ -236,6 +236,19 @@ export default function PanelWidget() {
   }, []);
 
   const effectiveMode: WidgetMode = (mode === 'weather' && !hasLocation) ? 'clocks' : mode;
+
+  if (compact) {
+    // Compact mode: fills the h-14 navbar strip — content only, no chrome
+    return (
+      <div className="h-full">
+        {effectiveMode === 'weather' && hasLocation && (
+          <WeatherWidget lat={userLat!} lon={userLon!} unit={tempUnit} />
+        )}
+        {effectiveMode === 'clocks' && <ClocksWidget />}
+        {effectiveMode === 'news' && <NewsWidget />}
+      </div>
+    );
+  }
 
   return (
     <div className="shrink-0 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40" style={{ height: '90px' }}>

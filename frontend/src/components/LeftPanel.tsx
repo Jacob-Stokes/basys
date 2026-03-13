@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLeftPanel } from '../context/LeftPanelContext';
 import { usePanelSwap } from '../hooks/usePanelSwap';
 import QuickNotes from './QuickNotes';
-import PanelWidget from './PanelWidget';
+import CornerWidget from './CornerWidget';
 
 type PanelTab = 'tab1' | 'tab2' | 'tab3';
 
@@ -42,7 +42,7 @@ function Tab3() {
 }
 
 export default function LeftPanel() {
-  const { isOpen, close } = useLeftPanel();
+  const { isOpen } = useLeftPanel();
   const [activeTab, setActiveTab] = useState<PanelTab>('tab1');
   const swapped = usePanelSwap();
 
@@ -52,30 +52,22 @@ export default function LeftPanel() {
   const hiddenTranslate = swapped ? 'translate-x-full' : '-translate-x-full';
 
   return (
+    <>
+    {/* Corner widget strip — sits at navbar height, same column as the panel, no borders */}
+    {isOpen && (
+      <div
+        className={`fixed top-0 ${side} h-14 w-full sm:w-[300px] z-30 bg-white dark:bg-gray-800 transition-transform duration-200 ease-in-out`}
+      >
+        <CornerWidget corner={swapped ? 'top-right' : 'top-left'} />
+      </div>
+    )}
     <div
       className={`fixed top-14 ${side} bottom-0 w-full sm:w-[300px] bg-white dark:bg-gray-800 ${border} border-gray-200 dark:border-gray-700 z-20 flex flex-col shadow-xl transition-transform duration-200 ease-in-out ${
         isOpen ? 'translate-x-0' : `${hiddenTranslate} pointer-events-none`
       }`}
     >
-      {/* Header — mirrors ChatSidebar style */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Side Panel</span>
-        <button
-          onClick={close}
-          className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-          title="Close panel"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Widget — only when panel is open */}
-      {isOpen && <PanelWidget />}
-
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 shrink-0">
+      {/* Tabs — border-t joins with the corner strip above */}
+      <div className="flex border-t border-b border-gray-200 dark:border-gray-700 shrink-0">
         {TABS.map(tab => (
           <button
             key={tab.id}
@@ -98,5 +90,6 @@ export default function LeftPanel() {
         {activeTab === 'tab3' && <Tab3 />}
       </div>
     </div>
+    </>
   );
 }

@@ -166,7 +166,7 @@ export default function ChatSidebar() {
       {/* ---- TOP 2/3: header + messages + input ---- */}
       <div className="flex flex-col" style={{ flex: '2 1 0%', minHeight: 0 }}>
         {/* Header — simplified: title + new + close */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between px-3 py-2 border-t border-b border-gray-200 dark:border-gray-700 shrink-0">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
             {conversations.find(c => c.id === activeConversationId)?.title || 'New conversation'}
           </span>
