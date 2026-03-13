@@ -27,7 +27,6 @@ export default function ChatSidebar() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [showList, setShowList] = useState(false);
   const [creatingConv, setCreatingConv] = useState(false);
 
   // Load conversations when sidebar opens; auto-select latest if none active
@@ -41,7 +40,7 @@ export default function ChatSidebar() {
     }).catch(() => {});
   }, [isOpen]);
 
-  // Load messages when active conversation changes (handles selecting from list)
+  // Load messages when active conversation changes
   useEffect(() => {
     if (!activeConversationId) {
       setMessages([]);
@@ -55,12 +54,11 @@ export default function ChatSidebar() {
   const handleNewConversation = useCallback(async () => {
     setCreatingConv(true);
     try {
-      const conv = await api.createConversation(); // blocks until greeting is in DB
+      const conv = await api.createConversation();
       const loaded = await api.getConversation(conv.id);
       setMessages(parseStoredMessages(loaded.messages || []));
       setActiveConversationId(conv.id);
       setConversations(prev => [conv, ...prev]);
-      setShowList(false);
     } catch {} finally {
       setCreatingConv(false);
     }
@@ -74,11 +72,10 @@ export default function ChatSidebar() {
     if (!convId) {
       setCreatingConv(true);
       try {
-        const conv = await api.createConversation(); // blocks until greeting is in DB
+        const conv = await api.createConversation();
         convId = conv.id;
         setActiveConversationId(conv.id);
         setConversations(prev => [conv, ...prev]);
-        // Load greeting so it shows before the user's streaming reply
         const loaded = await api.getConversation(conv.id);
         setMessages(parseStoredMessages(loaded.messages || []));
       } catch {
@@ -115,7 +112,7 @@ export default function ChatSidebar() {
           m.id === assistantId ? { ...m, content: m.content + text } : m
         ));
       },
-      // onToolUse — also trigger side effects (e.g. start timer when agent creates a pomodoro)
+      // onToolUse
       (tool: ToolCall) => {
         if ((tool.name === 'manage_pomodoro' || tool.name === 'mcp__thesys__manage_pomodoro') && tool.input?.action === 'create') {
           const minutes = tool.input?.duration_minutes ?? 25;
@@ -133,7 +130,7 @@ export default function ChatSidebar() {
             : m
         ));
       },
-      // onDone — refresh conversation list to get updated title
+      // onDone
       () => {
         api.listConversations().then(setConversations).catch(() => {});
       },
@@ -153,13 +150,9 @@ export default function ChatSidebar() {
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
-    setShowList(false);
   }, [setActiveConversationId]);
 
-  const activeTitle = conversations.find(c => c.id === activeConversationId)?.title || 'New conversation';
   const swapped = usePanelSwap();
-
-  // When swapped, chat sidebar lives on the left side
   const side = swapped ? 'left-0' : 'right-0';
   const border = swapped ? 'border-r' : 'border-l';
   const hiddenTranslate = swapped ? '-translate-x-full' : 'translate-x-full';
@@ -170,75 +163,100 @@ export default function ChatSidebar() {
         isOpen ? 'translate-x-0' : `${hiddenTranslate} pointer-events-none`
       }`}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <button
-            onClick={() => setShowList(!showList)}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-            title="Conversations"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+      {/* ---- TOP 2/3: header + messages + input ---- */}
+      <div className="flex flex-col" style={{ flex: '2 1 0%', minHeight: 0 }}>
+        {/* Header — simplified: title + new + close */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-            {activeTitle}
+            {conversations.find(c => c.id === activeConversationId)?.title || 'New conversation'}
           </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleNewConversation}
-            disabled={creatingConv}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="New conversation"
-          >
-            {creatingConv ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-            ) : (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleNewConversation}
+              disabled={creatingConv}
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="New conversation"
+            >
+              {creatingConv ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={close}
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+              title="Close"
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
-            )}
-          </button>
-          <button
-            onClick={close}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-            title="Close"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            </button>
+          </div>
         </div>
+
+        {/* Error banner */}
+        {error && (
+          <div className="px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs shrink-0">
+            {error}
+          </div>
+        )}
+
+        {/* Messages */}
+        <ChatMessageList messages={messages} />
+
+        {/* Input */}
+        <ChatInput onSend={handleSend} disabled={isStreaming || creatingConv} />
+
+        {/* Cancel streaming */}
+        {isStreaming && (
+          <div className="px-3 pb-2 shrink-0">
+            <button
+              onClick={cancel}
+              className="w-full text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              Stop generating
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Conversation list overlay */}
-      {showList && (
-        <div className="absolute top-10 left-0 right-0 bottom-0 bg-white dark:bg-gray-800 z-10 overflow-y-auto">
-          <div className="p-2 space-y-1">
+      {/* ---- BOTTOM 1/3: conversation history ---- */}
+      <div className="flex flex-col border-t border-gray-200 dark:border-gray-700" style={{ flex: '1 1 0%', minHeight: 0 }}>
+        <div className="flex items-center justify-between px-3 py-1.5 shrink-0">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+            History
+          </span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {conversations.length}
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-2 pb-2 space-y-0.5">
             {conversations.length === 0 && (
               <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">No conversations yet</p>
             )}
             {conversations.map(conv => (
               <div
                 key={conv.id}
-                className={`flex items-center justify-between gap-2 px-3 py-2 rounded text-sm cursor-pointer ${
+                className={`group flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded text-xs cursor-pointer transition-colors ${
                   conv.id === activeConversationId
                     ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
                 onClick={() => handleSelectConversation(conv.id)}
               >
                 <span className="truncate">{conv.title}</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
-                  className="shrink-0 p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+                  className="shrink-0 p-0.5 rounded text-gray-400 opacity-0 group-hover:opacity-100 hover:text-red-500 dark:hover:text-red-400 transition-opacity"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
@@ -246,32 +264,7 @@ export default function ChatSidebar() {
             ))}
           </div>
         </div>
-      )}
-
-      {/* Error banner */}
-      {error && (
-        <div className="px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs">
-          {error}
-        </div>
-      )}
-
-      {/* Messages */}
-      <ChatMessageList messages={messages} />
-
-      {/* Input */}
-      <ChatInput onSend={handleSend} disabled={isStreaming || creatingConv} />
-
-      {/* Cancel streaming */}
-      {isStreaming && (
-        <div className="px-3 pb-2">
-          <button
-            onClick={cancel}
-            className="w-full text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            Stop generating
-          </button>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -289,7 +282,6 @@ function parseStoredMessages(stored: any[]): ChatMessage[] {
       if (typeof parsed === 'string') {
         content = parsed;
       } else if (Array.isArray(parsed)) {
-        // Claude content blocks
         for (const block of parsed) {
           if (block.type === 'text') {
             content += block.text;
