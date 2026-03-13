@@ -341,6 +341,75 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
       required: ['query'],
     },
   },
+  // ═══ SPRINTS ═══
+  {
+    name: 'manage_sprint',
+    description: 'List, create, get, update, delete sprints, or transition sprint status. Sprints belong to projects.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'create', 'get', 'update', 'delete', 'transition_status'] },
+        sprintId: { type: 'string' },
+        projectId: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        start_date: { type: 'string' },
+        end_date: { type: 'string' },
+        status: { type: 'string', enum: ['planned', 'active', 'completed'] },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'manage_sprint_column',
+    description: 'List, create, update, or delete columns (buckets) within a sprint board.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
+        sprintId: { type: 'string' },
+        columnId: { type: 'string' },
+        title: { type: 'string' },
+        position: { type: 'number' },
+        is_done_column: { type: 'boolean' },
+      },
+      required: ['action', 'sprintId'],
+    },
+  },
+  {
+    name: 'manage_note',
+    description: 'List, create, update, or delete quick notes.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
+        noteId: { type: 'string' },
+        content: { type: 'string' },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'manage_event',
+    description: 'List, create, update, or delete calendar events.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
+        eventId: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        start_date: { type: 'string' },
+        end_date: { type: 'string' },
+        all_day: { type: 'boolean' },
+        color: { type: 'string' },
+        location: { type: 'string' },
+        filter_start: { type: 'string' },
+        filter_end: { type: 'string' },
+      },
+      required: ['action'],
+    },
+  },
   // ═══ MEMORY (chat-only) ═══
   {
     name: 'save_memory',
@@ -890,6 +959,150 @@ registerTool('recall_memory', (args, userId) => {
     return db.prepare('SELECT id, content, category, created_at FROM chat_memory WHERE user_id = ? AND content LIKE ? ORDER BY created_at DESC LIMIT 20').all(userId, `%${args.query}%`);
   }
   return db.prepare('SELECT id, content, category, created_at FROM chat_memory WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(userId);
+});
+
+// ═══ SPRINT TOOLS ═══
+
+registerTool('manage_sprint', (args, userId) => {
+  const now = new Date().toISOString();
+  const verifySprint = (sprintId: string) => {
+    const sprint = db.prepare(`SELECT s.* FROM sprints s JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.user_id = ?`).get(sprintId, userId) as any;
+    if (!sprint) throw new Error('Sprint not found or access denied');
+    return sprint;
+  };
+  if (args.action === 'list') {
+    if (!args.projectId) throw new Error('projectId is required for list');
+    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
+    if (!project) throw new Error('Project not found');
+    return db.prepare(`SELECT s.*, COUNT(CASE WHEN t.done=0 THEN 1 END) as open_tasks, COUNT(CASE WHEN t.done=1 THEN 1 END) as done_tasks FROM sprints s LEFT JOIN tasks t ON t.sprint_id=s.id WHERE s.project_id=? GROUP BY s.id ORDER BY s.sprint_number DESC`).all(args.projectId);
+  }
+  if (args.action === 'create') {
+    if (!args.projectId) throw new Error('projectId is required');
+    if (!args.title) throw new Error('title is required');
+    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
+    if (!project) throw new Error('Project not found');
+    const maxNum = db.prepare('SELECT MAX(sprint_number) as max FROM sprints WHERE project_id = ?').get(args.projectId) as any;
+    const sprintNumber = (maxNum?.max ?? 0) + 1;
+    const id = uuidv4();
+    db.prepare(`INSERT INTO sprints (id, project_id, title, description, sprint_number, status, start_date, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?)`).run(id, args.projectId, args.title.trim(), args.description || null, sprintNumber, args.start_date || null, args.end_date || null, now, now);
+    const DEFAULT_COLUMNS = [{ title: 'To Do', position: 0, is_done_column: 0 }, { title: 'In Progress', position: 1, is_done_column: 0 }, { title: 'Review', position: 2, is_done_column: 0 }, { title: 'Done', position: 3, is_done_column: 1 }];
+    const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)');
+    for (const col of DEFAULT_COLUMNS) insertBucket.run(uuidv4(), args.projectId, id, col.title, col.position, col.is_done_column);
+    const sprint = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id);
+    const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(id);
+    return { ...sprint as any, columns };
+  }
+  if (args.action === 'get') {
+    if (!args.sprintId) throw new Error('sprintId is required');
+    const sprint = verifySprint(args.sprintId);
+    const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprintId);
+    const tasks = db.prepare(`SELECT t.* FROM tasks t WHERE t.sprint_id = ? ORDER BY t.position ASC, t.created_at DESC`).all(args.sprintId);
+    const backlog = db.prepare(`SELECT t.* FROM tasks t WHERE t.project_id = ? AND t.sprint_id IS NULL ORDER BY t.position ASC, t.created_at DESC`).all(sprint.project_id);
+    return { ...sprint, columns, tasks, backlog };
+  }
+  if (args.action === 'update') {
+    if (!args.sprintId) throw new Error('sprintId is required');
+    const existing = verifySprint(args.sprintId);
+    db.prepare(`UPDATE sprints SET title = COALESCE(?, title), description = ?, start_date = ?, end_date = ?, updated_at = ? WHERE id = ?`).run(args.title?.trim() || null, args.description !== undefined ? args.description : existing.description, args.start_date !== undefined ? args.start_date : existing.start_date, args.end_date !== undefined ? args.end_date : existing.end_date, now, args.sprintId);
+    return db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprintId);
+  }
+  if (args.action === 'delete') {
+    if (!args.sprintId) throw new Error('sprintId is required');
+    verifySprint(args.sprintId);
+    db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(args.sprintId);
+    db.prepare('DELETE FROM buckets WHERE sprint_id = ?').run(args.sprintId);
+    db.prepare('DELETE FROM sprints WHERE id = ?').run(args.sprintId);
+    return { deleted: true, id: args.sprintId };
+  }
+  if (args.action === 'transition_status') {
+    if (!args.sprintId) throw new Error('sprintId is required');
+    if (!args.status) throw new Error('status is required');
+    const existing = verifySprint(args.sprintId);
+    const validTransitions: Record<string, string[]> = { planned: ['active'], active: ['completed'], completed: ['active'] };
+    if (!validTransitions[existing.status]?.includes(args.status)) throw new Error(`Cannot transition from '${existing.status}' to '${args.status}'`);
+    db.prepare('UPDATE sprints SET status = ?, updated_at = ? WHERE id = ?').run(args.status, now, args.sprintId);
+    return db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprintId);
+  }
+  throw new Error('Invalid action');
+});
+
+registerTool('manage_sprint_column', (args, userId) => {
+  const sprint = db.prepare(`SELECT s.* FROM sprints s JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.user_id = ?`).get(args.sprintId, userId) as any;
+  if (!sprint) throw new Error('Sprint not found or access denied');
+  if (args.action === 'list') return db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprintId);
+  if (args.action === 'create') {
+    if (!args.title) throw new Error('title is required');
+    const maxPos = db.prepare('SELECT MAX(position) as max FROM buckets WHERE sprint_id = ?').get(args.sprintId) as any;
+    const id = uuidv4();
+    db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)').run(id, sprint.project_id, args.sprintId, args.title.trim(), args.position ?? ((maxPos?.max ?? 0) + 1), args.is_done_column ? 1 : 0);
+    return db.prepare('SELECT * FROM buckets WHERE id = ?').get(id);
+  }
+  if (args.action === 'update') {
+    if (!args.columnId) throw new Error('columnId is required');
+    db.prepare('UPDATE buckets SET title = COALESCE(?, title), position = COALESCE(?, position), is_done_column = COALESCE(?, is_done_column) WHERE id = ? AND sprint_id = ?').run(args.title?.trim() || null, args.position ?? null, args.is_done_column !== undefined ? (args.is_done_column ? 1 : 0) : null, args.columnId, args.sprintId);
+    return db.prepare('SELECT * FROM buckets WHERE id = ?').get(args.columnId);
+  }
+  if (args.action === 'delete') {
+    if (!args.columnId) throw new Error('columnId is required');
+    db.prepare('UPDATE tasks SET bucket_id = NULL WHERE bucket_id = ?').run(args.columnId);
+    db.prepare('DELETE FROM buckets WHERE id = ?').run(args.columnId);
+    return { deleted: true, id: args.columnId };
+  }
+  throw new Error('Invalid action');
+});
+
+registerTool('manage_note', (args, userId) => {
+  if (args.action === 'list') return db.prepare('SELECT * FROM quick_notes WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
+  if (args.action === 'create') {
+    if (!args.content) throw new Error('content is required');
+    const id = uuidv4();
+    db.prepare('INSERT INTO quick_notes (id, user_id, content) VALUES (?, ?, ?)').run(id, userId, args.content.trim());
+    return db.prepare('SELECT * FROM quick_notes WHERE id = ?').get(id);
+  }
+  if (args.action === 'update') {
+    if (!args.noteId) throw new Error('noteId is required');
+    if (!args.content) throw new Error('content is required');
+    const result = db.prepare(`UPDATE quick_notes SET content = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`).run(args.content.trim(), args.noteId, userId);
+    if (result.changes === 0) throw new Error('Note not found');
+    return db.prepare('SELECT * FROM quick_notes WHERE id = ?').get(args.noteId);
+  }
+  if (args.action === 'delete') {
+    if (!args.noteId) throw new Error('noteId is required');
+    db.prepare('DELETE FROM quick_notes WHERE id = ? AND user_id = ?').run(args.noteId, userId);
+    return { deleted: true, id: args.noteId };
+  }
+  throw new Error('Invalid action');
+});
+
+registerTool('manage_event', (args, userId) => {
+  const now = new Date().toISOString();
+  if (args.action === 'list') {
+    let query = 'SELECT * FROM events WHERE user_id = ?';
+    const params: any[] = [userId];
+    if (args.filter_start) { query += ' AND start_date >= ?'; params.push(args.filter_start); }
+    if (args.filter_end) { query += ' AND start_date <= ?'; params.push(args.filter_end); }
+    return db.prepare(query + ' ORDER BY start_date ASC').all(...params);
+  }
+  if (args.action === 'create') {
+    if (!args.title) throw new Error('title is required');
+    if (!args.start_date) throw new Error('start_date is required');
+    const id = uuidv4();
+    db.prepare(`INSERT INTO events (id, user_id, title, description, start_date, end_date, all_day, color, location, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, userId, args.title, args.description || null, args.start_date, args.end_date || null, args.all_day ? 1 : 0, args.color || '#3b82f6', args.location || null, now, now);
+    return db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+  }
+  if (args.action === 'update') {
+    if (!args.eventId) throw new Error('eventId is required');
+    const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.eventId, userId) as any;
+    if (!existing) throw new Error('Event not found');
+    db.prepare(`UPDATE events SET title=?, description=?, start_date=?, end_date=?, all_day=?, color=?, location=?, updated_at=? WHERE id=? AND user_id=?`).run(args.title ?? existing.title, args.description !== undefined ? args.description : existing.description, args.start_date ?? existing.start_date, args.end_date !== undefined ? (args.end_date || null) : existing.end_date, args.all_day !== undefined ? (args.all_day ? 1 : 0) : existing.all_day, args.color ?? existing.color, args.location !== undefined ? (args.location || null) : existing.location, now, args.eventId, userId);
+    return db.prepare('SELECT * FROM events WHERE id = ?').get(args.eventId);
+  }
+  if (args.action === 'delete') {
+    if (!args.eventId) throw new Error('eventId is required');
+    db.prepare('DELETE FROM events WHERE id = ? AND user_id = ?').run(args.eventId, userId);
+    return { deleted: true, id: args.eventId };
+  }
+  throw new Error('Invalid action');
 });
 
 // ─── PUBLIC API ──────────────────────────────────────────────────
