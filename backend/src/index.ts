@@ -37,6 +37,9 @@ const PORT = process.env.PORT || 3001;
 
 app.set('trust proxy', 1);
 
+// Open CORS for MCP and OAuth endpoints (Claude's cloud servers need cross-origin access)
+app.use(['/mcp', '/oauth', '/.well-known', '/authorize', '/token', '/register', '/revoke'], cors());
+
 // Middleware — CORS only needed when frontend runs on a different origin (dev mode)
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
