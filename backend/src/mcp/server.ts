@@ -93,13 +93,13 @@ export function setupMcpRoutes(app: Express): void {
       await session.transport.handleRequest(req, res, req.body);
     } else if (!sessionId) {
       // New session — create transport and server
+      const server = createMcpServer();
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
           sessions.set(sid, { transport, server });
         },
       });
-      const server = createMcpServer();
 
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
