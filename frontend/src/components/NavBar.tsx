@@ -11,7 +11,7 @@ import QuickCreateMenu from './QuickCreateMenu';
 import GlobalSearch from './GlobalSearch';
 
 const NAV_TABS = [
-  { key: 'todo', label: 'Todo', path: '/' },
+  { key: 'todo', label: 'Home', path: '/' },
   { key: 'sprints', label: 'Projects', path: '/sprints' },
   { key: 'life', label: 'Life', path: '/life' },
   { key: 'command', label: 'Command', path: '/command' },

@@ -5,11 +5,13 @@ import Home from './Home';
 import Habits from './Habits';
 import Journal from './Journal';
 import Phonebook from './Phonebook';
+import CalendarPage from './CalendarPage';
 
-type LifeTab = 'journal' | 'goals' | 'habits' | 'recipes' | 'bookshelf' | 'phonebook';
+type LifeTab = 'journal' | 'calendar' | 'goals' | 'habits' | 'recipes' | 'bookshelf' | 'phonebook';
 
 const tabs: { key: LifeTab; label: string }[] = [
   { key: 'journal', label: 'Journal' },
+  { key: 'calendar', label: 'Calendar' },
   { key: 'goals', label: 'Goals' },
   { key: 'habits', label: 'Habits' },
   { key: 'recipes', label: 'Recipes' },
@@ -34,6 +36,7 @@ function Placeholder({ title, description, icon }: { title: string; description:
 function renderTab(tab: LifeTab) {
   switch (tab) {
     case 'journal': return <Journal embedded />;
+    case 'calendar': return <CalendarPage embedded />;
     case 'goals': return <Home />;
     case 'habits': return <Habits />;
     case 'phonebook': return <Phonebook embedded />;

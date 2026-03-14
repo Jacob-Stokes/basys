@@ -81,6 +81,7 @@ interface TaskItem {
   bucket_is_done_column: number;
   sprint_buckets: SprintBucket[] | null;
   task_type: string | null;
+  agent_action_count: { total: number; draft: number; staged: number; running: number; done: number; failed: number } | null;
   project: { id: string; title: string; hex_color: string } | null;
   sprint: { id: string; title: string } | null;
   labels: LabelItem[];
@@ -584,6 +585,20 @@ function TaskRow({ task, onToggle, onEdit, onDelete, onToggleFavorite, isExpande
                 task.task_type === 'story' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300' :
                 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
               }`}>{task.task_type}</span>
+            )}
+            {task.agent_action_count && task.agent_action_count.total > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 ${
+                task.agent_action_count.running > 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' :
+                task.agent_action_count.staged > 0 ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' :
+                task.agent_action_count.failed > 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' :
+                'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              }`} title={`Agent: ${task.agent_action_count.staged} staged, ${task.agent_action_count.draft} draft, ${task.agent_action_count.done} done`}>
+                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                </svg>
+                {task.agent_action_count.staged > 0 && <span>{task.agent_action_count.staged}↑</span>}
+                {task.agent_action_count.draft > 0 && <span className="text-gray-400">{task.agent_action_count.draft}</span>}
+              </span>
             )}
             {task.labels.map(l => <LabelPill key={l.id} label={l} small />)}
             {task.links?.map(link => (
@@ -2211,7 +2226,17 @@ export default function Tasks({ initialTab = 'overview' }: { initialTab?: Active
 
           {/* Calendar — 2/5 (always visible) */}
           <div className="w-full lg:w-2/5">
-              <div ref={calendarCardRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5">
+              <div ref={calendarCardRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md pt-2 pb-5 px-5 relative">
+                {/* Full calendar link */}
+                <button
+                  onClick={() => navigate('/life?tab=calendar')}
+                  className="absolute top-2 right-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  title="Open full calendar"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                </button>
                 <Calendar
                   taskDates={taskDates}
                   eventDateColors={eventDateColors}
