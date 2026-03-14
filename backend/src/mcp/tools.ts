@@ -49,8 +49,24 @@ function getUserId(extra: any): string {
   return userId;
 }
 
-const bulkItemsSchema = z.array(z.record(z.string(), z.any())).optional()
+function parseJsonArrayInput(value: unknown) {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+const bulkItemsSchema = z.preprocess(parseJsonArrayInput, z.array(z.object({}).catchall(z.unknown()))).optional()
   .describe('For bulk actions, provide an array of item objects using the same fields as the single-item action.');
+
+const taskCommentBulkItemsSchema = z.preprocess(parseJsonArrayInput, z.array(z.object({
+  task_id: z.string().optional(),
+  comment_id: z.string().optional(),
+  content: z.string().optional(),
+}).catchall(z.unknown()))).optional()
+  .describe('For bulk_create/bulk_delete, provide an array of comment objects with task_id plus content or comment_id.');
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -528,7 +544,7 @@ export function createMcpServer(): McpServer {
     description: 'List, create, update, or delete habits and quit trackers. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_HABIT_ACTIONS).describe('Operation to perform'),
-      habitId: z.string().optional().describe('Habit ID (required for update/delete)'),
+      habit_id: z.string().optional().describe('Habit ID (required for update/delete)'),
       title: z.string().optional().describe('Habit title (required for create)'),
       emoji: z.string().optional().describe('Emoji icon for the habit'),
       type: z.enum(['habit', 'quit']).optional().describe('Type: habit (build) or quit (stop). Defaults to habit.'),
@@ -624,10 +640,10 @@ export function createMcpServer(): McpServer {
   // ─── manage_task ──────────────────────────────────────────
 
   server.registerTool('manage_task', {
-    description: 'List, create, update, delete tasks, or toggle done/favorite. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, update, delete tasks, or toggle done/favorite. bulk_update also supports done and is_favorite fields. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_TASK_ACTIONS).describe('Operation to perform'),
-      taskId: z.string().optional().describe('Task ID (required for update/delete/toggle)'),
+      task_id: z.string().optional().describe('Task ID (required for update/delete/toggle)'),
       title: z.string().optional().describe('Task title (required for create)'),
       description: z.string().optional(),
       project_id: z.string().optional().describe('Project ID to assign task to'),
@@ -641,6 +657,8 @@ export function createMcpServer(): McpServer {
       task_type: z.string().optional().describe('Task type (e.g. task, bug, feature, story)'),
       hex_color: z.string().optional().describe('Color hex code for the task'),
       percent_done: z.number().optional().describe('Completion percentage (0-100)'),
+      done: z.boolean().optional().describe('Set completion status directly (supported in update/bulk_update)'),
+      is_favorite: z.boolean().optional().describe('Set favorite status directly (supported in update/bulk_update)'),
       labels: z.array(z.string()).optional().describe('Array of label IDs to assign'),
       links: z.array(z.object({
         target_type: z.enum(['goal', 'subgoal', 'habit', 'pomodoro']),
@@ -669,10 +687,10 @@ export function createMcpServer(): McpServer {
     description: 'List, add, or delete comments on a task. Supports bulk_create and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_TASK_COMMENT_ACTIONS).describe('Operation to perform'),
-      taskId: z.string().optional().describe('Task ID (required for list and single-item create/delete, or per item in bulk actions)'),
-      commentId: z.string().optional().describe('Comment ID (required for delete)'),
+      task_id: z.string().optional().describe('Task ID (required for list and single-item create/delete, or per item in bulk actions)'),
+      comment_id: z.string().optional().describe('Comment ID (required for delete)'),
       content: z.string().optional().describe('Comment text (required for create)'),
-      items: bulkItemsSchema,
+      items: taskCommentBulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
@@ -689,7 +707,7 @@ export function createMcpServer(): McpServer {
     description: 'List, create, update, delete, archive, or favorite projects. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_PROJECT_ACTIONS).describe('Operation to perform'),
-      projectId: z.string().optional().describe('Project ID (required for update/delete/toggle)'),
+      project_id: z.string().optional().describe('Project ID (required for update/delete/toggle)'),
       title: z.string().optional().describe('Project title (required for create)'),
       description: z.string().optional(),
       hex_color: z.string().optional().describe('Color hex code (e.g. #3b82f6)'),
@@ -711,7 +729,7 @@ export function createMcpServer(): McpServer {
     description: 'List, create, update, or delete labels. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_LABEL_ACTIONS).describe('Operation to perform'),
-      labelId: z.string().optional().describe('Label ID (required for update/delete)'),
+      label_id: z.string().optional().describe('Label ID (required for update/delete)'),
       title: z.string().optional().describe('Label title (required for create)'),
       hex_color: z.string().optional().describe('Color hex code (defaults to #e2e8f0)'),
       description: z.string().optional(),
@@ -730,7 +748,7 @@ export function createMcpServer(): McpServer {
     description: 'List, create, update, complete, or delete pomodoro sessions. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_POMODORO_ACTIONS).describe('Operation to perform'),
-      pomodoroId: z.string().optional().describe('Session ID (required for update/complete/delete)'),
+      pomodoro_id: z.string().optional().describe('Session ID (required for update/complete/delete)'),
       duration_minutes: z.number().optional().describe('Duration in minutes (default 25)'),
       note: z.string().optional().describe('Session note'),
       task_id: z.string().optional().describe('Link session to a task'),
@@ -751,8 +769,8 @@ export function createMcpServer(): McpServer {
     description: 'Create, list, or revoke share links for goals. Supports bulk_create and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_SHARE_ACTIONS).describe('Operation to perform'),
-      shareId: z.string().optional().describe('Share link ID (required for revoke)'),
-      goalId: z.string().optional().describe('Goal ID (required for create, optional filter for list)'),
+      share_id: z.string().optional().describe('Share link ID (required for revoke)'),
+      goal_id: z.string().optional().describe('Goal ID (required for create, optional filter for list)'),
       show_logs: z.boolean().optional().describe('Show activity logs in shared view (default false)'),
       show_guestbook: z.boolean().optional().describe('Show guestbook in shared view (default false)'),
       items: bulkItemsSchema,
@@ -770,7 +788,7 @@ export function createMcpServer(): McpServer {
     description: 'List, add, update, delete, or reset agent etiquette rules. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_ETIQUETTE_ACTIONS).describe('Operation to perform'),
-      ruleId: z.string().optional().describe('Rule ID (required for update/delete)'),
+      rule_id: z.string().optional().describe('Rule ID (required for update/delete)'),
       content: z.string().optional().describe('Rule text (required for add/update)'),
       position: z.number().optional().describe('Position/order of the rule'),
       items: bulkItemsSchema,
@@ -838,13 +856,13 @@ export function createMcpServer(): McpServer {
     description: 'List, create, get, update, delete sprints, or transition sprint status. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_SPRINT_ACTIONS).describe('Operation to perform'),
-      sprintId: z.string().optional().describe('Sprint ID (required for get/update/delete/transition_status)'),
-      projectId: z.string().optional().describe('Project ID (required for list/create)'),
+      sprint_id: z.string().optional().describe('Sprint ID (required for get/update/delete/transition_status)'),
+      project_id: z.string().optional().describe('Project ID (required for list/create)'),
       title: z.string().optional().describe('Sprint title (required for create)'),
       description: z.string().optional().describe('Sprint description'),
       start_date: z.string().optional().describe('Start date (ISO format)'),
       end_date: z.string().optional().describe('End date (ISO format)'),
-      status: z.enum(['planned', 'active', 'completed']).optional().describe('Target status for transition_status action'),
+      status: z.enum(['planned', 'active', 'completed']).optional().describe('Sprint status. Used on create or as the target status for transition_status.'),
       items: bulkItemsSchema,
     },
   }, async (args, extra) => {
@@ -858,8 +876,8 @@ export function createMcpServer(): McpServer {
     description: 'List, create, update, or delete columns within a sprint board. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_SPRINT_COLUMN_ACTIONS).describe('Operation to perform'),
-      sprintId: z.string().optional().describe('Sprint ID (required for list and single-item create/update/delete, or per item in bulk actions)'),
-      columnId: z.string().optional().describe('Column ID (required for update/delete)'),
+      sprint_id: z.string().optional().describe('Sprint ID (required for list and single-item create/update/delete, or per item in bulk actions)'),
+      column_id: z.string().optional().describe('Column ID (required for update/delete)'),
       title: z.string().optional().describe('Column title (required for create)'),
       position: z.number().optional().describe('Column position'),
       is_done_column: z.boolean().optional().describe('Whether tasks in this column count as done'),
@@ -878,7 +896,7 @@ export function createMcpServer(): McpServer {
     description: 'List, create, update, or delete quick notes. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_NOTE_ACTIONS).describe('Operation to perform'),
-      noteId: z.string().optional().describe('Note ID (required for update/delete)'),
+      note_id: z.string().optional().describe('Note ID (required for update/delete)'),
       content: z.string().optional().describe('Note content/text (required for create)'),
       items: bulkItemsSchema,
     },
@@ -892,7 +910,7 @@ export function createMcpServer(): McpServer {
     description: 'List, create, update, or delete calendar events. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_EVENT_ACTIONS).describe('Operation to perform'),
-      eventId: z.string().optional().describe('Event ID (required for update/delete)'),
+      event_id: z.string().optional().describe('Event ID (required for update/delete)'),
       title: z.string().optional().describe('Event title (required for create)'),
       description: z.string().optional().describe('Event description'),
       start_date: z.string().optional().describe('Start date/time in ISO format (required for create)'),

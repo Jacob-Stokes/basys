@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../../src/db/database';
 import { CLAUDE_TOOLS, executeToolCall } from '../../src/chat/toolRegistry';
+import { createMcpServer } from '../../src/mcp/tools';
 import { insertRuntimeUser, resetRuntimeDb } from '../helpers/runtimeApp';
 
 describe('Bulk manage tools', () => {
@@ -30,21 +31,23 @@ describe('Bulk manage tools', () => {
     const updated = executeToolCall('manage_task', {
       action: 'bulk_update',
       items: [
-        { taskId: firstId, title: 'First task updated', priority: 4 },
-        { taskId: secondId, description: 'Expanded notes' },
+        { task_id: firstId, title: 'First task updated', priority: 4, done: true, is_favorite: true },
+        { task_id: secondId, description: 'Expanded notes' },
       ],
     }, user.id) as any;
 
     expect(updated.count).toBe(2);
     expect(updated.results[0].title).toBe('First task updated');
     expect(updated.results[0].priority).toBe(4);
+    expect(updated.results[0].done).toBe(1);
+    expect(updated.results[0].is_favorite).toBe(1);
     expect(updated.results[1].description).toBe('Expanded notes');
 
     const deleted = executeToolCall('manage_task', {
       action: 'bulk_delete',
       items: [
-        { taskId: firstId },
-        { taskId: secondId },
+        { task_id: firstId },
+        { task_id: secondId },
       ],
     }, user.id) as any;
 
@@ -62,8 +65,8 @@ describe('Bulk manage tools', () => {
     const created = executeToolCall('manage_task_comment', {
       action: 'bulk_create',
       items: [
-        { taskId, content: 'First comment' },
-        { taskId, content: 'Second comment' },
+        { task_id: taskId, content: 'First comment' },
+        { task_id: taskId, content: 'Second comment' },
       ],
     }, user.id) as any;
 
@@ -76,8 +79,8 @@ describe('Bulk manage tools', () => {
     const deleted = executeToolCall('manage_task_comment', {
       action: 'bulk_delete',
       items: created.results.map((comment: { id: string }) => ({
-        taskId,
-        commentId: comment.id,
+        task_id: taskId,
+        comment_id: comment.id,
       })),
     }, user.id) as any;
 
@@ -103,7 +106,7 @@ describe('Bulk manage tools', () => {
     const updated = executeToolCall('manage_etiquette', {
       action: 'bulk_update',
       items: created.results.map((rule: { id: string; content: string }, index: number) => ({
-        ruleId: rule.id,
+        rule_id: rule.id,
         content: `${rule.content} (${index + 1})`,
       })),
     }, user.id) as any;
@@ -113,7 +116,7 @@ describe('Bulk manage tools', () => {
 
     const deleted = executeToolCall('manage_etiquette', {
       action: 'bulk_delete',
-      items: created.results.map((rule: { id: string }) => ({ ruleId: rule.id })),
+      items: created.results.map((rule: { id: string }) => ({ rule_id: rule.id })),
     }, user.id) as any;
 
     expect(deleted.count).toBe(2);
@@ -130,8 +133,8 @@ describe('Bulk manage tools', () => {
     const created = executeToolCall('manage_share', {
       action: 'bulk_create',
       items: [
-        { goalId, show_logs: true },
-        { goalId, show_guestbook: true },
+        { goal_id: goalId, show_logs: true },
+        { goal_id: goalId, show_guestbook: true },
       ],
     }, user.id) as any;
 
@@ -140,7 +143,7 @@ describe('Bulk manage tools', () => {
 
     const deleted = executeToolCall('manage_share', {
       action: 'bulk_delete',
-      items: created.results.map((share: { id: string }) => ({ shareId: share.id })),
+      items: created.results.map((share: { id: string }) => ({ share_id: share.id })),
     }, user.id) as any;
 
     expect(deleted.count).toBe(2);
@@ -151,5 +154,63 @@ describe('Bulk manage tools', () => {
       expect.arrayContaining(['bulk_create', 'bulk_update', 'bulk_delete'])
     );
     expect(manageTaskTool?.input_schema.properties.items).toBeDefined();
+    expect(manageTaskTool?.input_schema.properties.task_id).toBeDefined();
+    expect(manageTaskTool?.input_schema.properties.taskId).toBeUndefined();
+  });
+
+  it('returns assigned labels in the task create response', () => {
+    const labelId = uuidv4();
+    db.prepare(`
+      INSERT INTO labels (id, user_id, title, hex_color, created_at, updated_at)
+      VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(labelId, user.id, 'Urgent', '#ff0000');
+
+    const created = executeToolCall('manage_task', {
+      action: 'create',
+      title: 'Labelled task',
+      labels: [labelId],
+    }, user.id) as any;
+
+    expect(created.labels).toEqual([
+      expect.objectContaining({ id: labelId, title: 'Urgent' }),
+    ]);
+  });
+
+  it('allows sprint status to be set during creation', () => {
+    const projectId = uuidv4();
+    db.prepare(`
+      INSERT INTO projects (id, user_id, title, type, created_at, updated_at)
+      VALUES (?, ?, ?, 'personal', datetime('now'), datetime('now'))
+    `).run(projectId, user.id, 'Sprint project');
+
+    const created = executeToolCall('manage_sprint', {
+      action: 'create',
+      project_id: projectId,
+      title: 'Active sprint',
+      status: 'active',
+    }, user.id) as any;
+
+    expect(created.status).toBe('active');
+  });
+
+  it('accepts JSON-stringified bulk comment items in the MCP schema and exposes explicit snake_case item fields', async () => {
+    const server = createMcpServer() as any;
+    const schema = server._registeredTools.manage_task_comment.inputSchema;
+
+    const parsed = await schema.safeParseAsync({
+      action: 'bulk_create',
+      items: JSON.stringify([
+        { task_id: 'task-1', content: 'First' },
+        { task_id: 'task-1', content: 'Second' },
+      ]),
+    });
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+
+    expect(parsed.data.items).toEqual([
+      { task_id: 'task-1', content: 'First' },
+      { task_id: 'task-1', content: 'Second' },
+    ]);
   });
 });

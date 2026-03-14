@@ -13,6 +13,56 @@ const DEFAULT_BULK_ACTION_MAP: Record<BulkAction, string> = {
   bulk_delete: 'delete',
 };
 
+const MANAGE_ARG_ALIASES = {
+  habitId: 'habit_id',
+  taskId: 'task_id',
+  commentId: 'comment_id',
+  projectId: 'project_id',
+  labelId: 'label_id',
+  pomodoroId: 'pomodoro_id',
+  shareId: 'share_id',
+  goalId: 'goal_id',
+  ruleId: 'rule_id',
+  sprintId: 'sprint_id',
+  columnId: 'column_id',
+  noteId: 'note_id',
+  eventId: 'event_id',
+} as const;
+
+function normalizeManageArgs(args: ToolArgs): ToolArgs {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return args;
+
+  const normalizedArgs: ToolArgs = { ...args };
+  for (const [legacyKey, normalizedKey] of Object.entries(MANAGE_ARG_ALIASES)) {
+    if (normalizedArgs[normalizedKey] === undefined && normalizedArgs[legacyKey] !== undefined) {
+      normalizedArgs[normalizedKey] = normalizedArgs[legacyKey];
+    }
+  }
+
+  if (Array.isArray(normalizedArgs.items)) {
+    normalizedArgs.items = normalizedArgs.items.map((item: unknown) => normalizeManageArgs(item as ToolArgs));
+  }
+
+  return normalizedArgs;
+}
+
+function hydrateTaskRelations(task: any) {
+  if (!task) return task;
+  task.labels = db.prepare('SELECT l.* FROM labels l JOIN task_labels tl ON l.id = tl.label_id WHERE tl.task_id = ?').all(task.id);
+  task.links = db.prepare('SELECT * FROM task_links WHERE task_id = ?').all(task.id);
+  return task;
+}
+
+function getTaskWithRelations(taskId: string) {
+  const task = db.prepare(`
+    SELECT t.*, p.title as project_title, p.hex_color as project_color, p.type as project_type
+    FROM tasks t
+    LEFT JOIN projects p ON t.project_id = p.id
+    WHERE t.id = ?
+  `).get(taskId) as any;
+  return hydrateTaskRelations(task);
+}
+
 function createManagedActionHandler(
   actions: Record<string, ToolHandler>,
   options: {
@@ -21,7 +71,8 @@ function createManagedActionHandler(
 ): ToolHandler {
   const bulkActionMap = { ...DEFAULT_BULK_ACTION_MAP, ...options.bulkActionMap };
 
-  return (args, userId) => {
+  return (rawArgs, userId) => {
+    const args = normalizeManageArgs(rawArgs);
     const bulkTargetAction = bulkActionMap[args.action as BulkAction];
     if (bulkTargetAction) {
       const handler = actions[bulkTargetAction];
@@ -202,8 +253,8 @@ const createHabit: ToolHandler = (args, userId) => {
 };
 
 const updateHabit: ToolHandler = (args, userId) => {
-  if (!args.habitId) throw new Error('habitId is required for update');
-  const existing = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(args.habitId, userId) as any;
+  if (!args.habit_id) throw new Error('habit_id is required for update');
+  const existing = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(args.habit_id, userId) as any;
   if (!existing) throw new Error('Habit not found or access denied');
   db.prepare(`UPDATE habits SET title = ?, emoji = ?, frequency = ?, quit_date = ?, subgoal_id = ?, archived = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(
@@ -213,17 +264,17 @@ const updateHabit: ToolHandler = (args, userId) => {
       args.quit_date ?? existing.quit_date,
       args.subgoal_id ?? existing.subgoal_id,
       args.archived !== undefined ? (args.archived ? 1 : 0) : existing.archived,
-      args.habitId
+      args.habit_id
     );
-  return db.prepare('SELECT * FROM habits WHERE id = ?').get(args.habitId);
+  return db.prepare('SELECT * FROM habits WHERE id = ?').get(args.habit_id);
 };
 
 const deleteHabit: ToolHandler = (args, userId) => {
-  if (!args.habitId) throw new Error('habitId is required for delete');
-  const existing = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(args.habitId, userId);
+  if (!args.habit_id) throw new Error('habit_id is required for delete');
+  const existing = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(args.habit_id, userId);
   if (!existing) throw new Error('Habit not found or access denied');
-  db.prepare('DELETE FROM habits WHERE id = ?').run(args.habitId);
-  return { deleted: true, id: args.habitId };
+  db.prepare('DELETE FROM habits WHERE id = ?').run(args.habit_id);
+  return { deleted: true, id: args.habit_id };
 };
 
 export const handleManageHabit = createManagedActionHandler({
@@ -262,11 +313,8 @@ const listTasks: ToolHandler = (args, userId) => {
   sql += ' ORDER BY t.done ASC, t.priority DESC, t.due_date ASC NULLS LAST, t.created_at DESC';
 
   const tasks = db.prepare(sql).all(...params) as any[];
-  const labelStmt = db.prepare('SELECT l.* FROM labels l JOIN task_labels tl ON l.id = tl.label_id WHERE tl.task_id = ?');
-  const linkStmt = db.prepare('SELECT * FROM task_links WHERE task_id = ?');
   for (const task of tasks) {
-    task.labels = labelStmt.all(task.id);
-    task.links = linkStmt.all(task.id);
+    hydrateTaskRelations(task);
   }
   return tasks;
 };
@@ -274,8 +322,9 @@ const listTasks: ToolHandler = (args, userId) => {
 const createTask: ToolHandler = (args, userId) => {
   if (!args.title) throw new Error('title is required');
   const id = uuidv4();
-  db.prepare(`INSERT INTO tasks (id, user_id, title, description, project_id, sprint_id, bucket_id, priority, due_date, start_date, end_date, assignee_name, task_type, hex_color, percent_done)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+  const done = args.done ? 1 : 0;
+  db.prepare(`INSERT INTO tasks (id, user_id, title, description, project_id, sprint_id, bucket_id, priority, due_date, start_date, end_date, assignee_name, task_type, hex_color, percent_done, done, done_at, is_favorite)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       id,
       userId,
@@ -291,7 +340,10 @@ const createTask: ToolHandler = (args, userId) => {
       args.assignee_name || null,
       args.task_type || null,
       args.hex_color || null,
-      args.percent_done || 0
+      args.percent_done || 0,
+      done,
+      done ? new Date().toISOString() : null,
+      args.is_favorite ? 1 : 0
     );
   if (args.labels?.length) {
     const ins = db.prepare('INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)');
@@ -301,15 +353,16 @@ const createTask: ToolHandler = (args, userId) => {
     const ins = db.prepare('INSERT OR IGNORE INTO task_links (task_id, target_type, target_id) VALUES (?, ?, ?)');
     for (const link of args.links) ins.run(id, link.target_type, link.target_id);
   }
-  return db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+  return getTaskWithRelations(id);
 };
 
 const updateTask: ToolHandler = (args, userId) => {
-  if (!args.taskId) throw new Error('taskId is required for update');
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
+  if (!args.task_id) throw new Error('task_id is required for update');
+  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.task_id, userId) as any;
   if (!existing) throw new Error('Task not found or access denied');
   db.prepare(`UPDATE tasks SET title = ?, description = ?, project_id = ?, sprint_id = ?, bucket_id = ?, priority = ?, due_date = ?,
-    start_date = ?, end_date = ?, assignee_name = ?, task_type = ?, hex_color = ?, percent_done = ?, updated_at = datetime('now') WHERE id = ?`)
+    start_date = ?, end_date = ?, assignee_name = ?, task_type = ?, hex_color = ?, percent_done = ?, done = ?, done_at = ?,
+    is_favorite = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(
       args.title ?? existing.title,
       args.description ?? existing.description,
@@ -324,55 +377,58 @@ const updateTask: ToolHandler = (args, userId) => {
       args.task_type !== undefined ? (args.task_type || null) : existing.task_type,
       args.hex_color !== undefined ? (args.hex_color || null) : existing.hex_color,
       args.percent_done ?? existing.percent_done,
-      args.taskId
+      args.done !== undefined ? (args.done ? 1 : 0) : existing.done,
+      args.done !== undefined ? (args.done ? existing.done_at || new Date().toISOString() : null) : existing.done_at,
+      args.is_favorite !== undefined ? (args.is_favorite ? 1 : 0) : existing.is_favorite,
+      args.task_id
     );
   if (args.labels) {
-    db.prepare('DELETE FROM task_labels WHERE task_id = ?').run(args.taskId);
+    db.prepare('DELETE FROM task_labels WHERE task_id = ?').run(args.task_id);
     const ins = db.prepare('INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)');
-    for (const lid of args.labels) ins.run(args.taskId, lid);
+    for (const lid of args.labels) ins.run(args.task_id, lid);
   }
   if (args.links) {
-    db.prepare('DELETE FROM task_links WHERE task_id = ?').run(args.taskId);
+    db.prepare('DELETE FROM task_links WHERE task_id = ?').run(args.task_id);
     const ins = db.prepare('INSERT OR IGNORE INTO task_links (task_id, target_type, target_id) VALUES (?, ?, ?)');
-    for (const link of args.links) ins.run(args.taskId, link.target_type, link.target_id);
+    for (const link of args.links) ins.run(args.task_id, link.target_type, link.target_id);
   }
-  return db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId);
+  return getTaskWithRelations(args.task_id);
 };
 
 const deleteTask: ToolHandler = (args, userId) => {
-  if (!args.taskId) throw new Error('taskId is required for delete');
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId);
+  if (!args.task_id) throw new Error('task_id is required for delete');
+  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.task_id, userId);
   if (!existing) throw new Error('Task not found or access denied');
-  db.prepare('DELETE FROM tasks WHERE id = ?').run(args.taskId);
-  return { deleted: true, id: args.taskId };
+  db.prepare('DELETE FROM tasks WHERE id = ?').run(args.task_id);
+  return { deleted: true, id: args.task_id };
 };
 
 const toggleTaskDone: ToolHandler = (args, userId) => {
-  if (!args.taskId) throw new Error('taskId is required');
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
+  if (!args.task_id) throw new Error('task_id is required');
+  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.task_id, userId) as any;
   if (!existing) throw new Error('Task not found or access denied');
 
   if (!existing.done && existing.repeat_after > 0 && existing.due_date) {
     const baseDate = new Date(existing.due_date);
     const nextDate = new Date(baseDate.getTime() + existing.repeat_after * 1000);
     db.prepare(`UPDATE tasks SET due_date = ?, updated_at = datetime('now') WHERE id = ?`)
-      .run(nextDate.toISOString().slice(0, 19), args.taskId);
-    const rescheduled = db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId) as any;
+      .run(nextDate.toISOString().slice(0, 19), args.task_id);
+    const rescheduled = getTaskWithRelations(args.task_id) as any;
     return { ...rescheduled, rescheduled: true };
   }
 
   const newDone = existing.done ? 0 : 1;
   const doneAt = newDone ? new Date().toISOString() : null;
-  db.prepare('UPDATE tasks SET done = ?, done_at = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newDone, doneAt, args.taskId);
-  return db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId);
+  db.prepare('UPDATE tasks SET done = ?, done_at = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newDone, doneAt, args.task_id);
+  return getTaskWithRelations(args.task_id);
 };
 
 const toggleTaskFavorite: ToolHandler = (args, userId) => {
-  if (!args.taskId) throw new Error('taskId is required');
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
+  if (!args.task_id) throw new Error('task_id is required');
+  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.task_id, userId) as any;
   if (!existing) throw new Error('Task not found or access denied');
-  db.prepare('UPDATE tasks SET is_favorite = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.is_favorite ? 0 : 1, args.taskId);
-  return db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId);
+  db.prepare('UPDATE tasks SET is_favorite = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.is_favorite ? 0 : 1, args.task_id);
+  return getTaskWithRelations(args.task_id);
 };
 
 export const handleManageTask = createManagedActionHandler({
@@ -391,25 +447,25 @@ const verifyTaskOwnership = (taskId: string, userId: string) => {
 };
 
 const listTaskComments: ToolHandler = (args, userId) => {
-  verifyTaskOwnership(args.taskId, userId);
-  return db.prepare('SELECT * FROM task_comments WHERE task_id = ? ORDER BY created_at DESC').all(args.taskId);
+  verifyTaskOwnership(args.task_id, userId);
+  return db.prepare('SELECT * FROM task_comments WHERE task_id = ? ORDER BY created_at DESC').all(args.task_id);
 };
 
 const createTaskComment: ToolHandler = (args, userId) => {
-  verifyTaskOwnership(args.taskId, userId);
+  verifyTaskOwnership(args.task_id, userId);
   if (!args.content) throw new Error('content is required');
   const id = uuidv4();
-  db.prepare('INSERT INTO task_comments (id, task_id, user_id, content) VALUES (?, ?, ?, ?)').run(id, args.taskId, userId, args.content);
+  db.prepare('INSERT INTO task_comments (id, task_id, user_id, content) VALUES (?, ?, ?, ?)').run(id, args.task_id, userId, args.content);
   return db.prepare('SELECT * FROM task_comments WHERE id = ?').get(id);
 };
 
 const deleteTaskComment: ToolHandler = (args, userId) => {
-  verifyTaskOwnership(args.taskId, userId);
-  if (!args.commentId) throw new Error('commentId is required for delete');
-  const comment = db.prepare('SELECT * FROM task_comments WHERE id = ? AND task_id = ?').get(args.commentId, args.taskId);
+  verifyTaskOwnership(args.task_id, userId);
+  if (!args.comment_id) throw new Error('comment_id is required for delete');
+  const comment = db.prepare('SELECT * FROM task_comments WHERE id = ? AND task_id = ?').get(args.comment_id, args.task_id);
   if (!comment) throw new Error('Comment not found');
-  db.prepare('DELETE FROM task_comments WHERE id = ?').run(args.commentId);
-  return { deleted: true, id: args.commentId };
+  db.prepare('DELETE FROM task_comments WHERE id = ?').run(args.comment_id);
+  return { deleted: true, id: args.comment_id };
 };
 
 export const handleManageTaskComment = createManagedActionHandler({
@@ -453,8 +509,8 @@ const createProject: ToolHandler = (args, userId) => {
 };
 
 const updateProject: ToolHandler = (args, userId) => {
-  if (!args.projectId) throw new Error('projectId is required for update');
-  const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId) as any;
+  if (!args.project_id) throw new Error('project_id is required for update');
+  const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.project_id, userId) as any;
   if (!existing) throw new Error('Project not found or access denied');
   db.prepare(`UPDATE projects SET title = ?, description = ?, hex_color = ?, type = ?, parent_project_id = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(
@@ -463,33 +519,33 @@ const updateProject: ToolHandler = (args, userId) => {
       args.hex_color ?? existing.hex_color,
       args.type ?? existing.type,
       args.parent_project_id !== undefined ? (args.parent_project_id || null) : existing.parent_project_id,
-      args.projectId
+      args.project_id
     );
-  return db.prepare('SELECT * FROM projects WHERE id = ?').get(args.projectId);
+  return db.prepare('SELECT * FROM projects WHERE id = ?').get(args.project_id);
 };
 
 const deleteProject: ToolHandler = (args, userId) => {
-  if (!args.projectId) throw new Error('projectId is required for delete');
-  const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
+  if (!args.project_id) throw new Error('project_id is required for delete');
+  const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.project_id, userId);
   if (!existing) throw new Error('Project not found or access denied');
-  db.prepare('DELETE FROM projects WHERE id = ?').run(args.projectId);
-  return { deleted: true, id: args.projectId };
+  db.prepare('DELETE FROM projects WHERE id = ?').run(args.project_id);
+  return { deleted: true, id: args.project_id };
 };
 
 const toggleProjectArchive: ToolHandler = (args, userId) => {
-  if (!args.projectId) throw new Error('projectId is required');
-  const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId) as any;
+  if (!args.project_id) throw new Error('project_id is required');
+  const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.project_id, userId) as any;
   if (!existing) throw new Error('Project not found or access denied');
-  db.prepare('UPDATE projects SET archived = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.archived ? 0 : 1, args.projectId);
-  return db.prepare('SELECT * FROM projects WHERE id = ?').get(args.projectId);
+  db.prepare('UPDATE projects SET archived = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.archived ? 0 : 1, args.project_id);
+  return db.prepare('SELECT * FROM projects WHERE id = ?').get(args.project_id);
 };
 
 const toggleProjectFavorite: ToolHandler = (args, userId) => {
-  if (!args.projectId) throw new Error('projectId is required');
-  const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId) as any;
+  if (!args.project_id) throw new Error('project_id is required');
+  const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.project_id, userId) as any;
   if (!existing) throw new Error('Project not found or access denied');
-  db.prepare('UPDATE projects SET is_favorite = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.is_favorite ? 0 : 1, args.projectId);
-  return db.prepare('SELECT * FROM projects WHERE id = ?').get(args.projectId);
+  db.prepare('UPDATE projects SET is_favorite = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.is_favorite ? 0 : 1, args.project_id);
+  return db.prepare('SELECT * FROM projects WHERE id = ?').get(args.project_id);
 };
 
 export const handleManageProject = createManagedActionHandler({
@@ -516,20 +572,20 @@ const createLabel: ToolHandler = (args, userId) => {
 };
 
 const updateLabel: ToolHandler = (args, userId) => {
-  if (!args.labelId) throw new Error('labelId is required for update');
-  const existing = db.prepare('SELECT * FROM labels WHERE id = ? AND user_id = ?').get(args.labelId, userId) as any;
+  if (!args.label_id) throw new Error('label_id is required for update');
+  const existing = db.prepare('SELECT * FROM labels WHERE id = ? AND user_id = ?').get(args.label_id, userId) as any;
   if (!existing) throw new Error('Label not found or access denied');
   db.prepare(`UPDATE labels SET title = ?, hex_color = ?, description = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(args.title ?? existing.title, args.hex_color ?? existing.hex_color, args.description ?? existing.description, args.labelId);
-  return db.prepare('SELECT * FROM labels WHERE id = ?').get(args.labelId);
+    .run(args.title ?? existing.title, args.hex_color ?? existing.hex_color, args.description ?? existing.description, args.label_id);
+  return db.prepare('SELECT * FROM labels WHERE id = ?').get(args.label_id);
 };
 
 const deleteLabel: ToolHandler = (args, userId) => {
-  if (!args.labelId) throw new Error('labelId is required for delete');
-  const existing = db.prepare('SELECT * FROM labels WHERE id = ? AND user_id = ?').get(args.labelId, userId);
+  if (!args.label_id) throw new Error('label_id is required for delete');
+  const existing = db.prepare('SELECT * FROM labels WHERE id = ? AND user_id = ?').get(args.label_id, userId);
   if (!existing) throw new Error('Label not found or access denied');
-  db.prepare('DELETE FROM labels WHERE id = ?').run(args.labelId);
-  return { deleted: true, id: args.labelId };
+  db.prepare('DELETE FROM labels WHERE id = ?').run(args.label_id);
+  return { deleted: true, id: args.label_id };
 };
 
 export const handleManageLabel = createManagedActionHandler({
@@ -563,29 +619,29 @@ const createPomodoro: ToolHandler = (args, userId) => {
 };
 
 const updatePomodoro: ToolHandler = (args, userId) => {
-  if (!args.pomodoroId) throw new Error('pomodoroId is required for update');
-  const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoroId, userId) as any;
+  if (!args.pomodoro_id) throw new Error('pomodoro_id is required for update');
+  const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoro_id, userId) as any;
   if (!existing) throw new Error('Session not found or access denied');
   db.prepare('UPDATE pomodoro_sessions SET note = ?, status = ? WHERE id = ?')
-    .run(args.note ?? existing.note, args.status ?? existing.status, args.pomodoroId);
-  return db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(args.pomodoroId);
+    .run(args.note ?? existing.note, args.status ?? existing.status, args.pomodoro_id);
+  return db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(args.pomodoro_id);
 };
 
 const completePomodoro: ToolHandler = (args, userId) => {
-  if (!args.pomodoroId) throw new Error('pomodoroId is required');
-  const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoroId, userId);
+  if (!args.pomodoro_id) throw new Error('pomodoro_id is required');
+  const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoro_id, userId);
   if (!existing) throw new Error('Session not found or access denied');
   db.prepare('UPDATE pomodoro_sessions SET status = ?, ended_at = ? WHERE id = ?')
-    .run('completed', new Date().toISOString(), args.pomodoroId);
-  return db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(args.pomodoroId);
+    .run('completed', new Date().toISOString(), args.pomodoro_id);
+  return db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(args.pomodoro_id);
 };
 
 const deletePomodoro: ToolHandler = (args, userId) => {
-  if (!args.pomodoroId) throw new Error('pomodoroId is required for delete');
-  const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoroId, userId);
+  if (!args.pomodoro_id) throw new Error('pomodoro_id is required for delete');
+  const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoro_id, userId);
   if (!existing) throw new Error('Session not found or access denied');
-  db.prepare('DELETE FROM pomodoro_sessions WHERE id = ?').run(args.pomodoroId);
-  return { deleted: true, id: args.pomodoroId };
+  db.prepare('DELETE FROM pomodoro_sessions WHERE id = ?').run(args.pomodoro_id);
+  return { deleted: true, id: args.pomodoro_id };
 };
 
 export const handleManagePomodoro = createManagedActionHandler({
@@ -599,27 +655,27 @@ export const handleManagePomodoro = createManagedActionHandler({
 const listShares: ToolHandler = (args, userId) => {
   let sql = 'SELECT * FROM shared_goals WHERE user_id = ?';
   const params: any[] = [userId];
-  if (args.goalId) { sql += ' AND goal_id = ?'; params.push(args.goalId); }
+  if (args.goal_id) { sql += ' AND goal_id = ?'; params.push(args.goal_id); }
   sql += ' ORDER BY created_at DESC';
   return db.prepare(sql).all(...params);
 };
 
 const createShare: ToolHandler = (args, userId) => {
-  if (!args.goalId) throw new Error('goalId is required');
-  if (!goalOwnerCheck(args.goalId, userId)) throw new Error('Goal not found or access denied');
+  if (!args.goal_id) throw new Error('goal_id is required');
+  if (!goalOwnerCheck(args.goal_id, userId)) throw new Error('Goal not found or access denied');
   const id = uuidv4();
   const token = uuidv4().replace(/-/g, '').substring(0, 16);
   db.prepare('INSERT INTO shared_goals (id, goal_id, user_id, token, show_logs, show_guestbook) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, args.goalId, userId, token, args.show_logs ? 1 : 0, args.show_guestbook ? 1 : 0);
+    .run(id, args.goal_id, userId, token, args.show_logs ? 1 : 0, args.show_guestbook ? 1 : 0);
   return db.prepare('SELECT * FROM shared_goals WHERE id = ?').get(id);
 };
 
 const revokeShare: ToolHandler = (args, userId) => {
-  if (!args.shareId) throw new Error('shareId is required');
-  const existing = db.prepare('SELECT * FROM shared_goals WHERE id = ? AND user_id = ?').get(args.shareId, userId);
+  if (!args.share_id) throw new Error('share_id is required');
+  const existing = db.prepare('SELECT * FROM shared_goals WHERE id = ? AND user_id = ?').get(args.share_id, userId);
   if (!existing) throw new Error('Share link not found or access denied');
-  db.prepare('DELETE FROM shared_goals WHERE id = ?').run(args.shareId);
-  return { deleted: true, id: args.shareId };
+  db.prepare('DELETE FROM shared_goals WHERE id = ?').run(args.share_id);
+  return { deleted: true, id: args.share_id };
 };
 
 export const handleManageShare = createManagedActionHandler({
@@ -648,22 +704,22 @@ const addEtiquette: ToolHandler = (args, userId) => {
 };
 
 const updateEtiquette: ToolHandler = (args, userId) => {
-  if (!args.ruleId) throw new Error('ruleId is required');
-  const existing = db.prepare('SELECT * FROM agent_etiquette WHERE id = ? AND user_id = ?').get(args.ruleId, userId) as any;
+  if (!args.rule_id) throw new Error('rule_id is required');
+  const existing = db.prepare('SELECT * FROM agent_etiquette WHERE id = ? AND user_id = ?').get(args.rule_id, userId) as any;
   if (!existing) throw new Error('Rule not found or access denied');
   db.prepare('UPDATE agent_etiquette SET content = ?, position = ? WHERE id = ?')
-    .run(args.content ?? existing.content, args.position ?? existing.position, args.ruleId);
-  return db.prepare('SELECT * FROM agent_etiquette WHERE id = ?').get(args.ruleId);
+    .run(args.content ?? existing.content, args.position ?? existing.position, args.rule_id);
+  return db.prepare('SELECT * FROM agent_etiquette WHERE id = ?').get(args.rule_id);
 };
 
 const deleteEtiquette: ToolHandler = (args, userId) => {
-  if (!args.ruleId) throw new Error('ruleId is required');
-  const existing = db.prepare('SELECT * FROM agent_etiquette WHERE id = ? AND user_id = ?').get(args.ruleId, userId);
+  if (!args.rule_id) throw new Error('rule_id is required');
+  const existing = db.prepare('SELECT * FROM agent_etiquette WHERE id = ? AND user_id = ?').get(args.rule_id, userId);
   if (!existing) throw new Error('Rule not found or access denied');
-  db.prepare('DELETE FROM agent_etiquette WHERE id = ?').run(args.ruleId);
+  db.prepare('DELETE FROM agent_etiquette WHERE id = ?').run(args.rule_id);
   const remaining = db.prepare('SELECT id FROM agent_etiquette WHERE user_id = ? ORDER BY position').all(userId) as any[];
   remaining.forEach((rule: any, index: number) => db.prepare('UPDATE agent_etiquette SET position = ? WHERE id = ?').run(index + 1, rule.id));
-  return { deleted: true, id: args.ruleId };
+  return { deleted: true, id: args.rule_id };
 };
 
 const resetEtiquette: ToolHandler = (_args, userId) => {
@@ -697,8 +753,8 @@ function verifySprintOwnership(sprintId: string, userId: string) {
 }
 
 const listSprints: ToolHandler = (args, userId) => {
-  if (!args.projectId) throw new Error('projectId is required for list');
-  const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
+  if (!args.project_id) throw new Error('project_id is required for list');
+  const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.project_id, userId);
   if (!project) throw new Error('Project not found or access denied');
   return db.prepare(`
     SELECT s.*,
@@ -708,23 +764,27 @@ const listSprints: ToolHandler = (args, userId) => {
     WHERE s.project_id = ?
     GROUP BY s.id
     ORDER BY s.sprint_number DESC, s.created_at DESC
-  `).all(args.projectId);
+  `).all(args.project_id);
 };
 
 const createSprint: ToolHandler = (args, userId) => {
-  if (!args.projectId) throw new Error('projectId is required for create');
+  if (!args.project_id) throw new Error('project_id is required for create');
   if (!args.title) throw new Error('title is required for create');
-  const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
+  const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.project_id, userId);
   if (!project) throw new Error('Project not found or access denied');
+  const sprintStatus = args.status || 'planned';
+  if (!['planned', 'active', 'completed'].includes(sprintStatus)) {
+    throw new Error('status must be planned, active, or completed');
+  }
 
   const now = new Date().toISOString();
-  const maxNum = db.prepare('SELECT MAX(sprint_number) as max FROM sprints WHERE project_id = ?').get(args.projectId) as any;
+  const maxNum = db.prepare('SELECT MAX(sprint_number) as max FROM sprints WHERE project_id = ?').get(args.project_id) as any;
   const sprintNumber = (maxNum?.max ?? 0) + 1;
   const id = uuidv4();
 
   db.prepare(`INSERT INTO sprints (id, project_id, title, description, sprint_number, status, start_date, end_date, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?)`)
-    .run(id, args.projectId, args.title.trim(), args.description || null, sprintNumber, args.start_date || null, args.end_date || null, now, now);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, args.project_id, args.title.trim(), args.description || null, sprintNumber, sprintStatus, args.start_date || null, args.end_date || null, now, now);
 
   const defaultColumns = [
     { title: 'To Do', position: 0, is_done_column: 0 },
@@ -734,7 +794,7 @@ const createSprint: ToolHandler = (args, userId) => {
   ];
   const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)');
   for (const column of defaultColumns) {
-    insertBucket.run(uuidv4(), args.projectId, id, column.title, column.position, column.is_done_column);
+    insertBucket.run(uuidv4(), args.project_id, id, column.title, column.position, column.is_done_column);
   }
 
   const sprint = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id);
@@ -743,14 +803,14 @@ const createSprint: ToolHandler = (args, userId) => {
 };
 
 const getSprint: ToolHandler = (args, userId) => {
-  if (!args.sprintId) throw new Error('sprintId is required for get');
-  const sprint = verifySprintOwnership(args.sprintId, userId);
-  const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprintId);
+  if (!args.sprint_id) throw new Error('sprint_id is required for get');
+  const sprint = verifySprintOwnership(args.sprint_id, userId);
+  const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprint_id);
   const tasks = db.prepare(`
     SELECT t.*, p.title as project_title, p.hex_color as project_color
     FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
     WHERE t.sprint_id = ? ORDER BY t.position ASC, t.created_at DESC
-  `).all(args.sprintId);
+  `).all(args.sprint_id);
   const backlog = db.prepare(`
     SELECT t.*, p.title as project_title, p.hex_color as project_color
     FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
@@ -760,8 +820,8 @@ const getSprint: ToolHandler = (args, userId) => {
 };
 
 const updateSprint: ToolHandler = (args, userId) => {
-  if (!args.sprintId) throw new Error('sprintId is required for update');
-  const existing = verifySprintOwnership(args.sprintId, userId);
+  if (!args.sprint_id) throw new Error('sprint_id is required for update');
+  const existing = verifySprintOwnership(args.sprint_id, userId);
   const now = new Date().toISOString();
   db.prepare(`UPDATE sprints SET title = COALESCE(?, title), description = ?, start_date = ?, end_date = ?, updated_at = ? WHERE id = ?`)
     .run(
@@ -770,24 +830,24 @@ const updateSprint: ToolHandler = (args, userId) => {
       args.start_date !== undefined ? args.start_date : existing.start_date,
       args.end_date !== undefined ? args.end_date : existing.end_date,
       now,
-      args.sprintId
+      args.sprint_id
     );
-  return db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprintId);
+  return db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprint_id);
 };
 
 const deleteSprint: ToolHandler = (args, userId) => {
-  if (!args.sprintId) throw new Error('sprintId is required for delete');
-  verifySprintOwnership(args.sprintId, userId);
-  db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(args.sprintId);
-  db.prepare('DELETE FROM buckets WHERE sprint_id = ?').run(args.sprintId);
-  db.prepare('DELETE FROM sprints WHERE id = ?').run(args.sprintId);
-  return { deleted: true, id: args.sprintId };
+  if (!args.sprint_id) throw new Error('sprint_id is required for delete');
+  verifySprintOwnership(args.sprint_id, userId);
+  db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(args.sprint_id);
+  db.prepare('DELETE FROM buckets WHERE sprint_id = ?').run(args.sprint_id);
+  db.prepare('DELETE FROM sprints WHERE id = ?').run(args.sprint_id);
+  return { deleted: true, id: args.sprint_id };
 };
 
 const transitionSprintStatus: ToolHandler = (args, userId) => {
-  if (!args.sprintId) throw new Error('sprintId is required');
+  if (!args.sprint_id) throw new Error('sprint_id is required');
   if (!args.status) throw new Error('status is required');
-  const existing = verifySprintOwnership(args.sprintId, userId);
+  const existing = verifySprintOwnership(args.sprint_id, userId);
   const validTransitions: Record<string, string[]> = {
     planned: ['active'],
     active: ['completed'],
@@ -796,8 +856,8 @@ const transitionSprintStatus: ToolHandler = (args, userId) => {
   if (!validTransitions[existing.status]?.includes(args.status)) {
     throw new Error(`Cannot transition from '${existing.status}' to '${args.status}'`);
   }
-  db.prepare('UPDATE sprints SET status = ?, updated_at = ? WHERE id = ?').run(args.status, new Date().toISOString(), args.sprintId);
-  return db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprintId);
+  db.prepare('UPDATE sprints SET status = ?, updated_at = ? WHERE id = ?').run(args.status, new Date().toISOString(), args.sprint_id);
+  return db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprint_id);
 };
 
 export const handleManageSprint = createManagedActionHandler({
@@ -819,39 +879,39 @@ function verifySprintForColumn(sprintId: string, userId: string) {
 }
 
 const listSprintColumns: ToolHandler = (args, userId) => {
-  verifySprintForColumn(args.sprintId, userId);
-  return db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprintId);
+  verifySprintForColumn(args.sprint_id, userId);
+  return db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprint_id);
 };
 
 const createSprintColumn: ToolHandler = (args, userId) => {
-  const sprint = verifySprintForColumn(args.sprintId, userId);
+  const sprint = verifySprintForColumn(args.sprint_id, userId);
   if (!args.title) throw new Error('title is required');
-  const maxPos = db.prepare('SELECT MAX(position) as max FROM buckets WHERE sprint_id = ?').get(args.sprintId) as any;
+  const maxPos = db.prepare('SELECT MAX(position) as max FROM buckets WHERE sprint_id = ?').get(args.sprint_id) as any;
   const position = args.position ?? ((maxPos?.max ?? 0) + 1);
   const id = uuidv4();
   db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, sprint.project_id, args.sprintId, args.title.trim(), position, args.is_done_column ? 1 : 0);
+    .run(id, sprint.project_id, args.sprint_id, args.title.trim(), position, args.is_done_column ? 1 : 0);
   return db.prepare('SELECT * FROM buckets WHERE id = ?').get(id);
 };
 
 const updateSprintColumn: ToolHandler = (args, userId) => {
-  verifySprintForColumn(args.sprintId, userId);
-  if (!args.columnId) throw new Error('columnId is required for update');
-  const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.columnId, args.sprintId);
+  verifySprintForColumn(args.sprint_id, userId);
+  if (!args.column_id) throw new Error('column_id is required for update');
+  const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.column_id, args.sprint_id);
   if (!existing) throw new Error('Column not found');
   db.prepare('UPDATE buckets SET title = COALESCE(?, title), position = COALESCE(?, position), is_done_column = COALESCE(?, is_done_column) WHERE id = ?')
-    .run(args.title?.trim() || null, args.position ?? null, args.is_done_column !== undefined ? (args.is_done_column ? 1 : 0) : null, args.columnId);
-  return db.prepare('SELECT * FROM buckets WHERE id = ?').get(args.columnId);
+    .run(args.title?.trim() || null, args.position ?? null, args.is_done_column !== undefined ? (args.is_done_column ? 1 : 0) : null, args.column_id);
+  return db.prepare('SELECT * FROM buckets WHERE id = ?').get(args.column_id);
 };
 
 const deleteSprintColumn: ToolHandler = (args, userId) => {
-  verifySprintForColumn(args.sprintId, userId);
-  if (!args.columnId) throw new Error('columnId is required for delete');
-  const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.columnId, args.sprintId);
+  verifySprintForColumn(args.sprint_id, userId);
+  if (!args.column_id) throw new Error('column_id is required for delete');
+  const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.column_id, args.sprint_id);
   if (!existing) throw new Error('Column not found');
-  db.prepare('UPDATE tasks SET bucket_id = NULL WHERE bucket_id = ?').run(args.columnId);
-  db.prepare('DELETE FROM buckets WHERE id = ?').run(args.columnId);
-  return { deleted: true, id: args.columnId };
+  db.prepare('UPDATE tasks SET bucket_id = NULL WHERE bucket_id = ?').run(args.column_id);
+  db.prepare('DELETE FROM buckets WHERE id = ?').run(args.column_id);
+  return { deleted: true, id: args.column_id };
 };
 
 export const handleManageSprintColumn = createManagedActionHandler({
@@ -871,19 +931,19 @@ const createNote: ToolHandler = (args, userId) => {
 };
 
 const updateNote: ToolHandler = (args, userId) => {
-  if (!args.noteId) throw new Error('noteId is required for update');
+  if (!args.note_id) throw new Error('note_id is required for update');
   if (!args.content) throw new Error('content is required for update');
   const result = db.prepare(`UPDATE quick_notes SET content = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
-    .run(args.content.trim(), args.noteId, userId);
+    .run(args.content.trim(), args.note_id, userId);
   if (result.changes === 0) throw new Error('Note not found or access denied');
-  return db.prepare('SELECT * FROM quick_notes WHERE id = ?').get(args.noteId);
+  return db.prepare('SELECT * FROM quick_notes WHERE id = ?').get(args.note_id);
 };
 
 const deleteNote: ToolHandler = (args, userId) => {
-  if (!args.noteId) throw new Error('noteId is required for delete');
-  const result = db.prepare('DELETE FROM quick_notes WHERE id = ? AND user_id = ?').run(args.noteId, userId);
+  if (!args.note_id) throw new Error('note_id is required for delete');
+  const result = db.prepare('DELETE FROM quick_notes WHERE id = ? AND user_id = ?').run(args.note_id, userId);
   if (result.changes === 0) throw new Error('Note not found or access denied');
-  return { deleted: true, id: args.noteId };
+  return { deleted: true, id: args.note_id };
 };
 
 export const handleManageNote = createManagedActionHandler({
@@ -927,8 +987,8 @@ const createEvent: ToolHandler = (args, userId) => {
 };
 
 const updateEvent: ToolHandler = (args, userId) => {
-  if (!args.eventId) throw new Error('eventId is required for update');
-  const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.eventId, userId) as any;
+  if (!args.event_id) throw new Error('event_id is required for update');
+  const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.event_id, userId) as any;
   if (!existing) throw new Error('Event not found');
   const now = new Date().toISOString();
   db.prepare(`
@@ -943,18 +1003,18 @@ const updateEvent: ToolHandler = (args, userId) => {
     args.color ?? existing.color,
     args.location !== undefined ? (args.location || null) : existing.location,
     now,
-    args.eventId,
+    args.event_id,
     userId
   );
-  return db.prepare('SELECT * FROM events WHERE id = ?').get(args.eventId);
+  return db.prepare('SELECT * FROM events WHERE id = ?').get(args.event_id);
 };
 
 const deleteEvent: ToolHandler = (args, userId) => {
-  if (!args.eventId) throw new Error('eventId is required for delete');
-  const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.eventId, userId);
+  if (!args.event_id) throw new Error('event_id is required for delete');
+  const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.event_id, userId);
   if (!existing) throw new Error('Event not found');
-  db.prepare('DELETE FROM events WHERE id = ? AND user_id = ?').run(args.eventId, userId);
-  return { deleted: true, id: args.eventId };
+  db.prepare('DELETE FROM events WHERE id = ? AND user_id = ?').run(args.event_id, userId);
+  return { deleted: true, id: args.event_id };
 };
 
 export const handleManageEvent = createManagedActionHandler({
