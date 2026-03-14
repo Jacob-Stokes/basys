@@ -115,22 +115,25 @@ export function setupMcpRoutes(app: Express): void {
         const session = sessions.get(sessionId)!;
         console.log('[MCP POST] Reusing existing session', { sessionId, rpcMethod });
         await session.transport.handleRequest(req, res, req.body);
+      } else if (sessionId) {
+        // Stale session — tell client to re-initialize
+        console.log('[MCP POST] Stale session — returning 404 to force re-init', {
+          requestedSessionId: sessionId,
+          rpcMethod,
+        });
+        res.status(404).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Session not found. Please re-initialize.' },
+          id: null,
+        });
       } else {
-        // New session (no sessionId) or stale session (sessionId not found in memory after restart)
-        if (sessionId) {
-          console.log('[MCP POST] Stale session detected — creating replacement session', {
-            requestedSessionId: sessionId,
-            rpcMethod,
-          });
-        } else {
-          console.log('[MCP POST] No session supplied — creating new session', { rpcMethod });
-        }
+        // No session — create new one (expects initialize as first message)
+        console.log('[MCP POST] No session supplied — creating new session', { rpcMethod });
         const server = createMcpServer();
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
             console.log('[MCP POST] Session initialized', {
-              requestedSessionId: sessionId || null,
               newSessionId: sid,
               rpcMethod,
             });
