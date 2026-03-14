@@ -53,8 +53,11 @@ function getUserId(extra: any): string {
 
 function withToolLogging(toolName: string, handler: (args: any, extra: any) => Promise<any> | any) {
   return async (args: any, extra: any) => {
+    console.log(`[MCP tool] ${toolName} START`, { userId: extra?.authInfo?.extra?.userId, args });
     try {
-      return await handler(args, extra);
+      const result = await handler(args, extra);
+      console.log(`[MCP tool] ${toolName} OK`);
+      return result;
     } catch (err) {
       console.error(`[MCP tool error] ${toolName}:`, {
         userId: extra?.authInfo?.extra?.userId,

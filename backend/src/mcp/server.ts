@@ -127,6 +127,7 @@ export function setupMcpRoutes(app: Express): void {
         const session = sessions.get(sessionId)!;
         console.log('[MCP POST] Reusing existing session', { sessionId, rpcMethod });
         await session.transport.handleRequest(req, res, req.body);
+        console.log('[MCP POST] handleRequest completed', { sessionId, rpcMethod, statusCode: res.statusCode });
       } else if (sessionId) {
         // Stale session — tell client to re-initialize
         console.log('[MCP POST] Stale session — returning 404 to force re-init', {
