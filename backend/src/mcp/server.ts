@@ -109,6 +109,17 @@ export function setupMcpRoutes(app: Express): void {
   // ─── MCP endpoint ──────────────────────────────────────
   const bearerAuth = requireBearerAuth({ verifier: provider });
 
+  // Pre-auth logging — catches requests rejected by bearerAuth
+  app.post('/mcp', (req: Request, _res: Response, next: Function) => {
+    console.log('[MCP RAW] POST /mcp received', {
+      sessionId: req.headers['mcp-session-id'] || null,
+      protocolVersion: req.headers['mcp-protocol-version'] || null,
+      auth: req.headers['authorization']?.substring(0, 20) + '...',
+      method: getJsonRpcMethod(req.body),
+    });
+    next();
+  });
+
   // Handle POST /mcp (JSON-RPC messages) and GET /mcp (SSE streams)
   app.post('/mcp', bearerAuth, async (req: Request, res: Response) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
@@ -141,6 +152,7 @@ export function setupMcpRoutes(app: Express): void {
         const server = createMcpServer();
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
+          enableJsonResponse: true,
           onsessioninitialized: (sid) => {
             console.log('[MCP POST] Session initialized', {
               newSessionId: sid,
