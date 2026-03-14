@@ -18,6 +18,14 @@ const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'http://localhost:3001';
 // Session storage for stateful MCP connections
 const sessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
 
+function getJsonRpcMethod(body: any): string {
+  if (Array.isArray(body)) {
+    const methods = body.map((entry) => entry?.method).filter(Boolean);
+    return methods.length > 0 ? methods.join(',') : 'unknown';
+  }
+  return typeof body?.method === 'string' ? body.method : 'unknown';
+}
+
 export function setupMcpRoutes(app: Express): void {
   const provider = new HaradaOAuthProvider();
   const issuerUrl = new URL(MCP_SERVER_URL);
@@ -91,22 +99,41 @@ export function setupMcpRoutes(app: Express): void {
 
   // Handle POST /mcp (JSON-RPC messages) and GET /mcp (SSE streams)
   app.post('/mcp', bearerAuth, async (req: Request, res: Response) => {
-    try {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    const rpcMethod = getJsonRpcMethod(req.body);
+    const sessionMatched = !!(sessionId && sessions.has(sessionId));
 
+    console.log('[MCP POST] Incoming request', {
+      sessionId: sessionId || null,
+      sessionMatched,
+      rpcMethod,
+    });
+
+    try {
       if (sessionId && sessions.has(sessionId)) {
         // Existing session — forward the request
         const session = sessions.get(sessionId)!;
+        console.log('[MCP POST] Reusing existing session', { sessionId, rpcMethod });
         await session.transport.handleRequest(req, res, req.body);
       } else {
         // New session (no sessionId) or stale session (sessionId not found in memory after restart)
         if (sessionId) {
-          console.log(`[MCP] Stale session ${sessionId} — creating new session`);
+          console.log('[MCP POST] Stale session detected — creating replacement session', {
+            requestedSessionId: sessionId,
+            rpcMethod,
+          });
+        } else {
+          console.log('[MCP POST] No session supplied — creating new session', { rpcMethod });
         }
         const server = createMcpServer();
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
+            console.log('[MCP POST] Session initialized', {
+              requestedSessionId: sessionId || null,
+              newSessionId: sid,
+              rpcMethod,
+            });
             sessions.set(sid, { transport, server });
           },
         });
@@ -115,7 +142,11 @@ export function setupMcpRoutes(app: Express): void {
         await transport.handleRequest(req, res, req.body);
       }
     } catch (err) {
-      console.error('[MCP POST] Error:', err);
+      console.error('[MCP POST] Error:', {
+        sessionId: sessionId || null,
+        sessionMatched,
+        rpcMethod,
+      }, err);
       if (!res.headersSent) res.status(500).json({ error: 'Internal MCP error' });
     }
   });

@@ -51,6 +51,20 @@ function getUserId(extra: any): string {
   return userId;
 }
 
+function withToolLogging(toolName: string, handler: (args: any, extra: any) => Promise<any> | any) {
+  return async (args: any, extra: any) => {
+    try {
+      return await handler(args, extra);
+    } catch (err) {
+      console.error(`[MCP tool error] ${toolName}:`, {
+        userId: extra?.authInfo?.extra?.userId,
+        args,
+      }, err);
+      throw err;
+    }
+  };
+}
+
 function parseJsonArrayInput(value: unknown) {
   if (typeof value !== 'string') return value;
   try {
@@ -75,10 +89,12 @@ export function createMcpServer(): McpServer {
     name: 'thesys',
     version: '1.0.0',
   });
+  const registerTool = (name: string, config: any, handler: (args: any, extra: any) => Promise<any> | any) =>
+    (server.registerTool as any)(name, config, withToolLogging(name, handler));
 
   // ─── get_harada_overview ─────────────────────────────────
 
-  server.registerTool('get_harada_overview', {
+  registerTool('get_harada_overview', {
     description: 'START HERE. Fetches the full Harada landing page: who the user is, their goals, sub-goals, actions, guidance for agents, and API info.',
     inputSchema: {},
   }, async (_args, extra) => {
@@ -137,7 +153,7 @@ export function createMcpServer(): McpServer {
 
   // ─── get_summary ─────────────────────────────────────────
 
-  server.registerTool('get_summary', {
+  registerTool('get_summary', {
     description: 'Fetch the Harada user summary tree (goal -> sub-goal -> action).',
     inputSchema: {
       level: z.enum(['minimal', 'standard', 'detailed', 'full']).optional().describe('Level of detail (defaults to standard).'),
@@ -207,7 +223,7 @@ export function createMcpServer(): McpServer {
 
   // ─── list_goals ──────────────────────────────────────────
 
-  server.registerTool('list_goals', {
+  registerTool('list_goals', {
     description: 'List all primary goals.',
     inputSchema: {},
   }, async (_args, extra) => {
@@ -218,7 +234,7 @@ export function createMcpServer(): McpServer {
 
   // ─── upsert_goal ─────────────────────────────────────────
 
-  server.registerTool('upsert_goal', {
+  registerTool('upsert_goal', {
     description: 'Create or update a primary goal. Omit goalId to create; provide goalId to update.',
     inputSchema: {
       goalId: z.string().optional().describe('Goal ID — if provided, updates instead of creating.'),
@@ -246,7 +262,7 @@ export function createMcpServer(): McpServer {
 
   // ─── upsert_subgoal ──────────────────────────────────────
 
-  server.registerTool('upsert_subgoal', {
+  registerTool('upsert_subgoal', {
     description: 'Create or update a sub-goal. Omit subGoalId to create (requires goalId); provide subGoalId to update.',
     inputSchema: {
       subGoalId: z.string().optional(),
@@ -278,7 +294,7 @@ export function createMcpServer(): McpServer {
 
   // ─── upsert_action ───────────────────────────────────────
 
-  server.registerTool('upsert_action', {
+  registerTool('upsert_action', {
     description: 'Create or update an action. Omit actionId to create (requires subGoalId); provide actionId to update. Set completed to toggle completion.',
     inputSchema: {
       actionId: z.string().optional(),
@@ -321,7 +337,7 @@ export function createMcpServer(): McpServer {
 
   // ─── upsert_action_log ───────────────────────────────────
 
-  server.registerTool('upsert_action_log', {
+  registerTool('upsert_action_log', {
     description: 'Create or update an activity log. Omit logId to create (requires actionId); provide logId to update.',
     inputSchema: {
       logId: z.string().optional(),
@@ -356,7 +372,7 @@ export function createMcpServer(): McpServer {
 
   // ─── post_guestbook_entry ────────────────────────────────
 
-  server.registerTool('post_guestbook_entry', {
+  registerTool('post_guestbook_entry', {
     description: 'Leave a guestbook / encouragement note at user/goal/sub-goal/action level.',
     inputSchema: {
       agentName: z.string().describe('Name of the AI agent'),
@@ -374,7 +390,7 @@ export function createMcpServer(): McpServer {
 
   // ─── reorder_subgoal ─────────────────────────────────────
 
-  server.registerTool('reorder_subgoal', {
+  registerTool('reorder_subgoal', {
     description: 'Move a sub-goal to a new slot (1-8).',
     inputSchema: {
       subGoalId: z.string().describe('Sub-goal ID'),
@@ -403,7 +419,7 @@ export function createMcpServer(): McpServer {
 
   // ─── reorder_action ──────────────────────────────────────
 
-  server.registerTool('reorder_action', {
+  registerTool('reorder_action', {
     description: 'Reorder an action within its sub-goal (1-8).',
     inputSchema: {
       actionId: z.string().describe('Action ID'),
@@ -429,7 +445,7 @@ export function createMcpServer(): McpServer {
 
   // ─── bulk_import_goals ───────────────────────────────────
 
-  server.registerTool('bulk_import_goals', {
+  registerTool('bulk_import_goals', {
     description: 'Import one or more complete goal trees (with sub-goals, actions, and logs) in a single operation.',
     inputSchema: {
       goals: z.array(z.object({
@@ -506,7 +522,7 @@ export function createMcpServer(): McpServer {
 
   // ─── delete_resource ─────────────────────────────────────
 
-  server.registerTool('delete_resource', {
+  registerTool('delete_resource', {
     description: 'Delete a resource by type and ID. Supported types: goal, subgoal, action, log, guestbook.',
     inputSchema: {
       resourceType: z.enum(['goal', 'subgoal', 'action', 'log', 'guestbook']).describe('Type of resource'),
@@ -542,7 +558,7 @@ export function createMcpServer(): McpServer {
 
   // ─── manage_habit ─────────────────────────────────────────
 
-  server.registerTool('manage_habit', {
+  registerTool('manage_habit', {
     description: 'List, create, update, or delete habits and quit trackers. List supports verbosity=summary|standard|full (default standard). Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_HABIT_ACTIONS).describe('Operation to perform'),
@@ -565,7 +581,7 @@ export function createMcpServer(): McpServer {
 
   // ─── log_habit ────────────────────────────────────────────
 
-  server.registerTool('log_habit', {
+  registerTool('log_habit', {
     description: 'Log a habit completion, remove a log, or get calendar/stats. Use action="log" to mark a habit done for a date, "unlog" to remove, "calendar" for stats and history.',
     inputSchema: {
       action: z.enum(['log', 'unlog', 'calendar']).describe('Operation: log, unlog, or calendar'),
@@ -642,7 +658,7 @@ export function createMcpServer(): McpServer {
 
   // ─── manage_task ──────────────────────────────────────────
 
-  server.registerTool('manage_task', {
+  registerTool('manage_task', {
     description: 'List, create, update, delete tasks, or toggle done/favorite. List supports verbosity=summary|standard|full, where full also includes comments. bulk_update also supports done and is_favorite fields. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_TASK_ACTIONS).describe('Operation to perform'),
@@ -687,7 +703,7 @@ export function createMcpServer(): McpServer {
 
   // ─── manage_task_comment ──────────────────────────────────
 
-  server.registerTool('manage_task_comment', {
+  registerTool('manage_task_comment', {
     description: 'List, add, or delete comments on a task. Supports bulk_create and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_TASK_COMMENT_ACTIONS).describe('Operation to perform'),
@@ -707,7 +723,7 @@ export function createMcpServer(): McpServer {
 
   // ─── manage_project ───────────────────────────────────────
 
-  server.registerTool('manage_project', {
+  registerTool('manage_project', {
     description: 'List, create, update, delete, archive, or favorite projects. List supports verbosity=summary|standard|full; full also includes tasks, and include_sprints nests summary sprint+column data. Supports bulk_create, bulk_update, and bulk_delete via an items array. DELETE cascades: deletes all tasks, sprints, and buckets. To keep orphaned tasks instead, the user must explicitly say "keep tasks" — then set keep_tasks=true.',
     inputSchema: {
       action: z.enum(MANAGE_PROJECT_ACTIONS).describe('Operation to perform'),
@@ -732,7 +748,7 @@ export function createMcpServer(): McpServer {
 
   // ─── manage_label ─────────────────────────────────────────
 
-  server.registerTool('manage_label', {
+  registerTool('manage_label', {
     description: 'List, create, update, or delete labels. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_LABEL_ACTIONS).describe('Operation to perform'),
@@ -751,7 +767,7 @@ export function createMcpServer(): McpServer {
   // POMODORO SESSIONS
   // ═══════════════════════════════════════════════════════════════
 
-  server.registerTool('manage_pomodoro', {
+  registerTool('manage_pomodoro', {
     description: 'List, create, update, complete, or delete pomodoro sessions. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_POMODORO_ACTIONS).describe('Operation to perform'),
@@ -772,7 +788,7 @@ export function createMcpServer(): McpServer {
   // SHARING
   // ═══════════════════════════════════════════════════════════════
 
-  server.registerTool('manage_share', {
+  registerTool('manage_share', {
     description: 'Create, list, or revoke share links for goals. Supports bulk_create and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_SHARE_ACTIONS).describe('Operation to perform'),
@@ -791,7 +807,7 @@ export function createMcpServer(): McpServer {
   // AGENT ETIQUETTE
   // ═══════════════════════════════════════════════════════════════
 
-  server.registerTool('manage_etiquette', {
+  registerTool('manage_etiquette', {
     description: 'List, add, update, delete, or reset agent etiquette rules. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_ETIQUETTE_ACTIONS).describe('Operation to perform'),
@@ -809,7 +825,7 @@ export function createMcpServer(): McpServer {
   // CROSS-DOMAIN SEARCH
   // ═══════════════════════════════════════════════════════════════
 
-  server.registerTool('search', {
+  registerTool('search', {
     description: 'Search across goals, sub-goals, habits, tasks, projects, and notes by title/content. Returns typed results from all domains.',
     inputSchema: {
       query: z.string().describe('Search query (matched against titles)'),
@@ -859,7 +875,7 @@ export function createMcpServer(): McpServer {
   // SPRINTS
   // ═══════════════════════════════════════════════════════════════
 
-  server.registerTool('manage_sprint', {
+  registerTool('manage_sprint', {
     description: 'List, create, get, update, delete sprints, or transition sprint status. List supports verbosity=summary|standard|full; full also includes columns, and include_columns can request columns explicitly. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_SPRINT_ACTIONS).describe('Operation to perform'),
@@ -881,7 +897,7 @@ export function createMcpServer(): McpServer {
 
   // ─── manage_sprint_column ──────────────────────────────────
 
-  server.registerTool('manage_sprint_column', {
+  registerTool('manage_sprint_column', {
     description: 'List, create, update, or delete columns within a sprint board. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_SPRINT_COLUMN_ACTIONS).describe('Operation to perform'),
@@ -901,7 +917,7 @@ export function createMcpServer(): McpServer {
   // QUICK NOTES
   // ═══════════════════════════════════════════════════════════════
 
-  server.registerTool('manage_note', {
+  registerTool('manage_note', {
     description: 'List, create, update, or delete quick notes. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_NOTE_ACTIONS).describe('Operation to perform'),
@@ -915,7 +931,7 @@ export function createMcpServer(): McpServer {
   });
 
   // ── manage_event ──────────────────────────────────────────────
-  server.registerTool('manage_event', {
+  registerTool('manage_event', {
     description: 'List, create, update, or delete calendar events. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_EVENT_ACTIONS).describe('Operation to perform'),
@@ -938,7 +954,7 @@ export function createMcpServer(): McpServer {
 
   // ─── manage_agent_action ──────────────────────────────────────
 
-  server.registerTool('manage_agent_action', {
+  registerTool('manage_agent_action', {
     description: 'List, create, update, delete agent actions on tasks, or update their execution status. Use list_staged to get all staged actions ready for execution. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_AGENT_ACTION_ACTIONS).describe('Operation to perform'),

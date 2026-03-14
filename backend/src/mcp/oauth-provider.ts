@@ -18,6 +18,7 @@ import type {
   OAuthClientInformationFull,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { InvalidTokenError, InvalidGrantError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 
 // Token lifetimes
 const ACCESS_TOKEN_TTL = 60 * 60 * 24 * 7;  // 7 days in seconds
@@ -119,7 +120,7 @@ export class HaradaOAuthProvider implements OAuthServerProvider {
     authorizationCode: string,
   ): Promise<string> {
     const row = db.prepare('SELECT code_challenge FROM oauth_auth_codes WHERE code = ?').get(authorizationCode) as any;
-    if (!row) throw new Error('Invalid authorization code');
+    if (!row) throw new InvalidGrantError('Invalid authorization code');
     return row.code_challenge;
   }
 
@@ -136,12 +137,12 @@ export class HaradaOAuthProvider implements OAuthServerProvider {
     const row = db.prepare('SELECT * FROM oauth_auth_codes WHERE code = ? AND client_id = ?')
       .get(authorizationCode, client.client_id) as any;
 
-    if (!row) throw new Error('Invalid authorization code');
+    if (!row) throw new InvalidGrantError('Invalid authorization code');
 
     const now = Math.floor(Date.now() / 1000);
     if (row.expires_at < now) {
       db.prepare('DELETE FROM oauth_auth_codes WHERE code = ?').run(authorizationCode);
-      throw new Error('Authorization code expired');
+      throw new InvalidGrantError('Authorization code expired');
     }
 
     // Delete the code (single-use)
@@ -164,12 +165,12 @@ export class HaradaOAuthProvider implements OAuthServerProvider {
       "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'refresh' AND client_id = ?"
     ).get(refreshToken, client.client_id) as any;
 
-    if (!row) throw new Error('Invalid refresh token');
+    if (!row) throw new InvalidTokenError('Invalid refresh token');
 
     const now = Math.floor(Date.now() / 1000);
     if (row.expires_at < now) {
       db.prepare('DELETE FROM oauth_tokens WHERE token = ?').run(refreshToken);
-      throw new Error('Refresh token expired');
+      throw new InvalidTokenError('Refresh token expired');
     }
 
     // Delete old refresh token
@@ -187,14 +188,31 @@ export class HaradaOAuthProvider implements OAuthServerProvider {
     const row = db.prepare(
       "SELECT * FROM oauth_tokens WHERE token = ? AND token_type = 'access'"
     ).get(token) as any;
+    const tokenPrefix = token.slice(0, 8);
 
-    if (!row) throw new Error('Invalid access token');
+    if (!row) {
+      console.error('[OAuth verifyAccessToken] Invalid access token', { tokenPrefix });
+      throw new InvalidTokenError('Invalid access token');
+    }
 
     const now = Math.floor(Date.now() / 1000);
     if (row.expires_at < now) {
       db.prepare('DELETE FROM oauth_tokens WHERE token = ?').run(token);
-      throw new Error('Access token expired');
+      console.error('[OAuth verifyAccessToken] Access token expired', {
+        tokenPrefix,
+        clientId: row.client_id,
+        userId: row.user_id,
+        expiresAt: row.expires_at,
+      });
+      throw new InvalidTokenError('Access token expired');
     }
+
+    console.log('[OAuth verifyAccessToken] Verified access token', {
+      tokenPrefix,
+      clientId: row.client_id,
+      userId: row.user_id,
+      expiresAt: row.expires_at,
+    });
 
     return {
       token,
