@@ -363,7 +363,7 @@ export default function Settings() {
     }
   };
 
-  const parseTemplateConfig = (configStr: string | null): Record<string, boolean> => {
+  const parseTemplateConfig = (configStr: string | null): Record<string, any> => {
     if (!configStr) return {};
     try { return JSON.parse(configStr); } catch { return {}; }
   };
@@ -2986,8 +2986,8 @@ curl -X POST "$API_URL/api/guestbook" \\
                               cfg.include_tests && 'Tests',
                               cfg.dry_run && 'Dry run',
                               cfg.model_override && cfg.model_override,
-                              cfg.on_running_bucket_type && `Run → ${bucketTypeLabels[cfg.on_running_bucket_type] || cfg.on_running_bucket_type}`,
-                              cfg.on_complete_bucket_type && `Done → ${bucketTypeLabels[cfg.on_complete_bucket_type] || cfg.on_complete_bucket_type}`,
+                              cfg.on_running_bucket_type ? `Run → ${bucketTypeLabels[cfg.on_running_bucket_type] || cfg.on_running_bucket_type}` : null,
+                              cfg.on_complete_bucket_type ? `Done → ${bucketTypeLabels[cfg.on_complete_bucket_type] || cfg.on_complete_bucket_type}` : null,
                             ].filter(Boolean);
                             return flags.length > 0 ? (
                               <div className="flex gap-1 mt-1">
