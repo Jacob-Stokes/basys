@@ -182,6 +182,6 @@ app.get('/{*splat}', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT} [v${new Date().toISOString().slice(0, 10)}]`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });
