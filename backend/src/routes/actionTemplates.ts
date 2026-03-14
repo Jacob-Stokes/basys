@@ -20,14 +20,14 @@ router.get('/', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { title, description, default_config } = req.body;
+    const { title, description, default_config, auto_run } = req.body;
     if (!title?.trim()) return fail(res, 400, 'Title is required');
 
     const id = uuidv4();
     const now = new Date().toISOString();
-    db.prepare(`INSERT INTO action_templates (id, user_id, title, description, default_config, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, userId, title.trim(), description || null, typeof default_config === 'string' ? default_config : JSON.stringify(default_config || null), now, now);
+    db.prepare(`INSERT INTO action_templates (id, user_id, title, description, default_config, auto_run, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, userId, title.trim(), description || null, typeof default_config === 'string' ? default_config : JSON.stringify(default_config || null), auto_run ? 1 : 0, now, now);
 
     const template = db.prepare('SELECT * FROM action_templates WHERE id = ?').get(id);
     ok(res, template, 201);
@@ -44,13 +44,14 @@ router.put('/:id', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM action_templates WHERE id = ? AND user_id = ?').get(id, userId) as any;
     if (!existing) return fail(res, 404, 'Template not found');
 
-    const { title, description, default_config } = req.body;
+    const { title, description, default_config, auto_run } = req.body;
     const now = new Date().toISOString();
-    db.prepare(`UPDATE action_templates SET title = ?, description = ?, default_config = ?, updated_at = ? WHERE id = ?`)
+    db.prepare(`UPDATE action_templates SET title = ?, description = ?, default_config = ?, auto_run = ?, updated_at = ? WHERE id = ?`)
       .run(
         title?.trim() || existing.title,
         description !== undefined ? description : existing.description,
         default_config !== undefined ? (typeof default_config === 'string' ? default_config : JSON.stringify(default_config)) : existing.default_config,
+        auto_run !== undefined ? (auto_run ? 1 : 0) : existing.auto_run,
         now, id
       );
 

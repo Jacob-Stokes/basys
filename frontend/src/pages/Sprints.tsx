@@ -8,6 +8,9 @@ import type { FocusItem } from '../context/TimerContext';
 import { SprintBoardContent } from './SprintBoard';
 import { buildObsidianUri } from '../utils/obsidian';
 import AgentActionModal from '../components/AgentActionModal';
+import { useDisplaySettings } from '../context/DisplaySettingsContext';
+import { resolveViewSettings, parseViewSettings, BUILT_IN_BUCKET_TEMPLATES } from '../utils/viewSettings';
+import type { ViewSettings, BucketTemplate } from '../utils/viewSettings';
 
 interface Project {
   id: string;
@@ -22,6 +25,7 @@ interface Project {
   archived: number;
   parent_project_id: string | null;
   obsidian_path: string | null;
+  view_settings: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -94,40 +98,27 @@ export default function Sprints() {
   const [error, setError] = useState<string | null>(null);
   const [obsidianVaultName, setObsidianVaultName] = useState<string | null>(null);
 
-  // View preferences (persisted in localStorage)
-  const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>(() =>
-    (localStorage.getItem('projects_view_mode') as ProjectViewMode) || 'card'
-  );
-  const [cardSize, setCardSize] = useState<CardSize>(() =>
-    (localStorage.getItem('projects_card_size') as CardSize) || 'md'
-  );
+  // View preferences — resolved from global defaults (DisplaySettings)
+  const { settings: displaySettings } = useDisplaySettings();
+  const globalResolved = useMemo(() => resolveViewSettings(displaySettings.viewDefaults), [displaySettings.viewDefaults]);
 
-  const updateViewMode = (mode: ProjectViewMode) => {
-    setProjectViewMode(mode);
-    localStorage.setItem('projects_view_mode', mode);
-  };
-  const updateCardSize = (size: CardSize) => {
-    setCardSize(size);
-    localStorage.setItem('projects_card_size', size);
-  };
+  const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>(globalResolved.projectsViewMode);
+  const [cardSize, setCardSize] = useState<CardSize>(globalResolved.projectsCardSize);
+  const [projectSort, setProjectSort] = useState<ProjectSort>(globalResolved.projectsSort);
+  const [cardSubprojectMode, setCardSubprojectMode] = useState<CardSubprojectMode>(globalResolved.projectsSubprojectMode);
 
-  // Sort preference
-  const [projectSort, setProjectSort] = useState<ProjectSort>(() =>
-    (localStorage.getItem('projects_sort') as ProjectSort) || 'alpha'
-  );
-  const updateProjectSort = (sort: ProjectSort) => {
-    setProjectSort(sort);
-    localStorage.setItem('projects_sort', sort);
-  };
+  // Sync state when global defaults change
+  useEffect(() => {
+    setProjectViewMode(globalResolved.projectsViewMode);
+    setCardSize(globalResolved.projectsCardSize);
+    setProjectSort(globalResolved.projectsSort);
+    setCardSubprojectMode(globalResolved.projectsSubprojectMode);
+  }, [globalResolved]);
 
-  // Card subproject display mode
-  const [cardSubprojectMode, setCardSubprojectMode] = useState<CardSubprojectMode>(() =>
-    (localStorage.getItem('projects_card_subproject_mode') as CardSubprojectMode) || 'grouped'
-  );
-  const updateCardSubprojectMode = (mode: CardSubprojectMode) => {
-    setCardSubprojectMode(mode);
-    localStorage.setItem('projects_card_subproject_mode', mode);
-  };
+  const updateViewMode = (mode: ProjectViewMode) => setProjectViewMode(mode);
+  const updateCardSize = (size: CardSize) => setCardSize(size);
+  const updateProjectSort = (sort: ProjectSort) => setProjectSort(sort);
+  const updateCardSubprojectMode = (mode: CardSubprojectMode) => setCardSubprojectMode(mode);
 
   const cardWidth = CARD_SIZES.find(s => s.id === cardSize)?.width ?? 240;
 
@@ -146,6 +137,9 @@ export default function Sprints() {
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'project' | 'sprint'; id: string; title: string; taskCount: number; projectId?: string } | null>(null);
   const [deleteWithTasks, setDeleteWithTasks] = useState(true);
+
+  // Per-project view settings popover
+  const [projectSettingsId, setProjectSettingsId] = useState<string | null>(null);
 
   // ── Workspace tabs (multiple project views) ─────────────────
   interface TabHistoryEntry { projectId: string | null; sprintId: string | null; statusFilter: string; }
@@ -1300,6 +1294,74 @@ export default function Sprints() {
             </span>
           </div>
           <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+            <div className="relative">
+              <button
+                onClick={() => setProjectSettingsId(prev => prev === project.id ? null : project.id)}
+                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="Project view settings"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              </button>
+              {projectSettingsId === project.id && (
+                <div className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 w-52">
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">Project Defaults</div>
+                  {(() => {
+                    const projSettings = parseViewSettings(project.view_settings);
+                    const updateProjectViewSettings = (patch: Partial<ViewSettings>) => {
+                      const merged = { ...projSettings, ...patch };
+                      // Remove keys set to undefined (inherit)
+                      Object.keys(merged).forEach(k => { if (merged[k as keyof ViewSettings] === undefined) delete merged[k as keyof ViewSettings]; });
+                      const json = Object.keys(merged).length > 0 ? JSON.stringify(merged) : null;
+                      api.updateProject(project.id, { view_settings: merged });
+                      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, view_settings: json } : p));
+                    };
+                    return (
+                      <>
+                        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Sprint view</label>
+                        <select
+                          className="w-full text-xs border rounded px-2 py-1 mb-2 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                          value={projSettings.sprintViewMode ?? ''}
+                          onChange={e => updateProjectViewSettings({ sprintViewMode: e.target.value ? e.target.value as any : undefined })}
+                        >
+                          <option value="">Inherit (global)</option>
+                          <option value="kanban">Kanban</option>
+                          <option value="list">List</option>
+                        </select>
+                        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Projects view</label>
+                        <select
+                          className="w-full text-xs border rounded px-2 py-1 mb-2 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                          value={projSettings.projectsViewMode ?? ''}
+                          onChange={e => updateProjectViewSettings({ projectsViewMode: e.target.value ? e.target.value as any : undefined })}
+                        >
+                          <option value="">Inherit (global)</option>
+                          <option value="card">Card</option>
+                          <option value="list">List</option>
+                        </select>
+                        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Default buckets</label>
+                        <select
+                          className="w-full text-xs border rounded px-2 py-1 mb-1 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                          value=""
+                          onChange={e => {
+                            const allTpls: BucketTemplate[] = [...BUILT_IN_BUCKET_TEMPLATES, ...(displaySettings.bucketTemplates || [])];
+                            const tpl = allTpls.find(t => t.id === e.target.value);
+                            if (!tpl) { api.updateProject(project.id, { default_columns: null }); return; }
+                            const cols = tpl.columns.map((c, i) => ({ title: c.title, position: i, is_done_column: c.is_done_column, emoji: c.emoji, show_inline: c.show_inline, bucket_type: c.bucket_type }));
+                            api.updateProject(project.id, { default_columns: JSON.stringify(cols) });
+                          }}
+                        >
+                          <option value="">Select template...</option>
+                          <option value="">— None (global default) —</option>
+                          {[...BUILT_IN_BUCKET_TEMPLATES, ...(displaySettings.bucketTemplates || [])].map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </>
+                    );
+                  })()}
+                  <button onClick={() => setProjectSettingsId(null)} className="text-xs text-gray-400 hover:text-gray-600 mt-1">Close</button>
+                </div>
+              )}
+            </div>
             <button onClick={() => openNewSprint(project.id)} className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">+ {modeLabel(project.project_mode || 'simple')}</button>
           </div>
         </div>
@@ -1407,8 +1469,88 @@ export default function Sprints() {
               <>
                 <button onClick={() => { setShowProjectTaskInput(true); setTimeout(() => document.getElementById('project-task-input')?.focus(), 50); }} className="text-xs px-2.5 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700">+ Task</button>
                 <button onClick={() => openNewSprint(project.id)} className="text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">+ {modeLabel(project.project_mode || 'simple')}</button>
+                <button
+                  onClick={() => {
+                    setEditingProject(null);
+                    setProjectForm({ ...emptyProjectForm, parent_project_id: project.id });
+                    setShowProjectModal(true);
+                  }}
+                  className="text-xs px-2.5 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                >+ Sub-project</button>
               </>
             )}
+            {/* Project view settings cog */}
+            <div className="relative">
+              <button
+                onClick={() => setProjectSettingsId(prev => prev === project.id ? null : project.id)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                title="Project view settings"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              </button>
+              {projectSettingsId === project.id && (
+                <div className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 w-52">
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">Project Defaults</div>
+                  {(() => {
+                    const projSettings = parseViewSettings(project.view_settings);
+                    const updateProjectViewSettings = (patch: Partial<ViewSettings>) => {
+                      const merged = { ...projSettings, ...patch };
+                      Object.keys(merged).forEach(k => { if (merged[k as keyof ViewSettings] === undefined) delete merged[k as keyof ViewSettings]; });
+                      const json = Object.keys(merged).length > 0 ? JSON.stringify(merged) : null;
+                      api.updateProject(project.id, { view_settings: merged });
+                      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, view_settings: json } : p));
+                    };
+                    const allBucketTemplates: BucketTemplate[] = [...BUILT_IN_BUCKET_TEMPLATES, ...(displaySettings.bucketTemplates || [])];
+
+                    return (
+                      <>
+                        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Sprint view</label>
+                        <select
+                          className="w-full text-xs border rounded px-2 py-1 mb-2 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                          value={projSettings.sprintViewMode ?? ''}
+                          onChange={e => updateProjectViewSettings({ sprintViewMode: e.target.value ? e.target.value as any : undefined })}
+                        >
+                          <option value="">Inherit (global)</option>
+                          <option value="kanban">Kanban</option>
+                          <option value="list">List</option>
+                        </select>
+
+                        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">Default buckets template</label>
+                        <select
+                          className="w-full text-xs border rounded px-2 py-1 mb-1 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                          value=""
+                          onChange={e => {
+                            const tpl = allBucketTemplates.find(t => t.id === e.target.value);
+                            if (!tpl) {
+                              // Clear default columns
+                              api.updateProject(project.id, { default_columns: null });
+                              return;
+                            }
+                            const cols = tpl.columns.map((c, i) => ({
+                              title: c.title,
+                              position: i,
+                              is_done_column: c.is_done_column,
+                              emoji: c.emoji,
+                              show_inline: c.show_inline,
+                              bucket_type: c.bucket_type,
+                            }));
+                            api.updateProject(project.id, { default_columns: JSON.stringify(cols) });
+                          }}
+                        >
+                          <option value="">Select template...</option>
+                          <option value="">— None (use global default) —</option>
+                          {allBucketTemplates.map(t => (
+                            <option key={t.id} value={t.id}>{t.name} ({t.columns.length} cols)</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">New sprints in this project will use these buckets.</p>
+                      </>
+                    );
+                  })()}
+                  <button onClick={() => setProjectSettingsId(null)} className="text-xs text-gray-400 hover:text-gray-600 mt-1">Close</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1416,28 +1558,15 @@ export default function Sprints() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{project.description}</p>
         )}
 
-        {/* Child projects */}
+        {/* Child projects — only shown when sub-projects exist */}
         {(() => {
           const children = projects.filter(p => p.parent_project_id === project.id && !p.archived);
+          if (children.length === 0) return null;
           return (
             <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Sub-projects</h3>
-                <button
-                  onClick={() => {
-                    setEditingProject(null);
-                    setProjectForm({ ...emptyProjectForm, parent_project_id: project.id });
-                    setShowProjectModal(true);
-                  }}
-                  className="text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium flex items-center gap-0.5"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                  Add
-                </button>
-              </div>
-              {children.length > 0 && (
-                <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
-                  {children.map(child => (
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Sub-projects</h3>
+              <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                {children.map(child => (
                     <button
                       key={child.id}
                       onClick={() => { setSelectedProject(child.id); }}
@@ -1451,7 +1580,6 @@ export default function Sprints() {
                     </button>
                   ))}
                 </div>
-              )}
             </div>
           );
         })()}

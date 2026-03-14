@@ -85,10 +85,19 @@ export interface TabOrder {
 
 export const DEFAULT_TAB_ORDER: TabOrder = {
   navbar: ['todo', 'sprints', 'life', 'command', 'admin'],
-  lifeTabs: ['journal', 'goals', 'habits', 'recipes', 'bookshelf', 'phonebook'],
+  lifeTabs: ['journal', 'calendar', 'goals', 'habits', 'recipes', 'bookshelf', 'phonebook'],
   commandTabs: ['actions', 'monitoring', 'agents'],
   adminTabs: ['terminal', 'settings', 'wiki'],
   panelTabs: ['tab1', 'tab2', 'tab3'],
+};
+
+// Canonical labels for all tabs — Settings UI derives from these
+export const TAB_LABELS: Record<keyof TabOrder, Record<string, string>> = {
+  navbar: { todo: 'Home', sprints: 'Projects', life: 'Life', command: 'Command', admin: 'Admin' },
+  lifeTabs: { journal: 'Journal', calendar: 'Calendar', goals: 'Goals', habits: 'Habits', recipes: 'Recipes', bookshelf: 'Bookshelf', phonebook: 'Phonebook' },
+  commandTabs: { actions: 'Actions', monitoring: 'Monitoring', agents: 'Agents' },
+  adminTabs: { terminal: 'Terminal', settings: 'Settings', wiki: 'Wiki' },
+  panelTabs: { tab1: 'Notes', tab2: 'Tab 2', tab3: 'Tab 3' },
 };
 
 export function sortTabs<T>(defs: T[], order: string[], keyFn: (t: T) => string): T[] {
@@ -115,6 +124,8 @@ export interface DisplaySettings {
   pomodoroPosition: PomodoroPosition;
   customCSS: string;
   tabOrder: TabOrder;
+  viewDefaults: import('../utils/viewSettings').ViewSettings;
+  bucketTemplates: import('../utils/viewSettings').BucketTemplate[];
 }
 
 export interface GoalTheme {
@@ -179,6 +190,8 @@ const defaultSettings: DisplaySettings = {
   pomodoroPosition: 'footer',
   customCSS: '',
   tabOrder: DEFAULT_TAB_ORDER,
+  viewDefaults: {},
+  bucketTemplates: [],
 };
 
 interface DisplaySettingsContextValue {

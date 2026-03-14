@@ -906,8 +906,8 @@ const createSprintColumn: ToolHandler = (args, userId) => {
   const maxPos = db.prepare('SELECT MAX(position) as max FROM buckets WHERE sprint_id = ?').get(args.sprint_id) as any;
   const position = args.position ?? ((maxPos?.max ?? 0) + 1);
   const id = uuidv4();
-  db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, sprint.project_id, args.sprint_id, args.title.trim(), position, args.is_done_column ? 1 : 0);
+  db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column, bucket_type) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, sprint.project_id, args.sprint_id, args.title.trim(), position, args.is_done_column ? 1 : 0, args.bucket_type || null);
   return db.prepare('SELECT * FROM buckets WHERE id = ?').get(id);
 };
 
@@ -916,8 +916,8 @@ const updateSprintColumn: ToolHandler = (args, userId) => {
   if (!args.column_id) throw new Error('column_id is required for update');
   const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.column_id, args.sprint_id);
   if (!existing) throw new Error('Column not found');
-  db.prepare('UPDATE buckets SET title = COALESCE(?, title), position = COALESCE(?, position), is_done_column = COALESCE(?, is_done_column) WHERE id = ?')
-    .run(args.title?.trim() || null, args.position ?? null, args.is_done_column !== undefined ? (args.is_done_column ? 1 : 0) : null, args.column_id);
+  db.prepare('UPDATE buckets SET title = COALESCE(?, title), position = COALESCE(?, position), is_done_column = COALESCE(?, is_done_column), bucket_type = COALESCE(?, bucket_type) WHERE id = ?')
+    .run(args.title?.trim() || null, args.position ?? null, args.is_done_column !== undefined ? (args.is_done_column ? 1 : 0) : null, args.bucket_type !== undefined ? (args.bucket_type || null) : null, args.column_id);
   return db.prepare('SELECT * FROM buckets WHERE id = ?').get(args.column_id);
 };
 

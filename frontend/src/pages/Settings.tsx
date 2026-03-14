@@ -4,8 +4,10 @@ import { useModKeySubmit } from '../hooks/useModKeySubmit';
 import i18n from '../i18n';
 import ConfirmModal from '../components/ConfirmModal';
 import { API_URL, api } from '../api/client';
-import { useDisplaySettings, getAllPalettes, appThemeOptions, AppThemeName, DEFAULT_FALLBACK_COLOR, DEFAULT_TAB_ORDER, TabOrder } from '../context/DisplaySettingsContext';
+import { useDisplaySettings, getAllPalettes, appThemeOptions, AppThemeName, DEFAULT_FALLBACK_COLOR, DEFAULT_TAB_ORDER, TAB_LABELS, TabOrder } from '../context/DisplaySettingsContext';
 import { lightenColor } from '../utils/color';
+import { BUILT_IN_BUCKET_TEMPLATES } from '../utils/viewSettings';
+import type { BucketTemplate, BucketTemplateColumn } from '../utils/viewSettings';
 
 interface ApiKey {
   id: string;
@@ -34,13 +36,14 @@ export default function Settings() {
   const [confirmDeleteKeyId, setConfirmDeleteKeyId] = useState<{ id: string; name: string } | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
   const [allowQueryParamAuth, setAllowQueryParamAuth] = useState(true);
-  const [activeTab, setActiveTab] = useState<'account' | 'api' | 'display' | 'data' | 'etiquette' | 'integrations' | 'admin'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'api' | 'display' | 'data' | 'integrations' | 'agents' | 'admin'>('account');
   const [obsidianVaultName, setObsidianVaultName] = useState('');
   const [obsidianEnabled, setObsidianEnabled] = useState(false);
   const [obsidianNotice, setObsidianNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [savingObsidian, setSavingObsidian] = useState(false);
   const [apiSubTab, setApiSubTab] = useState<'keys' | 'security' | 'docs'>('keys');
   const [displaySubTab, setDisplaySubTab] = useState<'general' | 'goals' | 'navigation'>('general');
+  const [agentsSubTab, setAgentsSubTab] = useState<'templates' | 'etiquette'>('templates');
 
   // Password change state
   const [currentPasswordField, setCurrentPasswordField] = useState('');
@@ -51,6 +54,11 @@ export default function Settings() {
   const [keysPage, setKeysPage] = useState(1);
   const KEYS_PER_PAGE = 5;
   const [goalSummaries, setGoalSummaries] = useState<GoalSummary[]>([]);
+
+  // Bucket template editing state
+  const [editingBucketTemplate, setEditingBucketTemplate] = useState<BucketTemplate | null>(null);
+  const [editingBucketColumns, setEditingBucketColumns] = useState<BucketTemplateColumn[]>([]);
+  const [editingBucketName, setEditingBucketName] = useState('');
   const [goalsLoading, setGoalsLoading] = useState(false);
   const [exportMode, setExportMode] = useState<'all' | 'selected'>('all');
   const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
@@ -63,6 +71,32 @@ export default function Settings() {
   const [editingEtiquetteId, setEditingEtiquetteId] = useState<string | null>(null);
   const [editingEtiquetteContent, setEditingEtiquetteContent] = useState('');
   const [confirmResetEtiquette, setConfirmResetEtiquette] = useState(false);
+
+  // Agent templates state
+  interface ActionTemplate {
+    id: string;
+    title: string;
+    description: string | null;
+    default_config: string | null;
+    auto_run: number;
+    created_at: string;
+    updated_at: string;
+  }
+  const [actionTemplates, setActionTemplates] = useState<ActionTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateDescription, setNewTemplateDescription] = useState('');
+  const [newTemplateAutoRun, setNewTemplateAutoRun] = useState(false);
+  const [newTemplateConfig, setNewTemplateConfig] = useState<Record<string, boolean>>({});
+  const [newTemplateModel, setNewTemplateModel] = useState('');
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editingTemplateName, setEditingTemplateName] = useState('');
+  const [editingTemplateDescription, setEditingTemplateDescription] = useState('');
+  const [editingTemplateAutoRun, setEditingTemplateAutoRun] = useState(false);
+  const [editingTemplateConfig, setEditingTemplateConfig] = useState<Record<string, boolean>>({});
+  const [editingTemplateModel, setEditingTemplateModel] = useState('');
+  const [templateNotice, setTemplateNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [confirmDeleteTemplateId, setConfirmDeleteTemplateId] = useState<string | null>(null);
 
   // Profile state
   const [displayNameInput, setDisplayNameInput] = useState('');
@@ -213,8 +247,13 @@ export default function Settings() {
     if (activeTab === 'data' && goalSummaries.length === 0 && !goalsLoading) {
       fetchGoalSummaries();
     }
-    if (activeTab === 'etiquette' && etiquetteRules.length === 0 && !etiquetteLoading) {
-      loadEtiquette();
+    if (activeTab === 'agents') {
+      if (agentsSubTab === 'etiquette' && etiquetteRules.length === 0 && !etiquetteLoading) {
+        loadEtiquette();
+      }
+      if (agentsSubTab === 'templates' && actionTemplates.length === 0 && !templatesLoading) {
+        loadActionTemplates();
+      }
     }
     if (activeTab === 'admin' && adminUsers.length === 0 && !adminLoading && currentUser?.is_admin) {
       loadAdminUsers();
@@ -226,7 +265,7 @@ export default function Settings() {
         setAllProjectTypes(types.sort());
       }).catch(() => {});
     }
-  }, [activeTab]);
+  }, [activeTab, agentsSubTab]);
 
   const loadKeys = async () => {
     try {
@@ -310,6 +349,87 @@ export default function Settings() {
     } finally {
       setEtiquetteLoading(false);
     }
+  };
+
+  const loadActionTemplates = async () => {
+    try {
+      setTemplatesLoading(true);
+      const templates = await api.getActionTemplates();
+      setActionTemplates(templates);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  };
+
+  const parseTemplateConfig = (configStr: string | null): Record<string, boolean> => {
+    if (!configStr) return {};
+    try { return JSON.parse(configStr); } catch { return {}; }
+  };
+
+  const handleCreateTemplate = async () => {
+    if (!newTemplateName.trim()) return;
+    try {
+      const configObj: Record<string, any> = { ...newTemplateConfig };
+      if (newTemplateModel) configObj.model_override = newTemplateModel;
+      await api.createActionTemplate({
+        title: newTemplateName.trim(),
+        description: newTemplateDescription.trim() || undefined,
+        default_config: Object.keys(configObj).length > 0 ? configObj : undefined,
+        auto_run: newTemplateAutoRun,
+      } as any);
+      setNewTemplateName('');
+      setNewTemplateDescription('');
+      setNewTemplateAutoRun(false);
+      setNewTemplateConfig({});
+      setNewTemplateModel('');
+      setTemplateNotice({ type: 'success', message: 'Template created' });
+      loadActionTemplates();
+    } catch (err) {
+      setTemplateNotice({ type: 'error', message: (err as Error).message });
+    }
+  };
+
+  const handleUpdateTemplate = async (id: string) => {
+    try {
+      const configObj: Record<string, any> = { ...editingTemplateConfig };
+      if (editingTemplateModel) configObj.model_override = editingTemplateModel;
+      await api.updateActionTemplate(id, {
+        title: editingTemplateName.trim(),
+        description: editingTemplateDescription.trim() || null,
+        default_config: Object.keys(configObj).length > 0 ? configObj : null,
+        auto_run: editingTemplateAutoRun,
+      });
+      setEditingTemplateId(null);
+      setTemplateNotice({ type: 'success', message: 'Template updated' });
+      loadActionTemplates();
+    } catch (err) {
+      setTemplateNotice({ type: 'error', message: (err as Error).message });
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    try {
+      await api.deleteActionTemplate(id);
+      setConfirmDeleteTemplateId(null);
+      setTemplateNotice({ type: 'success', message: 'Template deleted' });
+      loadActionTemplates();
+    } catch (err) {
+      setTemplateNotice({ type: 'error', message: (err as Error).message });
+    }
+  };
+
+  const startEditTemplate = (t: ActionTemplate) => {
+    setEditingTemplateId(t.id);
+    setEditingTemplateName(t.title);
+    setEditingTemplateDescription(t.description || '');
+    setEditingTemplateAutoRun(!!t.auto_run);
+    const cfg = parseTemplateConfig(t.default_config);
+    const model = cfg.model_override || '';
+    const { model_override, ...rest } = cfg;
+    setEditingTemplateConfig(rest as Record<string, boolean>);
+    setEditingTemplateModel(model as string);
   };
 
   const handleAddEtiquette = async () => {
@@ -876,16 +996,6 @@ export default function Settings() {
             {t('settings.tabData')}
           </button>
           <button
-            onClick={() => setActiveTab('etiquette')}
-            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-              activeTab === 'etiquette'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}
-          >
-            {t('settings.tabEtiquette')}
-          </button>
-          <button
             onClick={() => setActiveTab('integrations')}
             className={`px-6 py-3 rounded-lg font-medium transition-colors ${
               activeTab === 'integrations'
@@ -894,6 +1004,16 @@ export default function Settings() {
             }`}
           >
             Integrations
+          </button>
+          <button
+            onClick={() => setActiveTab('agents')}
+            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+              activeTab === 'agents'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            Agents
           </button>
           {currentUser?.is_admin && (
             <button
@@ -1836,6 +1956,238 @@ curl -X POST "$API_URL/api/guestbook" \\
                 )}
               </div>
             </section>
+
+            {/* Project & Sprint Defaults */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">Project & Sprint Defaults</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Set global defaults for how projects and sprints are displayed. Individual projects and sprints can override these.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sprint default view</label>
+                  <div className="flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden w-fit">
+                    {(['kanban', 'list'] as const).map(v => (
+                      <button key={v} onClick={() => updateDisplaySettings({ viewDefaults: { ...displaySettings.viewDefaults, sprintViewMode: v } })}
+                        className={`px-3 py-1.5 text-sm transition-colors ${(displaySettings.viewDefaults?.sprintViewMode || 'kanban') === v ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                        {v === 'kanban' ? 'Kanban' : 'List'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Projects page view</label>
+                  <div className="flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden w-fit">
+                    {(['card', 'list'] as const).map(v => (
+                      <button key={v} onClick={() => updateDisplaySettings({ viewDefaults: { ...displaySettings.viewDefaults, projectsViewMode: v } })}
+                        className={`px-3 py-1.5 text-sm transition-colors ${(displaySettings.viewDefaults?.projectsViewMode || 'card') === v ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                        {v === 'card' ? 'Cards' : 'List'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Card size</label>
+                  <div className="flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden w-fit">
+                    {(['sm', 'md', 'lg'] as const).map(v => (
+                      <button key={v} onClick={() => updateDisplaySettings({ viewDefaults: { ...displaySettings.viewDefaults, projectsCardSize: v } })}
+                        className={`px-3 py-1.5 text-sm transition-colors ${(displaySettings.viewDefaults?.projectsCardSize || 'md') === v ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                        {v.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default sort</label>
+                  <select
+                    value={displaySettings.viewDefaults?.projectsSort || 'alpha'}
+                    onChange={e => updateDisplaySettings({ viewDefaults: { ...displaySettings.viewDefaults, projectsSort: e.target.value as any } })}
+                    className="text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="alpha">Alphabetical</option>
+                    <option value="recent">Most Recent</option>
+                    <option value="created">Date Created</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subproject display</label>
+                  <div className="flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden w-fit">
+                    {(['grouped', 'nested'] as const).map(v => (
+                      <button key={v} onClick={() => updateDisplaySettings({ viewDefaults: { ...displaySettings.viewDefaults, projectsSubprojectMode: v } })}
+                        className={`px-3 py-1.5 text-sm transition-colors ${(displaySettings.viewDefaults?.projectsSubprojectMode || 'grouped') === v ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                        {v === 'grouped' ? 'Grouped' : 'Nested'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Bucket Templates */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">Bucket Templates</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Create reusable column layouts for new sprints. Set a template as default on a project to auto-apply when creating sprints.
+              </p>
+              {(() => {
+                const allTemplates: BucketTemplate[] = [...BUILT_IN_BUCKET_TEMPLATES, ...(displaySettings.bucketTemplates || [])];
+                const editingTemplate = editingBucketTemplate;
+                const setEditingTemplate = setEditingBucketTemplate;
+                const editingColumns = editingBucketColumns;
+                const setEditingColumns = setEditingBucketColumns;
+                const editingName = editingBucketName;
+                const setEditingName = setEditingBucketName;
+
+                const isBuiltIn = (t: BucketTemplate) => BUILT_IN_BUCKET_TEMPLATES.some(b => b.id === t.id);
+
+                const saveTemplate = () => {
+                  if (!editingName.trim()) return;
+                  const updated: BucketTemplate = {
+                    id: editingTemplate?.id && !isBuiltIn(editingTemplate) ? editingTemplate.id : `custom-${Date.now()}`,
+                    name: editingName.trim(),
+                    columns: editingColumns.map((c, i) => ({ ...c, title: c.title || `Column ${i + 1}` })),
+                  };
+                  const existing = (displaySettings.bucketTemplates || []).filter(t => t.id !== updated.id);
+                  updateDisplaySettings({ bucketTemplates: [...existing, updated] });
+                  setEditingTemplate(null);
+                };
+
+                const deleteTemplate = (id: string) => {
+                  updateDisplaySettings({ bucketTemplates: (displaySettings.bucketTemplates || []).filter(t => t.id !== id) });
+                };
+
+                const startEdit = (t: BucketTemplate) => {
+                  setEditingTemplate(t);
+                  setEditingName(t.name + (isBuiltIn(t) ? ' (copy)' : ''));
+                  setEditingColumns([...t.columns.map(c => ({ ...c }))]);
+                };
+
+                const startNew = () => {
+                  setEditingTemplate({ id: '', name: '', columns: [] });
+                  setEditingName('');
+                  setEditingColumns([
+                    { title: 'To Do', emoji: '📋', is_done_column: 0, show_inline: 1, bucket_type: null },
+                    { title: 'In Progress', emoji: '🔨', is_done_column: 0, show_inline: 1, bucket_type: 'in_progress' },
+                    { title: 'Done', emoji: '✅', is_done_column: 1, show_inline: 1, bucket_type: 'done' },
+                  ]);
+                };
+
+                return (
+                  <div className="space-y-3">
+                    {/* Template list */}
+                    <div className="grid gap-2">
+                      {allTemplates.map(t => (
+                        <div key={t.id} className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{t.name}</span>
+                              {isBuiltIn(t) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Built-in</span>}
+                            </div>
+                            <div className="flex gap-1 mt-1">
+                              {t.columns.map((c, i) => (
+                                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                  {c.emoji || ''} {c.title}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => startEdit(t)} className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20">
+                              {isBuiltIn(t) ? 'Duplicate' : 'Edit'}
+                            </button>
+                            {!isBuiltIn(t) && (
+                              <button onClick={() => deleteTemplate(t.id)} className="text-xs text-red-500 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">Delete</button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button onClick={startNew} className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">+ New Template</button>
+
+                    {/* Edit/Create modal */}
+                    {editingTemplate && (
+                      <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                          {editingTemplate.id ? 'Edit Template' : 'New Template'}
+                        </h4>
+                        <div className="mb-3">
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Template name</label>
+                          <input
+                            type="text"
+                            value={editingName}
+                            onChange={e => setEditingName(e.target.value)}
+                            className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                            placeholder="My Template"
+                          />
+                        </div>
+                        <div className="mb-3">
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Columns</label>
+                          <div className="space-y-2">
+                            {editingColumns.map((col, idx) => (
+                              <div key={idx} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2 py-1.5">
+                                <input
+                                  type="text"
+                                  value={col.emoji || ''}
+                                  onChange={e => { const c = [...editingColumns]; c[idx] = { ...c[idx], emoji: e.target.value || null }; setEditingColumns(c); }}
+                                  className="w-10 text-center text-sm border border-gray-200 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-800"
+                                  placeholder="📋"
+                                />
+                                <input
+                                  type="text"
+                                  value={col.title}
+                                  onChange={e => { const c = [...editingColumns]; c[idx] = { ...c[idx], title: e.target.value }; setEditingColumns(c); }}
+                                  className="flex-1 text-sm border border-gray-200 dark:border-gray-600 rounded px-2 py-0.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                  placeholder="Column name"
+                                />
+                                <select
+                                  value={col.bucket_type || ''}
+                                  onChange={e => { const c = [...editingColumns]; c[idx] = { ...c[idx], bucket_type: e.target.value || null }; setEditingColumns(c); }}
+                                  className="text-xs border border-gray-200 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                                >
+                                  <option value="">No type</option>
+                                  <option value="in_progress">In Progress</option>
+                                  <option value="review">Review</option>
+                                  <option value="done">Done</option>
+                                </select>
+                                <label className="flex items-center gap-1 text-xs text-gray-500">
+                                  <input type="checkbox" checked={!!col.is_done_column} onChange={e => { const c = [...editingColumns]; c[idx] = { ...c[idx], is_done_column: e.target.checked ? 1 : 0 }; setEditingColumns(c); }} />
+                                  Done
+                                </label>
+                                <label className="flex items-center gap-1 text-xs text-gray-500">
+                                  <input type="checkbox" checked={!!col.show_inline} onChange={e => { const c = [...editingColumns]; c[idx] = { ...c[idx], show_inline: e.target.checked ? 1 : 0 }; setEditingColumns(c); }} />
+                                  Visible
+                                </label>
+                                <button
+                                  onClick={() => setEditingColumns(editingColumns.filter((_, i) => i !== idx))}
+                                  className="text-red-400 hover:text-red-600 p-0.5"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setEditingColumns([...editingColumns, { title: '', emoji: null, is_done_column: 0, show_inline: 1, bucket_type: null }])}
+                            className="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700"
+                          >
+                            + Add Column
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={saveTemplate} className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+                          <button onClick={() => setEditingTemplate(null)} className="text-sm px-3 py-1.5 text-gray-500 hover:text-gray-700 border border-gray-300 dark:border-gray-600 rounded">Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </section>
             </>}
 
             {/* Goals sub-tab */}
@@ -2165,12 +2517,17 @@ curl -X POST "$API_URL/api/guestbook" \\
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {([
-                  { key: 'navbar' as const, title: 'Navbar', labels: { todo: 'Todo', sprints: 'Projects', life: 'Life', journal: 'Journal', phonebook: 'Phonebook', admin: 'Admin' } },
-                  { key: 'lifeTabs' as const, title: 'Life Subtabs', labels: { goals: 'Goals', habits: 'Habits', recipes: 'Recipes', bookshelf: 'Bookshelf' } },
-                  { key: 'adminTabs' as const, title: 'Admin Subtabs', labels: { terminal: 'Terminal', settings: 'Settings', wiki: 'Wiki' } },
-                  { key: 'panelTabs' as const, title: 'Side Panel', labels: { tab1: 'Notes', tab2: 'Tab 2', tab3: 'Tab 3' } },
-                ] as { key: keyof TabOrder; title: string; labels: Record<string, string> }[]).map(group => {
-                  const order = displaySettings.tabOrder?.[group.key] ?? DEFAULT_TAB_ORDER[group.key];
+                  { key: 'navbar' as const, title: 'Navbar' },
+                  { key: 'lifeTabs' as const, title: 'Life Subtabs' },
+                  { key: 'commandTabs' as const, title: 'Command Subtabs' },
+                  { key: 'adminTabs' as const, title: 'Admin Subtabs' },
+                  { key: 'panelTabs' as const, title: 'Side Panel' },
+                ] as { key: keyof TabOrder; title: string }[]).map(group => {
+                  const defaults = DEFAULT_TAB_ORDER[group.key];
+                  const saved = displaySettings.tabOrder?.[group.key] ?? defaults;
+                  // Merge: keep user order, append any new tabs from defaults not in saved
+                  const order = [...saved, ...defaults.filter(k => !saved.includes(k))];
+                  const labels = TAB_LABELS[group.key] ?? {};
                   const moveItem = (idx: number, dir: -1 | 1) => {
                     const newOrder = [...order];
                     const target = idx + dir;
@@ -2184,7 +2541,7 @@ curl -X POST "$API_URL/api/guestbook" \\
                       <div className="space-y-1">
                         {order.map((key, idx) => (
                           <div key={key} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
-                            <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">{group.labels[key] ?? key}</span>
+                            <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">{labels[key] ?? key}</span>
                             <button
                               onClick={() => moveItem(idx, -1)}
                               disabled={idx === 0}
@@ -2331,104 +2688,6 @@ curl -X POST "$API_URL/api/guestbook" \\
           </div>
         )}
 
-        {activeTab === 'etiquette' && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('settings.agentEtiquetteRules')}</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  {t('settings.agentEtiquetteDesc')}
-                </p>
-              </div>
-              <button
-                onClick={() => setConfirmResetEtiquette(true)}
-                className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                {t('settings.resetToDefaults')}
-              </button>
-            </div>
-
-            {etiquetteLoading ? (
-              <p className="text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
-            ) : (
-              <div className="space-y-2">
-                {etiquetteRules.map((rule) => (
-                  <div key={rule.id} className="flex items-start gap-2 group">
-                    {editingEtiquetteId === rule.id ? (
-                      <div className="flex-1 flex gap-2">
-                        <input
-                          type="text"
-                          value={editingEtiquetteContent}
-                          onChange={(e) => setEditingEtiquetteContent(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleUpdateEtiquette(rule.id);
-                            if (e.key === 'Escape') { setEditingEtiquetteId(null); setEditingEtiquetteContent(''); }
-                          }}
-                          className="flex-1 px-3 py-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => handleUpdateEtiquette(rule.id)}
-                          className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-                        >
-                          {t('common.save')}
-                        </button>
-                        <button
-                          onClick={() => { setEditingEtiquetteId(null); setEditingEtiquetteContent(''); }}
-                          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
-                        >
-                          {t('common.cancel')}
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded text-sm text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-                          {rule.content}
-                          {rule.is_default ? (
-                            <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">{t('settings.defaultBadge')}</span>
-                          ) : null}
-                        </div>
-                        <button
-                          onClick={() => { setEditingEtiquetteId(rule.id); setEditingEtiquetteContent(rule.content); }}
-                          className="px-2 py-2 text-gray-400 dark:text-gray-500 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-sm"
-                          title={t('common.edit')}
-                        >
-                          {t('common.edit')}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEtiquette(rule.id)}
-                          className="px-2 py-2 text-gray-400 dark:text-gray-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-sm"
-                          title={t('common.remove')}
-                        >
-                          {t('common.remove')}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                ))}
-
-                {/* Add new rule */}
-                <div className="flex gap-2 pt-3 border-t dark:border-gray-700 mt-3">
-                  <input
-                    type="text"
-                    value={newEtiquetteContent}
-                    onChange={(e) => setNewEtiquetteContent(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddEtiquette(); }}
-                    placeholder={t('settings.addEtiquettePlaceholder')}
-                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                  />
-                  <button
-                    onClick={handleAddEtiquette}
-                    disabled={!newEtiquetteContent.trim()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {t('common.add')}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Integrations Tab */}
@@ -2490,6 +2749,381 @@ curl -X POST "$API_URL/api/guestbook" \\
               </button>
             </div>
           </div>
+        )}
+
+      {/* Agents Tab */}
+        {activeTab === 'agents' && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+            {/* Sub-tabs */}
+            <div className="flex gap-2 mb-5">
+              {(['templates', 'etiquette'] as const).map(sub => (
+                <button key={sub} onClick={() => setAgentsSubTab(sub)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    agentsSubTab === sub
+                      ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}>
+                  {sub === 'templates' ? 'Action Templates' : 'Etiquette'}
+                </button>
+              ))}
+            </div>
+
+            {agentsSubTab === 'templates' && (<>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Create reusable templates for agent actions. Templates appear in the quick-add dropdown on tasks.
+            </p>
+
+            {templateNotice && (
+              <div className={`mb-4 px-4 py-2 rounded text-sm ${
+                templateNotice.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+              }`}>
+                {templateNotice.message}
+              </div>
+            )}
+
+            {/* Create new template */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">New Template</h3>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Name</label>
+                    <input
+                      type="text"
+                      value={newTemplateName}
+                      onChange={(e) => setNewTemplateName(e.target.value)}
+                      placeholder="e.g. Implement feature"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Description</label>
+                    <input
+                      type="text"
+                      value={newTemplateDescription}
+                      onChange={(e) => setNewTemplateDescription(e.target.value)}
+                      placeholder="Optional description"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" checked={newTemplateAutoRun} onChange={(e) => setNewTemplateAutoRun(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                    Auto-run on add
+                  </label>
+                  <span className="text-gray-300 dark:text-gray-600">|</span>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" checked={!!newTemplateConfig.plan_mode} onChange={(e) => setNewTemplateConfig(c => ({ ...c, plan_mode: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+                    Plan mode
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" checked={!!newTemplateConfig.use_worktree} onChange={(e) => setNewTemplateConfig(c => ({ ...c, use_worktree: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+                    Worktree
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" checked={!!newTemplateConfig.include_tests} onChange={(e) => setNewTemplateConfig(c => ({ ...c, include_tests: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+                    Tests
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" checked={!!newTemplateConfig.dry_run} onChange={(e) => setNewTemplateConfig(c => ({ ...c, dry_run: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+                    Dry run
+                  </label>
+                  <span className="text-gray-300 dark:text-gray-600">|</span>
+                  <select
+                    value={newTemplateModel}
+                    onChange={(e) => setNewTemplateModel(e.target.value)}
+                    className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="">Default model</option>
+                    <option value="sonnet">Sonnet</option>
+                    <option value="opus">Opus</option>
+                    <option value="haiku">Haiku</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">On run:</span>
+                  <select
+                    value={(newTemplateConfig as any).on_running_bucket_type || ''}
+                    onChange={(e) => setNewTemplateConfig(c => ({ ...c, on_running_bucket_type: e.target.value || undefined } as any))}
+                    className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="">Don't move task</option>
+                    <option value="in_progress">Move to In Progress</option>
+                  </select>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">On complete:</span>
+                  <select
+                    value={(newTemplateConfig as any).on_complete_bucket_type || ''}
+                    onChange={(e) => setNewTemplateConfig(c => ({ ...c, on_complete_bucket_type: e.target.value || undefined } as any))}
+                    className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="">Don't move task</option>
+                    <option value="review">Move to Review</option>
+                    <option value="done">Move to Done</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleCreateTemplate}
+                  disabled={!newTemplateName.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  Create Template
+                </button>
+              </div>
+            </div>
+
+            {/* Templates list */}
+            {templatesLoading ? (
+              <p className="text-sm text-gray-400">Loading templates...</p>
+            ) : actionTemplates.length === 0 ? (
+              <p className="text-sm text-gray-400">No templates yet. Create one above.</p>
+            ) : (
+              <div className="space-y-3">
+                {actionTemplates.map((tmpl) => (
+                  <div key={tmpl.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    {editingTemplateId === tmpl.id ? (
+                      /* Editing mode */
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <input
+                            type="text"
+                            value={editingTemplateName}
+                            onChange={(e) => setEditingTemplateName(e.target.value)}
+                            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={editingTemplateDescription}
+                            onChange={(e) => setEditingTemplateDescription(e.target.value)}
+                            placeholder="Description"
+                            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" checked={editingTemplateAutoRun} onChange={(e) => setEditingTemplateAutoRun(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                            Auto-run
+                          </label>
+                          <span className="text-gray-300 dark:text-gray-600">|</span>
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" checked={!!editingTemplateConfig.plan_mode} onChange={(e) => setEditingTemplateConfig(c => ({ ...c, plan_mode: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+                            Plan mode
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" checked={!!editingTemplateConfig.use_worktree} onChange={(e) => setEditingTemplateConfig(c => ({ ...c, use_worktree: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+                            Worktree
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" checked={!!editingTemplateConfig.include_tests} onChange={(e) => setEditingTemplateConfig(c => ({ ...c, include_tests: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+                            Tests
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" checked={!!editingTemplateConfig.dry_run} onChange={(e) => setEditingTemplateConfig(c => ({ ...c, dry_run: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+                            Dry run
+                          </label>
+                          <span className="text-gray-300 dark:text-gray-600">|</span>
+                          <select
+                            value={editingTemplateModel}
+                            onChange={(e) => setEditingTemplateModel(e.target.value)}
+                            className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="">Default model</option>
+                            <option value="sonnet">Sonnet</option>
+                            <option value="opus">Opus</option>
+                            <option value="haiku">Haiku</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">On run:</span>
+                          <select
+                            value={(editingTemplateConfig as any).on_running_bucket_type || ''}
+                            onChange={(e) => setEditingTemplateConfig(c => ({ ...c, on_running_bucket_type: e.target.value || undefined } as any))}
+                            className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="">Don't move task</option>
+                            <option value="in_progress">Move to In Progress</option>
+                          </select>
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">On complete:</span>
+                          <select
+                            value={(editingTemplateConfig as any).on_complete_bucket_type || ''}
+                            onChange={(e) => setEditingTemplateConfig(c => ({ ...c, on_complete_bucket_type: e.target.value || undefined } as any))}
+                            className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="">Don't move task</option>
+                            <option value="review">Move to Review</option>
+                            <option value="done">Move to Done</option>
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleUpdateTemplate(tmpl.id)} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">Save</button>
+                          <button onClick={() => setEditingTemplateId(null)} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Display mode */
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{tmpl.title}</span>
+                            {tmpl.auto_run ? (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">Auto-run</span>
+                            ) : (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Draft</span>
+                            )}
+                          </div>
+                          {tmpl.description && (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{tmpl.description}</p>
+                          )}
+                          {tmpl.default_config && (() => {
+                            const cfg = parseTemplateConfig(tmpl.default_config);
+                            const bucketTypeLabels: Record<string, string> = { in_progress: 'In Progress', review: 'Review', done: 'Done' };
+                            const flags = [
+                              cfg.plan_mode && 'Plan',
+                              cfg.use_worktree && 'Worktree',
+                              cfg.include_tests && 'Tests',
+                              cfg.dry_run && 'Dry run',
+                              cfg.model_override && cfg.model_override,
+                              cfg.on_running_bucket_type && `Run → ${bucketTypeLabels[cfg.on_running_bucket_type] || cfg.on_running_bucket_type}`,
+                              cfg.on_complete_bucket_type && `Done → ${bucketTypeLabels[cfg.on_complete_bucket_type] || cfg.on_complete_bucket_type}`,
+                            ].filter(Boolean);
+                            return flags.length > 0 ? (
+                              <div className="flex gap-1 mt-1">
+                                {flags.map((f, i) => (
+                                  <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">{f}</span>
+                                ))}
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+                        <div className="flex items-center gap-1 ml-4">
+                          <button onClick={() => startEditTemplate(tmpl)} className="p-1.5 text-gray-400 hover:text-blue-500 rounded" title="Edit">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          </button>
+                          <button onClick={() => setConfirmDeleteTemplateId(tmpl.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded" title="Delete">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            </>)}
+
+            {agentsSubTab === 'etiquette' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('settings.agentEtiquetteRules')}</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      {t('settings.agentEtiquetteDesc')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setConfirmResetEtiquette(true)}
+                    className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    {t('settings.resetToDefaults')}
+                  </button>
+                </div>
+
+                {etiquetteLoading ? (
+                  <p className="text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {etiquetteRules.map((rule) => (
+                      <div key={rule.id} className="flex items-start gap-2 group">
+                        {editingEtiquetteId === rule.id ? (
+                          <div className="flex-1 flex gap-2">
+                            <input
+                              type="text"
+                              value={editingEtiquetteContent}
+                              onChange={(e) => setEditingEtiquetteContent(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleUpdateEtiquette(rule.id);
+                                if (e.key === 'Escape') { setEditingEtiquetteId(null); setEditingEtiquetteContent(''); }
+                              }}
+                              className="flex-1 px-3 py-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleUpdateEtiquette(rule.id)}
+                              className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                            >
+                              {t('common.save')}
+                            </button>
+                            <button
+                              onClick={() => { setEditingEtiquetteId(null); setEditingEtiquetteContent(''); }}
+                              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
+                            >
+                              {t('common.cancel')}
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded text-sm text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                              {rule.content}
+                              {rule.is_default ? (
+                                <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">{t('settings.defaultBadge')}</span>
+                              ) : null}
+                            </div>
+                            <button
+                              onClick={() => { setEditingEtiquetteId(rule.id); setEditingEtiquetteContent(rule.content); }}
+                              className="px-2 py-2 text-gray-400 dark:text-gray-500 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-sm"
+                              title={t('common.edit')}
+                            >
+                              {t('common.edit')}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEtiquette(rule.id)}
+                              className="px-2 py-2 text-gray-400 dark:text-gray-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-sm"
+                              title={t('common.remove')}
+                            >
+                              {t('common.remove')}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Add new rule */}
+                    <div className="flex gap-2 pt-3 border-t dark:border-gray-700 mt-3">
+                      <input
+                        type="text"
+                        value={newEtiquetteContent}
+                        onChange={(e) => setNewEtiquetteContent(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddEtiquette(); }}
+                        placeholder={t('settings.addEtiquettePlaceholder')}
+                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                      />
+                      <button
+                        onClick={handleAddEtiquette}
+                        disabled={!newEtiquetteContent.trim()}
+                        className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {t('common.add')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Delete template confirm */}
+        {confirmDeleteTemplateId && (
+          <ConfirmModal
+            title="Delete Template"
+            message="Are you sure you want to delete this template? This cannot be undone."
+            confirmLabel="Delete"
+            onConfirm={() => handleDeleteTemplate(confirmDeleteTemplateId)}
+            onCancel={() => setConfirmDeleteTemplateId(null)}
+          />
         )}
 
       {/* Admin Tab */}

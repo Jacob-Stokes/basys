@@ -32,7 +32,15 @@ export interface AgentActionConfig {
   dry_run?: boolean;
   model_override?: 'sonnet' | 'opus' | 'haiku' | null;
   on_complete_bucket_id?: string | null;
+  on_running_bucket_type?: string | null;
+  on_complete_bucket_type?: string | null;
 }
+
+export const BUCKET_TYPES = [
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'review', label: 'Review' },
+  { value: 'done', label: 'Done' },
+] as const;
 
 export const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',

@@ -146,7 +146,7 @@ router.put('/:id', (req: Request, res: Response) => {
     const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, userId);
     if (!existing) return fail(res, 404, 'Project not found');
 
-    const { title, description, hex_color, parent_project_id, type, project_mode, default_columns } = req.body;
+    const { title, description, hex_color, parent_project_id, type, project_mode, default_columns, view_settings } = req.body;
 
     const now = new Date().toISOString();
     db.prepare(`
@@ -158,6 +158,7 @@ router.put('/:id', (req: Request, res: Response) => {
         type = COALESCE(?, type),
         project_mode = COALESCE(?, project_mode),
         default_columns = ?,
+        view_settings = ?,
         updated_at = ?
       WHERE id = ?
     `).run(
@@ -168,6 +169,7 @@ router.put('/:id', (req: Request, res: Response) => {
       type || null,
       project_mode || null,
       default_columns !== undefined ? (default_columns ? JSON.stringify(default_columns) : null) : (existing as any).default_columns,
+      view_settings !== undefined ? (view_settings ? JSON.stringify(view_settings) : null) : (existing as any).view_settings,
       now, id
     );
 

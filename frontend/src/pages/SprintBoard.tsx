@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import TaskEditModal from '../components/TaskEditModal';
 import AgentActionModal from '../components/AgentActionModal';
+import { useDisplaySettings } from '../context/DisplaySettingsContext';
+import { resolveViewSettings, parseViewSettings } from '../utils/viewSettings';
+import type { ViewSettings, BucketTemplate, BucketTemplateColumn } from '../utils/viewSettings';
 
 // ── Props for embedded usage ────────────────────────────────────────
 export interface SprintBoardContentProps {
@@ -19,6 +22,7 @@ interface Column {
   is_done_column: number;
   emoji: string | null;
   show_inline: number;
+  bucket_type: string | null;
 }
 
 interface Task {
@@ -46,6 +50,8 @@ interface Sprint {
   start_date: string | null;
   end_date: string | null;
   project_mode?: string;
+  view_settings?: string | null;
+  project_view_settings?: string | null;
 }
 
 type ViewMode = 'kanban' | 'list';
@@ -87,28 +93,39 @@ function TaskCard({ task, onDragStart, onClick, onAgentAction }: {
       draggable
       onDragStart={e => onDragStart(e, task.id)}
       onClick={onClick}
-      className="group/card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow relative"
+      className="group/card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow"
     >
-      {/* Quick agent action button — top-right on hover */}
-      {onAgentAction && (
-        <button
-          onClick={e => { e.stopPropagation(); onAgentAction(task); }}
-          className="absolute top-1.5 right-1.5 p-1 rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 opacity-0 group-hover/card:opacity-100 transition-opacity"
-          title="Agent actions"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-          </svg>
-        </button>
-      )}
       <div className="flex items-start gap-2">
         {task.priority > 0 && priorityDots[task.priority] && (
           <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${priorityDots[task.priority]}`} />
         )}
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium ${task.done ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}>
-            {task.title}
-          </p>
+          <div className="flex items-start justify-between gap-1.5">
+            <p className={`text-sm font-medium ${task.done ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}>
+              {task.title}
+            </p>
+            {/* Agent pill — always visible, right-aligned */}
+            {onAgentAction && (() => {
+              const count = task.agent_action_count;
+              const total = count?.total || 0;
+              const hasActions = total > 0;
+              return (
+                <button onClick={e => { e.stopPropagation(); onAgentAction(task); }}
+                  className={`text-[10px] px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5 cursor-pointer hover:opacity-80 flex-shrink-0 ${
+                    !hasActions ? 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500 opacity-40' :
+                    count!.running > 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' :
+                    count!.staged > 0 ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' :
+                    count!.failed > 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' :
+                    'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                  }`} title={hasActions ? `${count!.staged} staged, ${count!.draft} draft — click to manage` : 'Add agent actions'}>
+                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                  </svg>
+                  {hasActions && (count!.staged > 0 ? count!.staged : total)}
+                </button>
+              );
+            })()}
+          </div>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             {task.task_type && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${typeColors[task.task_type] || typeColors.task}`}>
@@ -119,20 +136,6 @@ function TaskCard({ task, onDragStart, onClick, onAgentAction }: {
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
                 {assignee}
               </span>
-            )}
-            {task.agent_action_count && task.agent_action_count.total > 0 && (
-              <button onClick={e => { e.stopPropagation(); onAgentAction?.(task); }}
-                className={`text-[10px] px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5 cursor-pointer hover:opacity-80 ${
-                task.agent_action_count.running > 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' :
-                task.agent_action_count.staged > 0 ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' :
-                task.agent_action_count.failed > 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' :
-                'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-              }`} title={`${task.agent_action_count.staged} staged, ${task.agent_action_count.draft} draft — click to manage`}>
-                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-                </svg>
-                {task.agent_action_count.staged > 0 ? task.agent_action_count.staged : task.agent_action_count.total}
-              </button>
             )}
           </div>
         </div>
@@ -269,6 +272,19 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
                   <button onClick={() => { onUpdateColumn?.(column.id, { show_inline: column.show_inline ? 0 : 1 } as any); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
                     {column.show_inline ? '✓ Show Inline' : 'Show Inline'}
                   </button>
+                  <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
+                  <div className="px-4 py-1 text-xs font-medium text-gray-400 dark:text-gray-500">Bucket Type</div>
+                  {[
+                    { value: null, label: 'None' },
+                    { value: 'in_progress', label: 'In Progress' },
+                    { value: 'review', label: 'Review' },
+                    { value: 'done', label: 'Done' },
+                  ].map(opt => (
+                    <button key={opt.value || 'none'} onClick={() => { onUpdateColumn?.(column.id, { bucket_type: opt.value } as any); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                      {column.bucket_type === opt.value ? '✓ ' : '  '}{opt.label}
+                    </button>
+                  ))}
+                  <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
                   <button onClick={() => { if (confirm(`Delete column "${column.title}"? Tasks will be unassigned.`)) { onDeleteColumn?.(column.id); } setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
                     Delete Column
                   </button>
@@ -492,7 +508,10 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
   const [backlog, setBacklog] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { settings: displaySettings, updateSettings: updateDisplaySettings } = useDisplaySettings();
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
+  const [sprintSettingsOpen, setSprintSettingsOpen] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [backlogCollapsed, setBacklogCollapsed] = useState(false);
@@ -514,6 +533,13 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
       setTasks(data.tasks || []);
       setBacklog(data.backlog || []);
       setError(null);
+      // Resolve cascading view settings: global → project → sprint
+      const resolved = resolveViewSettings(
+        displaySettings.viewDefaults,
+        parseViewSettings(data.project_view_settings),
+        parseViewSettings(data.view_settings),
+      );
+      setViewMode(resolved.sprintViewMode);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -780,6 +806,88 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
               List
             </button>
           </div>
+
+          {/* Sprint view settings cog */}
+          <div className="relative">
+            <button
+              onClick={() => setSprintSettingsOpen(prev => !prev)}
+              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              title="Sprint view settings"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            </button>
+            {sprintSettingsOpen && sprint && (() => {
+              const sprintSettings = parseViewSettings(sprint.view_settings);
+              const updateSprintViewSettings = (patch: Partial<ViewSettings>) => {
+                const merged = { ...sprintSettings, ...patch };
+                Object.keys(merged).forEach(k => { if (merged[k as keyof ViewSettings] === undefined) delete merged[k as keyof ViewSettings]; });
+                const json = Object.keys(merged).length > 0 ? JSON.stringify(merged) : null;
+                api.updateSprint(sprint.id, { view_settings: merged });
+                setSprint(prev => prev ? { ...prev, view_settings: json } : prev);
+              };
+              return (
+                <div className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 w-52">
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">Sprint Defaults</div>
+                  <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">View mode</label>
+                  <select
+                    className="w-full text-xs border rounded px-2 py-1 mb-2 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                    value={sprintSettings.sprintViewMode ?? ''}
+                    onChange={e => {
+                      const val = e.target.value ? e.target.value as any : undefined;
+                      updateSprintViewSettings({ sprintViewMode: val });
+                      if (val) setViewMode(val);
+                      else {
+                        const resolved = resolveViewSettings(
+                          displaySettings.viewDefaults,
+                          parseViewSettings(sprint.project_view_settings),
+                        );
+                        setViewMode(resolved.sprintViewMode);
+                      }
+                    }}
+                  >
+                    <option value="">Inherit (project/global)</option>
+                    <option value="kanban">Kanban</option>
+                    <option value="list">List</option>
+                  </select>
+                  <hr className="my-2 border-gray-200 dark:border-gray-700" />
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Save buckets as template</div>
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      value={saveTemplateName}
+                      onChange={e => setSaveTemplateName(e.target.value)}
+                      placeholder="Template name"
+                      className="flex-1 text-xs border rounded px-2 py-1 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                    />
+                    <button
+                      onClick={() => {
+                        if (!saveTemplateName.trim() || columns.length === 0) return;
+                        const newTemplate: BucketTemplate = {
+                          id: `custom-${Date.now()}`,
+                          name: saveTemplateName.trim(),
+                          columns: columns.map((c): BucketTemplateColumn => ({
+                            title: c.title,
+                            emoji: c.emoji,
+                            is_done_column: c.is_done_column,
+                            show_inline: c.show_inline,
+                            bucket_type: c.bucket_type,
+                          })),
+                        };
+                        updateDisplaySettings({
+                          bucketTemplates: [...(displaySettings.bucketTemplates || []), newTemplate],
+                        });
+                        setSaveTemplateName('');
+                      }}
+                      className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      Save
+                    </button>
+                  </div>
+                  <button onClick={() => setSprintSettingsOpen(false)} className="text-xs text-gray-400 hover:text-gray-600 mt-2">Close</button>
+                </div>
+              );
+            })()}
+          </div>
         </div>
           );
         })()}
@@ -925,7 +1033,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
             ))}
             {unassignedTasks.length > 0 && (
               <ListSection
-                column={{ id: '__unassigned', title: (sprint.project_mode || 'simple') === 'simple' ? 'Tasks' : 'Unassigned', position: -1, is_done_column: 0, emoji: null, show_inline: 0 }}
+                column={{ id: '__unassigned', title: (sprint.project_mode || 'simple') === 'simple' ? 'Tasks' : 'Unassigned', position: -1, is_done_column: 0, emoji: null, show_inline: 0, bucket_type: null }}
                 tasks={unassignedTasks}
                 onTaskClick={t => setEditingTask(t)}
                 onToggleTask={handleToggleTask}
@@ -938,7 +1046,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
           {/* Backlog in list view */}
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg mx-4 mb-4 overflow-hidden">
             <ListSection
-              column={{ id: '__backlog', title: `Backlog`, position: -2, is_done_column: 0, emoji: null, show_inline: 0 }}
+              column={{ id: '__backlog', title: `Backlog`, position: -2, is_done_column: 0, emoji: null, show_inline: 0, bucket_type: null }}
               tasks={backlog}
               onTaskClick={t => setEditingTask(t)}
               onToggleTask={handleToggleTask}

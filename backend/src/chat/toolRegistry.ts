@@ -444,6 +444,7 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
         title: { type: 'string' },
         position: { type: 'number' },
         is_done_column: { type: 'boolean' },
+        bucket_type: { type: 'string', enum: ['in_progress', 'review', 'done'], description: 'Semantic type for agent action automation. Buckets with a type can be auto-targeted by templates.' },
         items: bulkItemsProperty,
       },
       required: ['action'],

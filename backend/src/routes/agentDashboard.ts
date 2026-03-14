@@ -27,11 +27,15 @@ router.get('/dashboard', (req: Request, res: Response) => {
     const actions = db.prepare(`
       SELECT aa.*,
         t.title as task_title,
+        t.sprint_id,
+        p.id as project_id,
         p.title as project_title,
-        p.hex_color as project_color
+        p.hex_color as project_color,
+        s.title as sprint_title
       FROM agent_actions aa
       LEFT JOIN tasks t ON aa.task_id = t.id
       LEFT JOIN projects p ON t.project_id = p.id
+      LEFT JOIN sprints s ON t.sprint_id = s.id
       WHERE ${where}
       ORDER BY aa.updated_at DESC
       LIMIT ?

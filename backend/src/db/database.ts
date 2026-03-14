@@ -592,6 +592,7 @@ CREATE TABLE IF NOT EXISTS action_templates (
   title TEXT NOT NULL,
   description TEXT,
   default_config TEXT,
+  auto_run INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -994,6 +995,52 @@ export function initDatabase() {
     }
   } catch (err) {
     console.log('Migration check (agent_actions expansion):', err);
+  }
+
+  // ── Migration: bucket_type column on buckets ──────────────────────
+  try {
+    const bucketCols = db.prepare("PRAGMA table_info(buckets)").all() as any[];
+    if (!bucketCols.some((col: any) => col.name === 'bucket_type')) {
+      db.exec(`ALTER TABLE buckets ADD COLUMN bucket_type TEXT DEFAULT NULL`);
+      // Backfill from existing bucket names
+      db.exec(`UPDATE buckets SET bucket_type = 'in_progress' WHERE bucket_type IS NULL AND (title LIKE '%Progress%' OR title LIKE '%Doing%' OR title LIKE '%Active%')`);
+      db.exec(`UPDATE buckets SET bucket_type = 'review' WHERE bucket_type IS NULL AND title LIKE '%Review%'`);
+      db.exec(`UPDATE buckets SET bucket_type = 'done' WHERE bucket_type IS NULL AND is_done_column = 1`);
+      console.log('Added bucket_type column to buckets and backfilled from names');
+    }
+  } catch (err) {
+    console.log('Migration check (buckets bucket_type):', err);
+  }
+
+  // ── Migration: view_settings on projects and sprints ──────────────────
+  try {
+    const projCols = db.prepare("PRAGMA table_info(projects)").all() as any[];
+    if (!projCols.some((c: any) => c.name === 'view_settings')) {
+      db.exec(`ALTER TABLE projects ADD COLUMN view_settings TEXT DEFAULT NULL`);
+      console.log('Added view_settings column to projects');
+    }
+  } catch (err) {
+    console.log('Migration check (projects view_settings):', err);
+  }
+  try {
+    const sprintCols = db.prepare("PRAGMA table_info(sprints)").all() as any[];
+    if (!sprintCols.some((c: any) => c.name === 'view_settings')) {
+      db.exec(`ALTER TABLE sprints ADD COLUMN view_settings TEXT DEFAULT NULL`);
+      console.log('Added view_settings column to sprints');
+    }
+  } catch (err) {
+    console.log('Migration check (sprints view_settings):', err);
+  }
+
+  // ── Migration: action_templates auto_run column ──────────────────────
+  try {
+    const tmplCols = db.prepare("PRAGMA table_info(action_templates)").all() as any[];
+    if (!tmplCols.find((c: any) => c.name === 'auto_run')) {
+      db.exec(`ALTER TABLE action_templates ADD COLUMN auto_run INTEGER DEFAULT 0`);
+      console.log('Added auto_run column to action_templates');
+    }
+  } catch (err) {
+    console.log('Migration check (action_templates auto_run):', err);
   }
 
   // ── Triggers: enforce bucket belongs to same project as task ──────────

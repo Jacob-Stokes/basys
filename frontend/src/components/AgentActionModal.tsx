@@ -20,7 +20,6 @@ export default function AgentActionModal({ taskId, taskTitle, onClose }: Props) 
   const [editingDesc, setEditingDesc] = useState<string | null>(null);
   const [descDraft, setDescDraft] = useState('');
   const [templates, setTemplates] = useState<any[]>([]);
-  const [showTemplates, setShowTemplates] = useState(false);
   const [sprintBuckets, setSprintBuckets] = useState<{ id: string; title: string }[]>([]);
 
   useEffect(() => {
@@ -31,25 +30,45 @@ export default function AgentActionModal({ taskId, taskTitle, onClose }: Props) 
     }).catch(() => {});
   }, [taskId]);
 
-  const handleAdd = async () => {
+  const [newConfig, setNewConfig] = useState<AgentActionConfig>({});
+
+  const handleAdd = async (andRun = false) => {
     if (!newTitle.trim()) return;
     try {
       const action = await api.createAgentAction(taskId, { title: newTitle.trim() });
-      setActions(prev => [...prev, action]);
+      let finalAction = action;
+      // Apply config if any options are set
+      const hasConfig = Object.values(newConfig).some(v => v !== undefined && v !== null && v !== false && v !== '');
+      if (hasConfig) {
+        finalAction = await api.updateAgentAction(taskId, action.id, { config: JSON.stringify(newConfig) });
+      }
+      if (andRun) {
+        // Stage then run
+        const staged = await api.updateAgentActionStatus(taskId, finalAction.id, { status: 'staged' });
+        const running = await api.updateAgentActionStatus(taskId, staged.id, { status: 'running' });
+        setActions(prev => [...prev, running]);
+      } else {
+        setActions(prev => [...prev, finalAction]);
+      }
       setNewTitle('');
+      setNewConfig({});
     } catch (err) { console.error(err); }
   };
 
   const handleAddFromTemplate = async (template: any) => {
     try {
       const action = await api.createAgentAction(taskId, { title: template.title, description: template.description || undefined });
+      let finalAction = action;
       if (template.default_config) {
-        const updated = await api.updateAgentAction(taskId, action.id, { config: template.default_config });
-        setActions(prev => [...prev, updated]);
-      } else {
-        setActions(prev => [...prev, action]);
+        finalAction = await api.updateAgentAction(taskId, action.id, { config: template.default_config });
       }
-      setShowTemplates(false);
+      if (template.auto_run) {
+        const staged = await api.updateAgentActionStatus(taskId, finalAction.id, { status: 'staged' });
+        const running = await api.updateAgentActionStatus(taskId, staged.id, { status: 'running' });
+        setActions(prev => [...prev, running]);
+      } else {
+        setActions(prev => [...prev, finalAction]);
+      }
     } catch (err) { console.error(err); }
   };
 
@@ -296,32 +315,81 @@ export default function AgentActionModal({ taskId, taskTitle, onClose }: Props) 
           )}
         </div>
 
-        {/* Footer — Add action */}
-        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex gap-2 flex-shrink-0">
-          <input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') onClose(); }}
-            placeholder="Add agent action..." autoFocus
-            className="flex-1 px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400 focus:ring-1 focus:ring-blue-500 outline-none" />
+        {/* Footer — Quick templates + Add action panel */}
+        <div className="border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+          {/* Quick templates row */}
           {templates.length > 0 && (
-            <div className="relative">
-              <button onClick={() => setShowTemplates(!showTemplates)}
-                className="px-2 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-500" title="From template">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                </svg>
-              </button>
-              {showTemplates && (
-                <div className="absolute bottom-full right-0 mb-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 py-1 max-h-48 overflow-y-auto">
-                  {templates.map(t => (
-                    <button key={t.id} onClick={() => handleAddFromTemplate(t)}
-                      className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 truncate">{t.title}</button>
-                  ))}
-                </div>
-              )}
+            <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] text-gray-400 uppercase tracking-wider mr-1">Quick:</span>
+                {templates.map(t => (
+                  <button key={t.id} onClick={() => handleAddFromTemplate(t)}
+                    className={`text-[11px] px-2 py-1 rounded-full font-medium transition-colors ${
+                      t.auto_run
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-400 dark:hover:bg-green-900/60'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
+                    }`}
+                    title={`${t.title}${t.auto_run ? ' (auto-run)' : ' (draft)'}${t.description ? ': ' + t.description : ''}`}>
+                    {!!t.auto_run && <span className="mr-0.5">&#9654;</span>}
+                    {t.title}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
-          <button onClick={handleAdd} disabled={!newTitle.trim()}
-            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">Add</button>
+
+          {/* Manual add panel */}
+          <div className="px-4 py-3">
+            <div className="max-w-sm mx-auto space-y-2">
+              <input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') onClose(); }}
+                placeholder="Action title..." autoFocus
+                className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400 focus:ring-1 focus:ring-blue-500 outline-none" />
+
+              {/* Config options */}
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-1">
+                  {CONFIG_OPTIONS.map(opt => (
+                    <label key={opt.key} className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400 cursor-pointer" title={opt.description}>
+                      <input type="checkbox" checked={!!newConfig[opt.key]}
+                        onChange={e => setNewConfig(prev => ({ ...prev, [opt.key]: e.target.checked }))}
+                        className="w-3 h-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-500">Model:</span>
+                  <select value={newConfig.model_override || ''} onChange={e => setNewConfig(prev => ({ ...prev, model_override: (e.target.value || null) as any }))}
+                    className="text-[11px] border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    {MODEL_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
+                {sprintBuckets.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-500">On complete:</span>
+                    <select value={newConfig.on_complete_bucket_id || ''} onChange={e => setNewConfig(prev => ({ ...prev, on_complete_bucket_id: e.target.value || null }))}
+                      className="text-[11px] border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex-1">
+                      <option value="">Don't move</option>
+                      {sprintBuckets.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => handleAdd(false)} disabled={!newTitle.trim()}
+                  className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
+                  Add Draft
+                </button>
+                <button onClick={() => handleAdd(true)} disabled={!newTitle.trim()}
+                  className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                  Add & Run
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

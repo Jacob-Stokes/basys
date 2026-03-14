@@ -332,7 +332,7 @@ export const api = {
   // Action Templates
   getActionTemplates: () =>
     apiRequest<any[]>('/api/action-templates'),
-  createActionTemplate: (data: { title: string; description?: string; default_config?: any }) =>
+  createActionTemplate: (data: { title: string; description?: string; default_config?: any; auto_run?: boolean }) =>
     apiRequest<any>('/api/action-templates', { method: 'POST', body: JSON.stringify(data) }),
   updateActionTemplate: (id: string, data: any) =>
     apiRequest<any>(`/api/action-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

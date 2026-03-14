@@ -312,7 +312,6 @@ export default function TaskEditModal({
   const [editingActionDesc, setEditingActionDesc] = useState<string | null>(null);
   const [actionDescDraft, setActionDescDraft] = useState('');
   const [actionTemplates, setActionTemplates] = useState<any[]>([]);
-  const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
 
   useEffect(() => {
     if (isEdit && task?.id) {
@@ -321,12 +320,26 @@ export default function TaskEditModal({
     }
   }, [isEdit, task?.id]);
 
-  const handleAddAgentAction = async () => {
+  const [newActionConfig, setNewActionConfig] = useState<AgentActionConfig>({});
+
+  const handleAddAgentAction = async (andRun = false) => {
     if (!newActionTitle.trim() || !task?.id) return;
     try {
       const action = await api.createAgentAction(task.id, { title: newActionTitle.trim() });
-      setAgentActions(prev => [...prev, action]);
+      let finalAction = action;
+      const hasConfig = Object.values(newActionConfig).some(v => v !== undefined && v !== null && v !== false && v !== '');
+      if (hasConfig) {
+        finalAction = await api.updateAgentAction(task.id, action.id, { config: JSON.stringify(newActionConfig) });
+      }
+      if (andRun) {
+        const staged = await api.updateAgentActionStatus(task.id, finalAction.id, { status: 'staged' });
+        const running = await api.updateAgentActionStatus(task.id, staged.id, { status: 'running' });
+        setAgentActions(prev => [...prev, running]);
+      } else {
+        setAgentActions(prev => [...prev, finalAction]);
+      }
       setNewActionTitle('');
+      setNewActionConfig({});
     } catch (err) { console.error('Failed to add agent action:', err); }
   };
 
@@ -394,13 +407,17 @@ export default function TaskEditModal({
     if (!task?.id) return;
     try {
       const action = await api.createAgentAction(task.id, { title: template.title, description: template.description || undefined });
+      let finalAction = action;
       if (template.default_config) {
-        const updated = await api.updateAgentAction(task.id, action.id, { config: template.default_config });
-        setAgentActions(prev => [...prev, updated]);
-      } else {
-        setAgentActions(prev => [...prev, action]);
+        finalAction = await api.updateAgentAction(task.id, action.id, { config: template.default_config });
       }
-      setShowTemplateDropdown(false);
+      if (template.auto_run) {
+        const staged = await api.updateAgentActionStatus(task.id, finalAction.id, { status: 'staged' });
+        const running = await api.updateAgentActionStatus(task.id, staged.id, { status: 'running' });
+        setAgentActions(prev => [...prev, running]);
+      } else {
+        setAgentActions(prev => [...prev, finalAction]);
+      }
     } catch (err) { console.error('Failed to add from template:', err); }
   };
 
@@ -1008,34 +1025,72 @@ export default function TaskEditModal({
                     ); })}
                   </div>
                 )}
-                <div className="flex gap-2">
+                {/* Quick templates row */}
+                {actionTemplates.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider mr-1">Quick:</span>
+                    {actionTemplates.map(t => (
+                      <button key={t.id} type="button" onClick={() => handleAddFromTemplate(t)}
+                        className={`text-[11px] px-2 py-1 rounded-full font-medium transition-colors ${
+                          t.auto_run
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-400 dark:hover:bg-green-900/60'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
+                        }`}
+                        title={`${t.title}${t.auto_run ? ' (auto-run)' : ' (draft)'}${t.description ? ': ' + t.description : ''}`}>
+                        {t.auto_run && <span className="mr-0.5">&#9654;</span>}
+                        {t.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Manual add panel */}
+                <div className="max-w-xs space-y-2">
                   <input type="text" value={newActionTitle} onChange={e => setNewActionTitle(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddAgentAction(); } }}
-                    placeholder="Add agent action..."
-                    className="flex-1 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400" />
-                  {actionTemplates.length > 0 && (
-                    <div className="relative">
-                      <button type="button" onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
-                        className="px-2 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-500"
-                        title="Add from template">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                        </svg>
-                      </button>
-                      {showTemplateDropdown && (
-                        <div className="absolute bottom-full right-0 mb-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 py-1 max-h-48 overflow-y-auto">
-                          {actionTemplates.map(t => (
-                            <button key={t.id} type="button" onClick={() => handleAddFromTemplate(t)}
-                              className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 truncate">
-                              {t.title}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                    placeholder="Action title..."
+                    className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400" />
+                  {/* Config options */}
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-2 gap-1">
+                      {CONFIG_OPTIONS.map(opt => (
+                        <label key={opt.key} className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400 cursor-pointer" title={opt.description}>
+                          <input type="checkbox" checked={!!newActionConfig[opt.key]}
+                            onChange={e => setNewActionConfig(prev => ({ ...prev, [opt.key]: e.target.checked }))}
+                            className="w-3 h-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          {opt.label}
+                        </label>
+                      ))}
                     </div>
-                  )}
-                  <button type="button" onClick={handleAddAgentAction} disabled={!newActionTitle.trim()}
-                    className="px-2 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50">Add</button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-gray-500">Model:</span>
+                      <select value={newActionConfig.model_override || ''} onChange={e => setNewActionConfig(prev => ({ ...prev, model_override: (e.target.value || null) as any }))}
+                        className="text-[11px] border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                        {MODEL_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                      </select>
+                    </div>
+                    {columns.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-gray-500">On complete:</span>
+                        <select value={newActionConfig.on_complete_bucket_id || ''} onChange={e => setNewActionConfig(prev => ({ ...prev, on_complete_bucket_id: e.target.value || null }))}
+                          className="text-[11px] border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex-1">
+                          <option value="">Don't move</option>
+                          {columns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  {/* Buttons */}
+                  <div className="flex gap-2 justify-end">
+                    <button type="button" onClick={() => handleAddAgentAction(false)} disabled={!newActionTitle.trim()}
+                      className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
+                      Add Draft
+                    </button>
+                    <button type="button" onClick={() => handleAddAgentAction(true)} disabled={!newActionTitle.trim()}
+                      className="px-2.5 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                      Add & Run
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
