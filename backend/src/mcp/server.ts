@@ -85,26 +85,31 @@ export function setupMcpRoutes(app: Express): void {
 
   // Handle POST /mcp (JSON-RPC messages) and GET /mcp (SSE streams)
   app.post('/mcp', bearerAuth, async (req: Request, res: Response) => {
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    try {
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    if (sessionId && sessions.has(sessionId)) {
-      // Existing session — forward the request
-      const session = sessions.get(sessionId)!;
-      await session.transport.handleRequest(req, res, req.body);
-    } else if (!sessionId) {
-      // New session — create transport and server
-      const server = createMcpServer();
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sid) => {
-          sessions.set(sid, { transport, server });
-        },
-      });
+      if (sessionId && sessions.has(sessionId)) {
+        // Existing session — forward the request
+        const session = sessions.get(sessionId)!;
+        await session.transport.handleRequest(req, res, req.body);
+      } else if (!sessionId) {
+        // New session — create transport and server
+        const server = createMcpServer();
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            sessions.set(sid, { transport, server });
+          },
+        });
 
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
-    } else {
-      res.status(400).json({ error: 'Invalid or expired session' });
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+      } else {
+        res.status(400).json({ error: 'Invalid or expired session' });
+      }
+    } catch (err) {
+      console.error('[MCP POST] Error:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Internal MCP error' });
     }
   });
 
