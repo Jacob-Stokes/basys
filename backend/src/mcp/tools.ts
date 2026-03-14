@@ -12,6 +12,32 @@ import { DEFAULT_ETIQUETTE, seedDefaultEtiquette } from '../utils/etiquette';
 import {
   ownedGoal, goalOwnerCheck, ownedSubGoal, ownedAction, ownedLog, actionOwnerCheck
 } from '../middleware/ownership';
+import {
+  handleManageHabit,
+  handleManageTask,
+  handleManageTaskComment,
+  handleManageProject,
+  handleManageLabel,
+  handleManagePomodoro,
+  handleManageShare,
+  handleManageEtiquette,
+  handleManageSprint,
+  handleManageSprintColumn,
+  handleManageNote,
+  handleManageEvent,
+  MANAGE_HABIT_ACTIONS,
+  MANAGE_TASK_ACTIONS,
+  MANAGE_TASK_COMMENT_ACTIONS,
+  MANAGE_PROJECT_ACTIONS,
+  MANAGE_LABEL_ACTIONS,
+  MANAGE_POMODORO_ACTIONS,
+  MANAGE_SHARE_ACTIONS,
+  MANAGE_ETIQUETTE_ACTIONS,
+  MANAGE_SPRINT_ACTIONS,
+  MANAGE_SPRINT_COLUMN_ACTIONS,
+  MANAGE_NOTE_ACTIONS,
+  MANAGE_EVENT_ACTIONS,
+} from '../tools/manageHandlers';
 
 function asTextContent(obj: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(obj, null, 2) }] };
@@ -22,6 +48,9 @@ function getUserId(extra: any): string {
   if (!userId) throw new Error('Authentication required');
   return userId;
 }
+
+const bulkItemsSchema = z.array(z.record(z.string(), z.any())).optional()
+  .describe('For bulk actions, provide an array of item objects using the same fields as the single-item action.');
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -496,9 +525,9 @@ export function createMcpServer(): McpServer {
   // ─── manage_habit ─────────────────────────────────────────
 
   server.registerTool('manage_habit', {
-    description: 'List, create, update, or delete habits and quit trackers. Use action="list" to see all habits with streak stats, "create" to add new ones, "update" to modify, "delete" to remove.',
+    description: 'List, create, update, or delete habits and quit trackers. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'update', 'delete']).describe('Operation to perform'),
+      action: z.enum(MANAGE_HABIT_ACTIONS).describe('Operation to perform'),
       habitId: z.string().optional().describe('Habit ID (required for update/delete)'),
       title: z.string().optional().describe('Habit title (required for create)'),
       emoji: z.string().optional().describe('Emoji icon for the habit'),
@@ -508,61 +537,11 @@ export function createMcpServer(): McpServer {
       subgoal_id: z.string().optional().describe('Link to a sub-goal'),
       archived: z.boolean().optional().describe('Archive/unarchive'),
       include_archived: z.boolean().optional().describe('Include archived habits in list'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    if (args.action === 'list') {
-      const filter = args.type ? 'AND h.type = ?' : '';
-      const archiveFilter = args.include_archived ? '' : 'AND h.archived = 0';
-      const params: any[] = [userId];
-      if (args.type) params.push(args.type);
-      const habits = db.prepare(`
-        SELECT h.*, COUNT(hl.id) as total_logs,
-          MAX(hl.log_date) as last_logged
-        FROM habits h
-        LEFT JOIN habit_logs hl ON hl.habit_id = h.id
-        WHERE h.user_id = ? ${filter} ${archiveFilter}
-        GROUP BY h.id
-        ORDER BY h.position, h.created_at
-      `).all(...params);
-      return asTextContent(habits);
-    }
-
-    if (args.action === 'create') {
-      if (!args.title) throw new Error('title is required');
-      const id = uuidv4();
-      db.prepare('INSERT INTO habits (id, user_id, title, emoji, type, frequency, quit_date, subgoal_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(id, userId, args.title, args.emoji || '', args.type || 'habit', args.frequency || 'daily', args.quit_date || null, args.subgoal_id || null);
-      return asTextContent(db.prepare('SELECT * FROM habits WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'update') {
-      if (!args.habitId) throw new Error('habitId is required for update');
-      const existing = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(args.habitId, userId) as any;
-      if (!existing) throw new Error('Habit not found or access denied');
-      db.prepare(`UPDATE habits SET title = ?, emoji = ?, frequency = ?, quit_date = ?, subgoal_id = ?, archived = ?, updated_at = datetime('now') WHERE id = ?`)
-        .run(
-          args.title ?? existing.title,
-          args.emoji ?? existing.emoji,
-          args.frequency ?? existing.frequency,
-          args.quit_date ?? existing.quit_date,
-          args.subgoal_id ?? existing.subgoal_id,
-          args.archived !== undefined ? (args.archived ? 1 : 0) : existing.archived,
-          args.habitId
-        );
-      return asTextContent(db.prepare('SELECT * FROM habits WHERE id = ?').get(args.habitId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.habitId) throw new Error('habitId is required for delete');
-      const existing = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(args.habitId, userId);
-      if (!existing) throw new Error('Habit not found or access denied');
-      db.prepare('DELETE FROM habits WHERE id = ?').run(args.habitId);
-      return asTextContent({ deleted: true, id: args.habitId });
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageHabit(args, userId));
   });
 
   // ─── log_habit ────────────────────────────────────────────
@@ -645,9 +624,9 @@ export function createMcpServer(): McpServer {
   // ─── manage_task ──────────────────────────────────────────
 
   server.registerTool('manage_task', {
-    description: 'List, create, update, delete tasks, or toggle done/favorite. Supports filtering by project, sprint, label, priority, due date, and search. Create/update accepts labels (array of label IDs) and links (array of {target_type, target_id}).',
+    description: 'List, create, update, delete tasks, or toggle done/favorite. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'update', 'delete', 'toggle_done', 'toggle_favorite']).describe('Operation to perform'),
+      action: z.enum(MANAGE_TASK_ACTIONS).describe('Operation to perform'),
       taskId: z.string().optional().describe('Task ID (required for update/delete/toggle)'),
       title: z.string().optional().describe('Task title (required for create)'),
       description: z.string().optional(),
@@ -677,184 +656,27 @@ export function createMcpServer(): McpServer {
       filter_project_type: z.string().optional().describe('Filter by project type (e.g. dev, personal)'),
       filter_exclude_types: z.string().optional().describe('Comma-separated project types to exclude (e.g. "dev,work")'),
       search: z.string().optional().describe('Search tasks by title'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    if (args.action === 'list') {
-      let sql = `SELECT t.*, p.title as project_title, p.hex_color as project_color, p.type as project_type
-        FROM tasks t LEFT JOIN projects p ON t.project_id = p.id WHERE t.user_id = ?`;
-      const params: any[] = [userId];
-
-      if (args.filter_done !== undefined) { sql += ' AND t.done = ?'; params.push(args.filter_done ? 1 : 0); }
-      if (args.filter_priority !== undefined) { sql += ' AND t.priority = ?'; params.push(args.filter_priority); }
-      if (args.filter_project) { sql += ' AND t.project_id = ?'; params.push(args.filter_project); }
-      if (args.filter_sprint) { sql += ' AND t.sprint_id = ?'; params.push(args.filter_sprint); }
-      if (args.filter_favorite) { sql += ' AND t.is_favorite = 1'; }
-      if (args.search) { sql += ' AND t.title LIKE ?'; params.push(`%${args.search}%`); }
-      if (args.filter_label) {
-        sql += ' AND t.id IN (SELECT task_id FROM task_labels WHERE label_id = ?)';
-        params.push(args.filter_label);
-      }
-      if (args.filter_project_type) {
-        sql += ' AND p.type = ?'; params.push(args.filter_project_type);
-      }
-      if (args.filter_exclude_types) {
-        const types = args.filter_exclude_types.split(',').map((t: string) => t.trim()).filter(Boolean);
-        if (types.length) {
-          sql += ` AND (p.type IS NULL OR p.type NOT IN (${types.map(() => '?').join(',')}))`;
-          params.push(...types);
-        }
-      }
-      sql += ' ORDER BY t.done ASC, t.priority DESC, t.due_date ASC NULLS LAST, t.created_at DESC';
-
-      const tasks = db.prepare(sql).all(...params) as any[];
-      // Attach labels and links
-      const labelStmt = db.prepare('SELECT l.* FROM labels l JOIN task_labels tl ON l.id = tl.label_id WHERE tl.task_id = ?');
-      const linkStmt = db.prepare('SELECT * FROM task_links WHERE task_id = ?');
-      for (const task of tasks) {
-        task.labels = labelStmt.all(task.id);
-        task.links = linkStmt.all(task.id);
-      }
-      return asTextContent(tasks);
-    }
-
-    if (args.action === 'create') {
-      if (!args.title) throw new Error('title is required');
-      const id = uuidv4();
-      db.prepare(`INSERT INTO tasks (id, user_id, title, description, project_id, sprint_id, bucket_id, priority, due_date, start_date, end_date, assignee_name, task_type, hex_color, percent_done)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, userId, args.title, args.description || null, args.project_id || null, args.sprint_id || null, args.bucket_id || null,
-          args.priority || 0, args.due_date || null, args.start_date || null, args.end_date || null,
-          args.assignee_name || null, args.task_type || null, args.hex_color || null, args.percent_done || 0);
-      // Labels
-      if (args.labels?.length) {
-        const ins = db.prepare('INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)');
-        for (const lid of args.labels) ins.run(id, lid);
-      }
-      // Links
-      if (args.links?.length) {
-        const ins = db.prepare('INSERT OR IGNORE INTO task_links (task_id, target_type, target_id) VALUES (?, ?, ?)');
-        for (const link of args.links) ins.run(id, link.target_type, link.target_id);
-      }
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-      return asTextContent(task);
-    }
-
-    if (args.action === 'update') {
-      if (!args.taskId) throw new Error('taskId is required for update');
-      const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
-      if (!existing) throw new Error('Task not found or access denied');
-      db.prepare(`UPDATE tasks SET title = ?, description = ?, project_id = ?, sprint_id = ?, bucket_id = ?, priority = ?, due_date = ?,
-        start_date = ?, end_date = ?, assignee_name = ?, task_type = ?, hex_color = ?, percent_done = ?, updated_at = datetime('now') WHERE id = ?`)
-        .run(
-          args.title ?? existing.title,
-          args.description ?? existing.description,
-          args.project_id !== undefined ? (args.project_id || null) : existing.project_id,
-          args.sprint_id !== undefined ? (args.sprint_id || null) : existing.sprint_id,
-          args.bucket_id !== undefined ? (args.bucket_id || null) : existing.bucket_id,
-          args.priority ?? existing.priority,
-          args.due_date !== undefined ? (args.due_date || null) : existing.due_date,
-          args.start_date !== undefined ? (args.start_date || null) : existing.start_date,
-          args.end_date !== undefined ? (args.end_date || null) : existing.end_date,
-          args.assignee_name !== undefined ? (args.assignee_name || null) : existing.assignee_name,
-          args.task_type !== undefined ? (args.task_type || null) : existing.task_type,
-          args.hex_color !== undefined ? (args.hex_color || null) : existing.hex_color,
-          args.percent_done ?? existing.percent_done,
-          args.taskId
-        );
-      // Replace labels if provided
-      if (args.labels) {
-        db.prepare('DELETE FROM task_labels WHERE task_id = ?').run(args.taskId);
-        const ins = db.prepare('INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)');
-        for (const lid of args.labels) ins.run(args.taskId, lid);
-      }
-      // Replace links if provided
-      if (args.links) {
-        db.prepare('DELETE FROM task_links WHERE task_id = ?').run(args.taskId);
-        const ins = db.prepare('INSERT OR IGNORE INTO task_links (task_id, target_type, target_id) VALUES (?, ?, ?)');
-        for (const link of args.links) ins.run(args.taskId, link.target_type, link.target_id);
-      }
-      return asTextContent(db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.taskId) throw new Error('taskId is required for delete');
-      const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId);
-      if (!existing) throw new Error('Task not found or access denied');
-      db.prepare('DELETE FROM tasks WHERE id = ?').run(args.taskId);
-      return asTextContent({ deleted: true, id: args.taskId });
-    }
-
-    if (args.action === 'toggle_done') {
-      if (!args.taskId) throw new Error('taskId is required');
-      const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
-      if (!existing) throw new Error('Task not found or access denied');
-
-      // Handle repeating tasks (repeat_after is in seconds)
-      if (!existing.done && existing.repeat_after > 0 && existing.due_date) {
-        const baseDate = new Date(existing.due_date);
-        const nextDate = new Date(baseDate.getTime() + existing.repeat_after * 1000);
-        db.prepare(`UPDATE tasks SET due_date = ?, updated_at = datetime('now') WHERE id = ?`)
-          .run(nextDate.toISOString().slice(0, 19), args.taskId);
-        const rescheduled = db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId) as any;
-        return asTextContent({ ...rescheduled, rescheduled: true });
-      }
-
-      const newDone = existing.done ? 0 : 1;
-      const doneAt = newDone ? new Date().toISOString() : null;
-      db.prepare('UPDATE tasks SET done = ?, done_at = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newDone, doneAt, args.taskId);
-      return asTextContent(db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId));
-    }
-
-    if (args.action === 'toggle_favorite') {
-      if (!args.taskId) throw new Error('taskId is required');
-      const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId) as any;
-      if (!existing) throw new Error('Task not found or access denied');
-      db.prepare('UPDATE tasks SET is_favorite = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.is_favorite ? 0 : 1, args.taskId);
-      return asTextContent(db.prepare('SELECT * FROM tasks WHERE id = ?').get(args.taskId));
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageTask(args, userId));
   });
 
   // ─── manage_task_comment ──────────────────────────────────
 
   server.registerTool('manage_task_comment', {
-    description: 'List, add, or delete comments on a task.',
+    description: 'List, add, or delete comments on a task. Supports bulk_create and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'delete']).describe('Operation to perform'),
-      taskId: z.string().describe('Task ID'),
+      action: z.enum(MANAGE_TASK_COMMENT_ACTIONS).describe('Operation to perform'),
+      taskId: z.string().optional().describe('Task ID (required for list and single-item create/delete, or per item in bulk actions)'),
       commentId: z.string().optional().describe('Comment ID (required for delete)'),
       content: z.string().optional().describe('Comment text (required for create)'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-    // Verify task ownership
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(args.taskId, userId);
-    if (!task) throw new Error('Task not found or access denied');
-
-    if (args.action === 'list') {
-      const comments = db.prepare('SELECT * FROM task_comments WHERE task_id = ? ORDER BY created_at DESC').all(args.taskId);
-      return asTextContent(comments);
-    }
-
-    if (args.action === 'create') {
-      if (!args.content) throw new Error('content is required');
-      const id = uuidv4();
-      db.prepare('INSERT INTO task_comments (id, task_id, user_id, content) VALUES (?, ?, ?, ?)').run(id, args.taskId, userId, args.content);
-      return asTextContent(db.prepare('SELECT * FROM task_comments WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.commentId) throw new Error('commentId is required for delete');
-      const comment = db.prepare('SELECT * FROM task_comments WHERE id = ? AND task_id = ?').get(args.commentId, args.taskId);
-      if (!comment) throw new Error('Comment not found');
-      db.prepare('DELETE FROM task_comments WHERE id = ?').run(args.commentId);
-      return asTextContent({ deleted: true, id: args.commentId });
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageTaskComment(args, userId));
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -864,9 +686,9 @@ export function createMcpServer(): McpServer {
   // ─── manage_project ───────────────────────────────────────
 
   server.registerTool('manage_project', {
-    description: 'List, create, update, delete, archive, or favorite projects. Projects group tasks and can have Kanban buckets.',
+    description: 'List, create, update, delete, archive, or favorite projects. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'update', 'delete', 'toggle_archive', 'toggle_favorite']).describe('Operation to perform'),
+      action: z.enum(MANAGE_PROJECT_ACTIONS).describe('Operation to perform'),
       projectId: z.string().optional().describe('Project ID (required for update/delete/toggle)'),
       title: z.string().optional().describe('Project title (required for create)'),
       description: z.string().optional(),
@@ -876,128 +698,28 @@ export function createMcpServer(): McpServer {
       include_tasks: z.boolean().optional().describe('Include tasks in list/get response'),
       include_archived: z.boolean().optional().describe('Include archived projects in list'),
       filter_type: z.string().optional().describe('Filter projects by type'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    if (args.action === 'list') {
-      let sql = `SELECT p.*,
-          (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND done = 0) as open_tasks,
-          (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND done = 1) as done_tasks
-        FROM projects p WHERE p.user_id = ?`;
-      const params: any[] = [userId];
-      if (!args.include_archived) { sql += ' AND p.archived = 0'; }
-      if (args.filter_type) { sql += ' AND p.type = ?'; params.push(args.filter_type); }
-      sql += ' ORDER BY p.position, p.created_at';
-      const projects = db.prepare(sql).all(...params) as any[];
-
-      if (args.include_tasks) {
-        const taskStmt = db.prepare('SELECT * FROM tasks WHERE project_id = ? ORDER BY done ASC, priority DESC, created_at DESC');
-        for (const p of projects) p.tasks = taskStmt.all(p.id);
-      }
-      return asTextContent(projects);
-    }
-
-    if (args.action === 'create') {
-      if (!args.title) throw new Error('title is required');
-      const id = uuidv4();
-      db.prepare('INSERT INTO projects (id, user_id, title, description, hex_color, type, parent_project_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(id, userId, args.title, args.description || null, args.hex_color || '', args.type || 'personal', args.parent_project_id || null);
-      return asTextContent(db.prepare('SELECT * FROM projects WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'update') {
-      if (!args.projectId) throw new Error('projectId is required for update');
-      const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId) as any;
-      if (!existing) throw new Error('Project not found or access denied');
-      db.prepare(`UPDATE projects SET title = ?, description = ?, hex_color = ?, type = ?, parent_project_id = ?, updated_at = datetime('now') WHERE id = ?`)
-        .run(
-          args.title ?? existing.title,
-          args.description ?? existing.description,
-          args.hex_color ?? existing.hex_color,
-          args.type ?? existing.type,
-          args.parent_project_id !== undefined ? (args.parent_project_id || null) : existing.parent_project_id,
-          args.projectId
-        );
-      return asTextContent(db.prepare('SELECT * FROM projects WHERE id = ?').get(args.projectId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.projectId) throw new Error('projectId is required for delete');
-      const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
-      if (!existing) throw new Error('Project not found or access denied');
-      db.prepare('DELETE FROM projects WHERE id = ?').run(args.projectId);
-      return asTextContent({ deleted: true, id: args.projectId });
-    }
-
-    if (args.action === 'toggle_archive') {
-      if (!args.projectId) throw new Error('projectId is required');
-      const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId) as any;
-      if (!existing) throw new Error('Project not found or access denied');
-      db.prepare('UPDATE projects SET archived = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.archived ? 0 : 1, args.projectId);
-      return asTextContent(db.prepare('SELECT * FROM projects WHERE id = ?').get(args.projectId));
-    }
-
-    if (args.action === 'toggle_favorite') {
-      if (!args.projectId) throw new Error('projectId is required');
-      const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId) as any;
-      if (!existing) throw new Error('Project not found or access denied');
-      db.prepare('UPDATE projects SET is_favorite = ?, updated_at = datetime(\'now\') WHERE id = ?').run(existing.is_favorite ? 0 : 1, args.projectId);
-      return asTextContent(db.prepare('SELECT * FROM projects WHERE id = ?').get(args.projectId));
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageProject(args, userId));
   });
 
   // ─── manage_label ─────────────────────────────────────────
 
   server.registerTool('manage_label', {
-    description: 'List, create, update, or delete labels. Labels are color-coded tags that can be attached to tasks.',
+    description: 'List, create, update, or delete labels. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'update', 'delete']).describe('Operation to perform'),
+      action: z.enum(MANAGE_LABEL_ACTIONS).describe('Operation to perform'),
       labelId: z.string().optional().describe('Label ID (required for update/delete)'),
       title: z.string().optional().describe('Label title (required for create)'),
       hex_color: z.string().optional().describe('Color hex code (defaults to #e2e8f0)'),
       description: z.string().optional(),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    if (args.action === 'list') {
-      const labels = db.prepare(`
-        SELECT l.*, COUNT(tl.task_id) as task_count
-        FROM labels l LEFT JOIN task_labels tl ON l.id = tl.label_id
-        WHERE l.user_id = ? GROUP BY l.id ORDER BY l.title
-      `).all(userId);
-      return asTextContent(labels);
-    }
-
-    if (args.action === 'create') {
-      if (!args.title) throw new Error('title is required');
-      const id = uuidv4();
-      db.prepare('INSERT INTO labels (id, user_id, title, hex_color, description) VALUES (?, ?, ?, ?, ?)')
-        .run(id, userId, args.title, args.hex_color || '#e2e8f0', args.description || null);
-      return asTextContent(db.prepare('SELECT * FROM labels WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'update') {
-      if (!args.labelId) throw new Error('labelId is required for update');
-      const existing = db.prepare('SELECT * FROM labels WHERE id = ? AND user_id = ?').get(args.labelId, userId) as any;
-      if (!existing) throw new Error('Label not found or access denied');
-      db.prepare(`UPDATE labels SET title = ?, hex_color = ?, description = ?, updated_at = datetime('now') WHERE id = ?`)
-        .run(args.title ?? existing.title, args.hex_color ?? existing.hex_color, args.description ?? existing.description, args.labelId);
-      return asTextContent(db.prepare('SELECT * FROM labels WHERE id = ?').get(args.labelId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.labelId) throw new Error('labelId is required for delete');
-      const existing = db.prepare('SELECT * FROM labels WHERE id = ? AND user_id = ?').get(args.labelId, userId);
-      if (!existing) throw new Error('Label not found or access denied');
-      db.prepare('DELETE FROM labels WHERE id = ?').run(args.labelId);
-      return asTextContent({ deleted: true, id: args.labelId });
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageLabel(args, userId));
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -1005,70 +727,20 @@ export function createMcpServer(): McpServer {
   // ═══════════════════════════════════════════════════════════════
 
   server.registerTool('manage_pomodoro', {
-    description: 'List, create, update, complete, or delete pomodoro (focus timer) sessions. Sessions can optionally link to a task.',
+    description: 'List, create, update, complete, or delete pomodoro sessions. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'update', 'complete', 'delete']).describe('Operation to perform'),
+      action: z.enum(MANAGE_POMODORO_ACTIONS).describe('Operation to perform'),
       pomodoroId: z.string().optional().describe('Session ID (required for update/complete/delete)'),
       duration_minutes: z.number().optional().describe('Duration in minutes (default 25)'),
       note: z.string().optional().describe('Session note'),
       task_id: z.string().optional().describe('Link session to a task'),
       status: z.enum(['completed', 'cancelled', 'in_progress']).optional().describe('Filter by status (for list)'),
       limit: z.number().optional().describe('Max results to return (for list, default 20)'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    if (args.action === 'list') {
-      let sql = 'SELECT * FROM pomodoro_sessions WHERE user_id = ?';
-      const params: any[] = [userId];
-      if (args.status) { sql += ' AND status = ?'; params.push(args.status); }
-      sql += ' ORDER BY started_at DESC LIMIT ?';
-      params.push(args.limit || 20);
-      return asTextContent(db.prepare(sql).all(...params));
-    }
-
-    if (args.action === 'create') {
-      const id = uuidv4();
-      db.prepare('INSERT INTO pomodoro_sessions (id, user_id, started_at, duration_minutes, status, note) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(id, userId, new Date().toISOString(), args.duration_minutes || 25, 'in_progress', args.note || null);
-      // Link to task if provided
-      if (args.task_id) {
-        const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(args.task_id, userId);
-        if (task) {
-          db.prepare('INSERT OR IGNORE INTO task_links (task_id, target_type, target_id) VALUES (?, ?, ?)')
-            .run(args.task_id, 'pomodoro', id);
-        }
-      }
-      return asTextContent(db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'update') {
-      if (!args.pomodoroId) throw new Error('pomodoroId is required for update');
-      const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoroId, userId) as any;
-      if (!existing) throw new Error('Session not found or access denied');
-      db.prepare('UPDATE pomodoro_sessions SET note = ?, status = ? WHERE id = ?')
-        .run(args.note ?? existing.note, args.status ?? existing.status, args.pomodoroId);
-      return asTextContent(db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(args.pomodoroId));
-    }
-
-    if (args.action === 'complete') {
-      if (!args.pomodoroId) throw new Error('pomodoroId is required');
-      const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoroId, userId);
-      if (!existing) throw new Error('Session not found or access denied');
-      db.prepare('UPDATE pomodoro_sessions SET status = ?, ended_at = ? WHERE id = ?')
-        .run('completed', new Date().toISOString(), args.pomodoroId);
-      return asTextContent(db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ?').get(args.pomodoroId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.pomodoroId) throw new Error('pomodoroId is required for delete');
-      const existing = db.prepare('SELECT * FROM pomodoro_sessions WHERE id = ? AND user_id = ?').get(args.pomodoroId, userId);
-      if (!existing) throw new Error('Session not found or access denied');
-      db.prepare('DELETE FROM pomodoro_sessions WHERE id = ?').run(args.pomodoroId);
-      return asTextContent({ deleted: true, id: args.pomodoroId });
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManagePomodoro(args, userId));
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -1076,44 +748,18 @@ export function createMcpServer(): McpServer {
   // ═══════════════════════════════════════════════════════════════
 
   server.registerTool('manage_share', {
-    description: 'Create, list, or revoke share links for goals. Share links allow public viewing of a goal without authentication.',
+    description: 'Create, list, or revoke share links for goals. Supports bulk_create and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'revoke']).describe('Operation to perform'),
+      action: z.enum(MANAGE_SHARE_ACTIONS).describe('Operation to perform'),
       shareId: z.string().optional().describe('Share link ID (required for revoke)'),
       goalId: z.string().optional().describe('Goal ID (required for create, optional filter for list)'),
       show_logs: z.boolean().optional().describe('Show activity logs in shared view (default false)'),
       show_guestbook: z.boolean().optional().describe('Show guestbook in shared view (default false)'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    if (args.action === 'list') {
-      let sql = 'SELECT * FROM shared_goals WHERE user_id = ?';
-      const params: any[] = [userId];
-      if (args.goalId) { sql += ' AND goal_id = ?'; params.push(args.goalId); }
-      sql += ' ORDER BY created_at DESC';
-      return asTextContent(db.prepare(sql).all(...params));
-    }
-
-    if (args.action === 'create') {
-      if (!args.goalId) throw new Error('goalId is required');
-      if (!goalOwnerCheck(args.goalId, userId)) throw new Error('Goal not found or access denied');
-      const id = uuidv4();
-      const token = uuidv4().replace(/-/g, '').substring(0, 16);
-      db.prepare('INSERT INTO shared_goals (id, goal_id, user_id, token, show_logs, show_guestbook) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(id, args.goalId, userId, token, args.show_logs ? 1 : 0, args.show_guestbook ? 1 : 0);
-      return asTextContent(db.prepare('SELECT * FROM shared_goals WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'revoke') {
-      if (!args.shareId) throw new Error('shareId is required');
-      const existing = db.prepare('SELECT * FROM shared_goals WHERE id = ? AND user_id = ?').get(args.shareId, userId);
-      if (!existing) throw new Error('Share link not found or access denied');
-      db.prepare('DELETE FROM shared_goals WHERE id = ?').run(args.shareId);
-      return asTextContent({ deleted: true, id: args.shareId });
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageShare(args, userId));
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -1121,59 +767,17 @@ export function createMcpServer(): McpServer {
   // ═══════════════════════════════════════════════════════════════
 
   server.registerTool('manage_etiquette', {
-    description: 'List, add, update, delete, or reset agent etiquette rules. These rules guide AI agent behavior when interacting with the user.',
+    description: 'List, add, update, delete, or reset agent etiquette rules. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'add', 'update', 'delete', 'reset']).describe('Operation to perform'),
+      action: z.enum(MANAGE_ETIQUETTE_ACTIONS).describe('Operation to perform'),
       ruleId: z.string().optional().describe('Rule ID (required for update/delete)'),
       content: z.string().optional().describe('Rule text (required for add/update)'),
       position: z.number().optional().describe('Position/order of the rule'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    if (args.action === 'list') {
-      seedDefaultEtiquette(userId);
-      const rules = db.prepare('SELECT * FROM agent_etiquette WHERE user_id = ? ORDER BY position').all(userId);
-      return asTextContent(rules);
-    }
-
-    if (args.action === 'add') {
-      if (!args.content) throw new Error('content is required');
-      const maxPos = (db.prepare('SELECT MAX(position) as max FROM agent_etiquette WHERE user_id = ?').get(userId) as any)?.max || 0;
-      const id = uuidv4();
-      db.prepare('INSERT INTO agent_etiquette (id, user_id, content, position, is_default) VALUES (?, ?, ?, ?, 0)')
-        .run(id, userId, args.content, args.position ?? maxPos + 1);
-      return asTextContent(db.prepare('SELECT * FROM agent_etiquette WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'update') {
-      if (!args.ruleId) throw new Error('ruleId is required');
-      const existing = db.prepare('SELECT * FROM agent_etiquette WHERE id = ? AND user_id = ?').get(args.ruleId, userId) as any;
-      if (!existing) throw new Error('Rule not found or access denied');
-      db.prepare('UPDATE agent_etiquette SET content = ?, position = ? WHERE id = ?')
-        .run(args.content ?? existing.content, args.position ?? existing.position, args.ruleId);
-      return asTextContent(db.prepare('SELECT * FROM agent_etiquette WHERE id = ?').get(args.ruleId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.ruleId) throw new Error('ruleId is required');
-      const existing = db.prepare('SELECT * FROM agent_etiquette WHERE id = ? AND user_id = ?').get(args.ruleId, userId);
-      if (!existing) throw new Error('Rule not found or access denied');
-      db.prepare('DELETE FROM agent_etiquette WHERE id = ?').run(args.ruleId);
-      // Re-number positions
-      const remaining = db.prepare('SELECT id FROM agent_etiquette WHERE user_id = ? ORDER BY position').all(userId) as any[];
-      remaining.forEach((r: any, i: number) => db.prepare('UPDATE agent_etiquette SET position = ? WHERE id = ?').run(i + 1, r.id));
-      return asTextContent({ deleted: true, id: args.ruleId });
-    }
-
-    if (args.action === 'reset') {
-      db.prepare('DELETE FROM agent_etiquette WHERE user_id = ?').run(userId);
-      seedDefaultEtiquette(userId);
-      const rules = db.prepare('SELECT * FROM agent_etiquette WHERE user_id = ? ORDER BY position').all(userId);
-      return asTextContent({ reset: true, rules });
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageEtiquette(args, userId));
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -1231,9 +835,9 @@ export function createMcpServer(): McpServer {
   // ═══════════════════════════════════════════════════════════════
 
   server.registerTool('manage_sprint', {
-    description: 'List, create, get, update, delete sprints, or transition sprint status. Sprints belong to projects and contain tasks organized in columns.',
+    description: 'List, create, get, update, delete sprints, or transition sprint status. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'get', 'update', 'delete', 'transition_status']).describe('Operation to perform'),
+      action: z.enum(MANAGE_SPRINT_ACTIONS).describe('Operation to perform'),
       sprintId: z.string().optional().describe('Sprint ID (required for get/update/delete/transition_status)'),
       projectId: z.string().optional().describe('Project ID (required for list/create)'),
       title: z.string().optional().describe('Sprint title (required for create)'),
@@ -1241,183 +845,29 @@ export function createMcpServer(): McpServer {
       start_date: z.string().optional().describe('Start date (ISO format)'),
       end_date: z.string().optional().describe('End date (ISO format)'),
       status: z.enum(['planned', 'active', 'completed']).optional().describe('Target status for transition_status action'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-    const now = new Date().toISOString();
-
-    // Helper to verify sprint ownership via project
-    const verifySprint = (sprintId: string) => {
-      const sprint = db.prepare(`
-        SELECT s.* FROM sprints s JOIN projects p ON s.project_id = p.id
-        WHERE s.id = ? AND p.user_id = ?
-      `).get(sprintId, userId) as any;
-      if (!sprint) throw new Error('Sprint not found or access denied');
-      return sprint;
-    };
-
-    if (args.action === 'list') {
-      if (!args.projectId) throw new Error('projectId is required for list');
-      const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
-      if (!project) throw new Error('Project not found or access denied');
-      const sprints = db.prepare(`
-        SELECT s.*,
-          COUNT(CASE WHEN t.done = 0 THEN 1 END) as open_tasks,
-          COUNT(CASE WHEN t.done = 1 THEN 1 END) as done_tasks
-        FROM sprints s LEFT JOIN tasks t ON t.sprint_id = s.id
-        WHERE s.project_id = ?
-        GROUP BY s.id
-        ORDER BY s.sprint_number DESC, s.created_at DESC
-      `).all(args.projectId);
-      return asTextContent(sprints);
-    }
-
-    if (args.action === 'create') {
-      if (!args.projectId) throw new Error('projectId is required for create');
-      if (!args.title) throw new Error('title is required for create');
-      const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.projectId, userId);
-      if (!project) throw new Error('Project not found or access denied');
-
-      const maxNum = db.prepare('SELECT MAX(sprint_number) as max FROM sprints WHERE project_id = ?').get(args.projectId) as any;
-      const sprintNumber = (maxNum?.max ?? 0) + 1;
-      const id = uuidv4();
-
-      db.prepare(`INSERT INTO sprints (id, project_id, title, description, sprint_number, status, start_date, end_date, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?)`)
-        .run(id, args.projectId, args.title.trim(), args.description || null, sprintNumber, args.start_date || null, args.end_date || null, now, now);
-
-      // Create default columns
-      const DEFAULT_COLUMNS = [
-        { title: 'To Do', position: 0, is_done_column: 0 },
-        { title: 'In Progress', position: 1, is_done_column: 0 },
-        { title: 'Review', position: 2, is_done_column: 0 },
-        { title: 'Done', position: 3, is_done_column: 1 },
-      ];
-      const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)');
-      for (const col of DEFAULT_COLUMNS) {
-        insertBucket.run(uuidv4(), args.projectId, id, col.title, col.position, col.is_done_column);
-      }
-
-      const sprint = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id);
-      const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(id);
-      return asTextContent({ ...sprint as any, columns });
-    }
-
-    if (args.action === 'get') {
-      if (!args.sprintId) throw new Error('sprintId is required for get');
-      const sprint = verifySprint(args.sprintId);
-      const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprintId);
-      const tasks = db.prepare(`
-        SELECT t.*, p.title as project_title, p.hex_color as project_color
-        FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
-        WHERE t.sprint_id = ? ORDER BY t.position ASC, t.created_at DESC
-      `).all(args.sprintId);
-      const backlog = db.prepare(`
-        SELECT t.*, p.title as project_title, p.hex_color as project_color
-        FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
-        WHERE t.project_id = ? AND t.sprint_id IS NULL ORDER BY t.position ASC, t.created_at DESC
-      `).all(sprint.project_id);
-      return asTextContent({ ...sprint, columns, tasks, backlog });
-    }
-
-    if (args.action === 'update') {
-      if (!args.sprintId) throw new Error('sprintId is required for update');
-      const existing = verifySprint(args.sprintId);
-      db.prepare(`UPDATE sprints SET title = COALESCE(?, title), description = ?, start_date = ?, end_date = ?, updated_at = ? WHERE id = ?`)
-        .run(
-          args.title?.trim() || null,
-          args.description !== undefined ? args.description : existing.description,
-          args.start_date !== undefined ? args.start_date : existing.start_date,
-          args.end_date !== undefined ? args.end_date : existing.end_date,
-          now, args.sprintId
-        );
-      return asTextContent(db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprintId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.sprintId) throw new Error('sprintId is required for delete');
-      verifySprint(args.sprintId);
-      db.prepare('UPDATE tasks SET sprint_id = NULL, bucket_id = NULL WHERE sprint_id = ?').run(args.sprintId);
-      db.prepare('DELETE FROM buckets WHERE sprint_id = ?').run(args.sprintId);
-      db.prepare('DELETE FROM sprints WHERE id = ?').run(args.sprintId);
-      return asTextContent({ deleted: true, id: args.sprintId });
-    }
-
-    if (args.action === 'transition_status') {
-      if (!args.sprintId) throw new Error('sprintId is required');
-      if (!args.status) throw new Error('status is required');
-      const existing = verifySprint(args.sprintId);
-      const validTransitions: Record<string, string[]> = {
-        planned: ['active'],
-        active: ['completed'],
-        completed: ['active'],
-      };
-      if (!validTransitions[existing.status]?.includes(args.status)) {
-        throw new Error(`Cannot transition from '${existing.status}' to '${args.status}'`);
-      }
-      db.prepare('UPDATE sprints SET status = ?, updated_at = ? WHERE id = ?').run(args.status, now, args.sprintId);
-      return asTextContent(db.prepare('SELECT * FROM sprints WHERE id = ?').get(args.sprintId));
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageSprint(args, userId));
   });
 
   // ─── manage_sprint_column ──────────────────────────────────
 
   server.registerTool('manage_sprint_column', {
-    description: 'List, create, update, or delete columns (buckets) within a sprint board.',
+    description: 'List, create, update, or delete columns within a sprint board. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'update', 'delete']).describe('Operation to perform'),
-      sprintId: z.string().describe('Sprint ID'),
+      action: z.enum(MANAGE_SPRINT_COLUMN_ACTIONS).describe('Operation to perform'),
+      sprintId: z.string().optional().describe('Sprint ID (required for list and single-item create/update/delete, or per item in bulk actions)'),
       columnId: z.string().optional().describe('Column ID (required for update/delete)'),
       title: z.string().optional().describe('Column title (required for create)'),
       position: z.number().optional().describe('Column position'),
       is_done_column: z.boolean().optional().describe('Whether tasks in this column count as done'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    // Verify sprint ownership
-    const sprint = db.prepare(`
-      SELECT s.* FROM sprints s JOIN projects p ON s.project_id = p.id
-      WHERE s.id = ? AND p.user_id = ?
-    `).get(args.sprintId, userId) as any;
-    if (!sprint) throw new Error('Sprint not found or access denied');
-
-    if (args.action === 'list') {
-      const columns = db.prepare('SELECT * FROM buckets WHERE sprint_id = ? ORDER BY position ASC').all(args.sprintId);
-      return asTextContent(columns);
-    }
-
-    if (args.action === 'create') {
-      if (!args.title) throw new Error('title is required');
-      const maxPos = db.prepare('SELECT MAX(position) as max FROM buckets WHERE sprint_id = ?').get(args.sprintId) as any;
-      const position = args.position ?? ((maxPos?.max ?? 0) + 1);
-      const id = uuidv4();
-      db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(id, sprint.project_id, args.sprintId, args.title.trim(), position, args.is_done_column ? 1 : 0);
-      return asTextContent(db.prepare('SELECT * FROM buckets WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'update') {
-      if (!args.columnId) throw new Error('columnId is required for update');
-      const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.columnId, args.sprintId);
-      if (!existing) throw new Error('Column not found');
-      db.prepare('UPDATE buckets SET title = COALESCE(?, title), position = COALESCE(?, position), is_done_column = COALESCE(?, is_done_column) WHERE id = ?')
-        .run(args.title?.trim() || null, args.position ?? null, args.is_done_column !== undefined ? (args.is_done_column ? 1 : 0) : null, args.columnId);
-      return asTextContent(db.prepare('SELECT * FROM buckets WHERE id = ?').get(args.columnId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.columnId) throw new Error('columnId is required for delete');
-      const existing = db.prepare('SELECT * FROM buckets WHERE id = ? AND sprint_id = ?').get(args.columnId, args.sprintId);
-      if (!existing) throw new Error('Column not found');
-      db.prepare('UPDATE tasks SET bucket_id = NULL WHERE bucket_id = ?').run(args.columnId);
-      db.prepare('DELETE FROM buckets WHERE id = ?').run(args.columnId);
-      return asTextContent({ deleted: true, id: args.columnId });
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageSprintColumn(args, userId));
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -1425,51 +875,23 @@ export function createMcpServer(): McpServer {
   // ═══════════════════════════════════════════════════════════════
 
   server.registerTool('manage_note', {
-    description: 'List, create, update, or delete quick notes. Notes are simple markdown text entries for capturing ideas quickly.',
+    description: 'List, create, update, or delete quick notes. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'update', 'delete']).describe('Operation to perform'),
+      action: z.enum(MANAGE_NOTE_ACTIONS).describe('Operation to perform'),
       noteId: z.string().optional().describe('Note ID (required for update/delete)'),
       content: z.string().optional().describe('Note content/text (required for create)'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-
-    if (args.action === 'list') {
-      const notes = db.prepare('SELECT * FROM quick_notes WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
-      return asTextContent(notes);
-    }
-
-    if (args.action === 'create') {
-      if (!args.content) throw new Error('content is required');
-      const id = uuidv4();
-      db.prepare('INSERT INTO quick_notes (id, user_id, content) VALUES (?, ?, ?)').run(id, userId, args.content.trim());
-      return asTextContent(db.prepare('SELECT * FROM quick_notes WHERE id = ?').get(id));
-    }
-
-    if (args.action === 'update') {
-      if (!args.noteId) throw new Error('noteId is required for update');
-      if (!args.content) throw new Error('content is required for update');
-      const result = db.prepare(`UPDATE quick_notes SET content = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
-        .run(args.content.trim(), args.noteId, userId);
-      if (result.changes === 0) throw new Error('Note not found or access denied');
-      return asTextContent(db.prepare('SELECT * FROM quick_notes WHERE id = ?').get(args.noteId));
-    }
-
-    if (args.action === 'delete') {
-      if (!args.noteId) throw new Error('noteId is required for delete');
-      const result = db.prepare('DELETE FROM quick_notes WHERE id = ? AND user_id = ?').run(args.noteId, userId);
-      if (result.changes === 0) throw new Error('Note not found or access denied');
-      return asTextContent({ deleted: true, id: args.noteId });
-    }
-
-    throw new Error('Invalid action');
+    return asTextContent(handleManageNote(args, userId));
   });
 
   // ── manage_event ──────────────────────────────────────────────
   server.registerTool('manage_event', {
-    description: 'List, create, update, or delete calendar events. Events are stored locally and can optionally push to Google Calendar.',
+    description: 'List, create, update, or delete calendar events. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
-      action: z.enum(['list', 'create', 'update', 'delete']).describe('Operation to perform'),
+      action: z.enum(MANAGE_EVENT_ACTIONS).describe('Operation to perform'),
       eventId: z.string().optional().describe('Event ID (required for update/delete)'),
       title: z.string().optional().describe('Event title (required for create)'),
       description: z.string().optional().describe('Event description'),
@@ -1480,64 +902,11 @@ export function createMcpServer(): McpServer {
       location: z.string().optional().describe('Event location'),
       filter_start: z.string().optional().describe('Filter: events starting on or after this date'),
       filter_end: z.string().optional().describe('Filter: events starting on or before this date'),
+      items: bulkItemsSchema,
     },
   }, async (args, extra) => {
     const userId = getUserId(extra);
-    const now = new Date().toISOString();
-
-    if (args.action === 'list') {
-      let query = 'SELECT * FROM events WHERE user_id = ?';
-      const params: any[] = [userId];
-      if (args.filter_start) { query += ' AND start_date >= ?'; params.push(args.filter_start); }
-      if (args.filter_end) { query += ' AND start_date <= ?'; params.push(args.filter_end); }
-      query += ' ORDER BY start_date ASC';
-      const events = db.prepare(query).all(...params);
-      return asTextContent(events);
-    }
-
-    if (args.action === 'create') {
-      if (!args.title) throw new Error('title is required for create');
-      if (!args.start_date) throw new Error('start_date is required for create');
-      const id = uuidv4();
-      db.prepare(`
-        INSERT INTO events (id, user_id, title, description, start_date, end_date, all_day, color, location, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, userId, args.title, args.description || null, args.start_date, args.end_date || null,
-        args.all_day ? 1 : 0, args.color || '#3b82f6', args.location || null, now, now);
-      const event = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
-      return asTextContent(event);
-    }
-
-    if (args.action === 'update') {
-      if (!args.eventId) throw new Error('eventId is required for update');
-      const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.eventId, userId) as any;
-      if (!existing) throw new Error('Event not found');
-      db.prepare(`
-        UPDATE events SET title = ?, description = ?, start_date = ?, end_date = ?, all_day = ?, color = ?, location = ?, updated_at = ?
-        WHERE id = ? AND user_id = ?
-      `).run(
-        args.title ?? existing.title,
-        args.description !== undefined ? args.description : existing.description,
-        args.start_date ?? existing.start_date,
-        args.end_date !== undefined ? (args.end_date || null) : existing.end_date,
-        args.all_day !== undefined ? (args.all_day ? 1 : 0) : existing.all_day,
-        args.color ?? existing.color,
-        args.location !== undefined ? (args.location || null) : existing.location,
-        now, args.eventId, userId
-      );
-      const updated = db.prepare('SELECT * FROM events WHERE id = ?').get(args.eventId);
-      return asTextContent(updated);
-    }
-
-    if (args.action === 'delete') {
-      if (!args.eventId) throw new Error('eventId is required for delete');
-      const existing = db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?').get(args.eventId, userId);
-      if (!existing) throw new Error('Event not found');
-      db.prepare('DELETE FROM events WHERE id = ? AND user_id = ?').run(args.eventId, userId);
-      return asTextContent({ deleted: true, id: args.eventId });
-    }
-
-    throw new Error(`Unknown action: ${args.action}`);
+    return asTextContent(handleManageEvent(args, userId));
   });
 
   return server;

@@ -917,3 +917,126 @@ code {
   background: transparent !important;
   color: #ffffff;
 }
+
+/* ── Vivid P3 Colors ─────────────────────────────────────────────
+   When .vivid-colors is on <html> AND the display supports P3,
+   boost saturation on colored UI elements (badges, pills, labels,
+   progress bars, project banners, buttons) for a more vivid look.
+   Uses P3 color() for key accents + filter boost for everything else.
+   ─────────────────────────────────────────────────────────────── */
+
+/* Layer 1: Blanket saturation boost on all colored elements */
+.vivid-colors [class*="bg-red"],
+.vivid-colors [class*="bg-green"],
+.vivid-colors [class*="bg-blue"],
+.vivid-colors [class*="bg-indigo"],
+.vivid-colors [class*="bg-purple"],
+.vivid-colors [class*="bg-violet"],
+.vivid-colors [class*="bg-pink"],
+.vivid-colors [class*="bg-amber"],
+.vivid-colors [class*="bg-orange"],
+.vivid-colors [class*="bg-teal"],
+.vivid-colors [class*="bg-emerald"],
+.vivid-colors [class*="bg-cyan"],
+.vivid-colors [class*="bg-yellow"] {
+  filter: saturate(1.4) contrast(1.05);
+}
+
+/* Layer 2: Text color boost — separate from bg so filters don't stack weirdly */
+.vivid-colors [class*="text-red-5"],
+.vivid-colors [class*="text-red-6"],
+.vivid-colors [class*="text-green-5"],
+.vivid-colors [class*="text-green-6"],
+.vivid-colors [class*="text-blue-5"],
+.vivid-colors [class*="text-blue-6"],
+.vivid-colors [class*="text-indigo-5"],
+.vivid-colors [class*="text-indigo-6"],
+.vivid-colors [class*="text-purple-5"],
+.vivid-colors [class*="text-purple-6"],
+.vivid-colors [class*="text-violet-5"],
+.vivid-colors [class*="text-violet-6"],
+.vivid-colors [class*="text-pink-5"],
+.vivid-colors [class*="text-pink-6"],
+.vivid-colors [class*="text-amber-5"],
+.vivid-colors [class*="text-amber-6"],
+.vivid-colors [class*="text-orange-5"],
+.vivid-colors [class*="text-orange-6"],
+.vivid-colors [class*="text-teal-5"],
+.vivid-colors [class*="text-teal-6"],
+.vivid-colors [class*="text-emerald-5"],
+.vivid-colors [class*="text-emerald-6"] {
+  filter: saturate(1.6) brightness(1.05);
+}
+
+/* Layer 3: P3 wide-gamut on key accent colors — visible pop on P3 displays */
+@supports (color: color(display-p3 1 0 0)) {
+  @media (color-gamut: p3) {
+    /* Reds — pushed to P3 edge */
+    .vivid-colors .text-red-600 { color: color(display-p3 0.92 0.08 0.05) !important; }
+    .vivid-colors .text-red-500 { color: color(display-p3 1 0.12 0.08) !important; }
+    .vivid-colors .bg-red-500   { background-color: color(display-p3 1 0.12 0.08) !important; }
+    .vivid-colors .bg-red-600   { background-color: color(display-p3 0.92 0.08 0.05) !important; }
+
+    /* Greens — super vivid */
+    .vivid-colors .text-green-600 { color: color(display-p3 0.05 0.78 0.18) !important; }
+    .vivid-colors .text-green-500 { color: color(display-p3 0.08 0.88 0.22) !important; }
+    .vivid-colors .bg-green-500   { background-color: color(display-p3 0.08 0.88 0.22) !important; }
+    .vivid-colors .bg-green-600   { background-color: color(display-p3 0.05 0.78 0.18) !important; }
+
+    /* Blues — electric */
+    .vivid-colors .text-blue-600 { color: color(display-p3 0.1 0.3 1) !important; }
+    .vivid-colors .text-blue-500 { color: color(display-p3 0.15 0.4 1) !important; }
+    .vivid-colors .bg-blue-500   { background-color: color(display-p3 0.15 0.4 1) !important; }
+    .vivid-colors .bg-blue-600   { background-color: color(display-p3 0.1 0.3 1) !important; }
+
+    /* Indigo — deep vivid */
+    .vivid-colors .text-indigo-600 { color: color(display-p3 0.22 0.2 0.95) !important; }
+    .vivid-colors .text-indigo-500 { color: color(display-p3 0.3 0.28 1) !important; }
+
+    /* Purple — ultra saturated */
+    .vivid-colors .text-purple-600 { color: color(display-p3 0.52 0.1 0.98) !important; }
+    .vivid-colors .text-purple-500 { color: color(display-p3 0.6 0.15 1) !important; }
+
+    /* Pink — neon edge */
+    .vivid-colors .text-pink-600 { color: color(display-p3 0.95 0.08 0.45) !important; }
+    .vivid-colors .text-pink-500 { color: color(display-p3 1 0.12 0.52) !important; }
+
+    /* Orange — blazing */
+    .vivid-colors .text-orange-600 { color: color(display-p3 0.98 0.42 0.02) !important; }
+    .vivid-colors .text-orange-500 { color: color(display-p3 1 0.5 0.05) !important; }
+
+    /* Yellow stars */
+    .vivid-colors .text-yellow-400 { color: color(display-p3 1 0.88 0.02) !important; }
+    .vivid-colors .text-yellow-500 { color: color(display-p3 1 0.8 0.0) !important; }
+
+    /* Teal — tropical */
+    .vivid-colors .text-teal-600 { color: color(display-p3 0.0 0.75 0.58) !important; }
+    .vivid-colors .text-teal-500 { color: color(display-p3 0.0 0.85 0.65) !important; }
+
+    /* Emerald */
+    .vivid-colors .text-emerald-500 { color: color(display-p3 0.05 0.82 0.4) !important; }
+    .vivid-colors .bg-emerald-500   { background-color: color(display-p3 0.05 0.82 0.4) !important; }
+  }
+}
+
+/* Layer 4: Project color banners and inline-style elements get a boost too */
+.vivid-colors [style*="background-color"] {
+  filter: saturate(1.35);
+}
+/* Don't double-filter cards/containers — only small accent elements */
+.vivid-colors .rounded-xl[style*="background-color"],
+.vivid-colors .rounded-lg[style*="background-color"] {
+  filter: none;
+}
+/* But DO boost the thin color banners on project cards */
+.vivid-colors .h-2[style*="background-color"] {
+  filter: saturate(1.5) brightness(1.08);
+}
+/* And color dots */
+.vivid-colors .rounded-full[style*="background-color"] {
+  filter: saturate(1.5);
+}
+/* Border-left colored pills (project/sprint pills) */
+.vivid-colors [style*="border-left-color"] {
+  filter: saturate(1.4);
+}

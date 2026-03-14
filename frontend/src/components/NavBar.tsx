@@ -14,8 +14,7 @@ const NAV_TABS = [
   { key: 'todo', label: 'Todo', path: '/' },
   { key: 'sprints', label: 'Projects', path: '/sprints' },
   { key: 'life', label: 'Life', path: '/life' },
-  { key: 'journal', label: 'Journal', path: '/journal' },
-  { key: 'phonebook', label: 'Phonebook', path: '/phonebook' },
+  { key: 'command', label: 'Command', path: '/command' },
   { key: 'admin', label: 'Admin', path: '/admin' },
 ];
 
@@ -99,7 +98,8 @@ export default function NavBar() {
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/' || location.pathname === '/tasks';
-    if (path === '/life') return location.pathname === '/life' || location.pathname.startsWith('/goal/');
+    if (path === '/life') return location.pathname === '/life' || location.pathname.startsWith('/goal/') || location.pathname === '/journal' || location.pathname === '/phonebook';
+    if (path === '/command') return location.pathname === '/command';
     if (path === '/admin') return location.pathname === '/admin';
     return location.pathname === path;
   };

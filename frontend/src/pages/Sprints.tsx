@@ -21,6 +21,8 @@ interface Project {
   archived: number;
   parent_project_id: string | null;
   obsidian_path: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Sprint {
@@ -70,6 +72,8 @@ const modeLabel = (mode: string, plural = false) =>
   mode === 'sprint' ? (plural ? 'Sprints' : 'Sprint') : (plural ? 'Sections' : 'Section');
 
 type ProjectViewMode = 'card' | 'list';
+type ProjectSort = 'alpha' | 'recent' | 'created';
+type CardSubprojectMode = 'grouped' | 'nested';
 const CARD_SIZES = [
   { id: 'sm', label: 'S', width: 180 },
   { id: 'md', label: 'M', width: 240 },
@@ -104,6 +108,24 @@ export default function Sprints() {
   const updateCardSize = (size: CardSize) => {
     setCardSize(size);
     localStorage.setItem('projects_card_size', size);
+  };
+
+  // Sort preference
+  const [projectSort, setProjectSort] = useState<ProjectSort>(() =>
+    (localStorage.getItem('projects_sort') as ProjectSort) || 'alpha'
+  );
+  const updateProjectSort = (sort: ProjectSort) => {
+    setProjectSort(sort);
+    localStorage.setItem('projects_sort', sort);
+  };
+
+  // Card subproject display mode
+  const [cardSubprojectMode, setCardSubprojectMode] = useState<CardSubprojectMode>(() =>
+    (localStorage.getItem('projects_card_subproject_mode') as CardSubprojectMode) || 'grouped'
+  );
+  const updateCardSubprojectMode = (mode: CardSubprojectMode) => {
+    setCardSubprojectMode(mode);
+    localStorage.setItem('projects_card_subproject_mode', mode);
   };
 
   const cardWidth = CARD_SIZES.find(s => s.id === cardSize)?.width ?? 240;
@@ -379,28 +401,77 @@ export default function Sprints() {
 
   const archivedCount = useMemo(() => projects.filter(p => p.archived).length, [projects]);
 
+  // Sort comparator based on current sort mode
+  const sortProjects = useCallback((a: Project, b: Project) => {
+    // Favorites first always
+    if (a.is_favorite !== b.is_favorite) return b.is_favorite - a.is_favorite;
+    switch (projectSort) {
+      case 'alpha':
+        return a.title.localeCompare(b.title);
+      case 'recent':
+        return (b.updated_at || '').localeCompare(a.updated_at || '');
+      case 'created':
+        return (b.created_at || '').localeCompare(a.created_at || '');
+      default:
+        return a.title.localeCompare(b.title);
+    }
+  }, [projectSort]);
+
   const filteredProjects = useMemo(() => {
     // Filter by active/archived
     const pool = showArchived ? projects.filter(p => p.archived) : projects.filter(p => !p.archived);
     let base: Project[];
     if (activeTab === 'all') base = pool;
-    else if (activeTab === 'home') {
-      base = [...pool].sort((a, b) => (a.type || 'personal').localeCompare(b.type || 'personal'));
-    } else if (activeTab.startsWith('type:')) {
+    else if (activeTab === 'home') base = pool;
+    else if (activeTab.startsWith('type:')) {
       const type = activeTab.slice(5);
       base = pool.filter(p => (p.type || 'personal') === type);
     } else base = pool;
 
-    // Build parent→children ordering: top-level first, then children indented after parent
+    // Separate top-level and children
     const topLevel = base.filter(p => !p.parent_project_id || !base.some(pp => pp.id === p.parent_project_id));
+    const childrenMap = new Map<string, Project[]>();
+    for (const p of base) {
+      if (p.parent_project_id && base.some(pp => pp.id === p.parent_project_id)) {
+        const kids = childrenMap.get(p.parent_project_id) || [];
+        kids.push(p);
+        childrenMap.set(p.parent_project_id, kids);
+      }
+    }
+
+    // Sort top-level projects
+    const sortedTopLevel = [...topLevel].sort(sortProjects);
+    // Sort children within each parent by same comparator
+    for (const [, kids] of childrenMap) {
+      kids.sort(sortProjects);
+    }
+
+    // Build flat list: parent then children
     const result: Project[] = [];
-    for (const parent of topLevel) {
+    for (const parent of sortedTopLevel) {
       result.push(parent);
-      const children = base.filter(p => p.parent_project_id === parent.id);
-      result.push(...children);
+      const children = childrenMap.get(parent.id);
+      if (children) result.push(...children);
     }
     return result;
-  }, [activeTab, projects, sprintsByProject, showArchived]);
+  }, [activeTab, projects, showArchived, sortProjects]);
+
+  // For card "nested" mode: only top-level projects, with children accessible via map
+  const topLevelProjects = useMemo(() => {
+    return filteredProjects.filter(p => !p.parent_project_id || !filteredProjects.some(pp => pp.id === p.parent_project_id));
+  }, [filteredProjects]);
+
+  const childrenByProject = useMemo(() => {
+    const map = new Map<string, Project[]>();
+    for (const p of filteredProjects) {
+      if (p.parent_project_id && filteredProjects.some(pp => pp.id === p.parent_project_id)) {
+        const kids = map.get(p.parent_project_id) || [];
+        kids.push(p);
+        map.set(p.parent_project_id, kids);
+      }
+    }
+    return map;
+  }, [filteredProjects]);
 
   const loadData = useCallback(async () => {
     try {
@@ -1748,6 +1819,52 @@ export default function Sprints() {
                   </div>
                 )}
 
+                {/* Sort selector */}
+                <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  {([['alpha', 'A→Z'], ['recent', '↻'], ['created', '🕐']] as [ProjectSort, string][]).map(([id, label]) => (
+                    <button
+                      key={id}
+                      onClick={() => updateProjectSort(id)}
+                      className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                        projectSort === id
+                          ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800'
+                          : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                      }`}
+                      title={id === 'alpha' ? 'Sort alphabetically' : id === 'recent' ? 'Sort by recently updated' : 'Sort by creation date'}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Card subproject mode — only in card view when subprojects exist */}
+                {projectViewMode === 'card' && childrenByProject.size > 0 && (
+                  <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <button
+                      onClick={() => updateCardSubprojectMode('grouped')}
+                      className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                        cardSubprojectMode === 'grouped'
+                          ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800'
+                          : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                      }`}
+                      title="Group: parent and subprojects sorted together"
+                    >
+                      ≡
+                    </button>
+                    <button
+                      onClick={() => updateCardSubprojectMode('nested')}
+                      className={`px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                        cardSubprojectMode === 'nested'
+                          ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800'
+                          : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                      }`}
+                      title="Nest: subprojects shown inside parent cards"
+                    >
+                      ⊞
+                    </button>
+                  </div>
+                )}
+
                 {archivedCount > 0 && (
                   <button
                     onClick={() => setShowArchived(!showArchived)}
@@ -1782,12 +1899,58 @@ export default function Sprints() {
                 </p>
               </div>
             ) : projectViewMode === 'card' ? (
-              <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardWidth}px, 1fr))` }}>
-                {filteredProjects.map(project => renderHomeCard(project))}
-              </div>
+              cardSubprojectMode === 'nested' ? (
+                /* Nested mode: larger parent cards with subproject mini-cards inside */
+                <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(cardWidth, 280)}px, 1fr))` }}>
+                  {topLevelProjects.map(project => {
+                    const children = childrenByProject.get(project.id) || [];
+                    return (
+                      <div key={project.id} className="flex flex-col">
+                        {renderHomeCard(project)}
+                        {children.length > 0 && (
+                          <div className="ml-3 mt-1 space-y-1">
+                            {children.map(child => (
+                              <div
+                                key={child.id}
+                                onClick={() => { activeWsTab.isHome ? openProjectInTab(child.id) : setSelectedProject(child.id); }}
+                                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow flex items-center gap-2 px-3 py-2 border-l-[3px]"
+                                style={{ borderLeftColor: child.hex_color || '#3b82f6' }}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate block">{child.title}</span>
+                                  <span className="text-[10px] text-gray-400">{child.open_tasks} open · {child.done_tasks} done</span>
+                                </div>
+                                {child.type && <span className="text-[9px] px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium uppercase flex-shrink-0">{child.type}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Grouped mode: parent and subprojects sorted together as separate cards */
+                <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardWidth}px, 1fr))` }}>
+                  {filteredProjects.map(project => renderHomeCard(project))}
+                </div>
+              )
             ) : (
+              /* List view: subprojects nested within parent cards */
               <div className="space-y-6">
-                {filteredProjects.map(project => renderProjectCard(project))}
+                {topLevelProjects.map(project => {
+                  const children = childrenByProject.get(project.id) || [];
+                  return (
+                    <div key={project.id}>
+                      {renderProjectCard(project)}
+                      {children.length > 0 && (
+                        <div className="ml-6 mt-2 space-y-3 border-l-2 border-gray-200 dark:border-gray-700 pl-4">
+                          {children.map(child => renderProjectCard(child))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>

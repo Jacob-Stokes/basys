@@ -3,14 +3,18 @@ import { useSearchParams } from 'react-router-dom';
 import { useDisplaySettings, sortTabs } from '../context/DisplaySettingsContext';
 import Home from './Home';
 import Habits from './Habits';
+import Journal from './Journal';
+import Phonebook from './Phonebook';
 
-type LifeTab = 'goals' | 'habits' | 'recipes' | 'bookshelf';
+type LifeTab = 'journal' | 'goals' | 'habits' | 'recipes' | 'bookshelf' | 'phonebook';
 
 const tabs: { key: LifeTab; label: string }[] = [
+  { key: 'journal', label: 'Journal' },
   { key: 'goals', label: 'Goals' },
   { key: 'habits', label: 'Habits' },
   { key: 'recipes', label: 'Recipes' },
   { key: 'bookshelf', label: 'Bookshelf' },
+  { key: 'phonebook', label: 'Phonebook' },
 ];
 
 function Placeholder({ title, description, icon }: { title: string; description: string; icon: string }) {
@@ -29,8 +33,10 @@ function Placeholder({ title, description, icon }: { title: string; description:
 
 function renderTab(tab: LifeTab) {
   switch (tab) {
+    case 'journal': return <Journal embedded />;
     case 'goals': return <Home />;
     case 'habits': return <Habits />;
+    case 'phonebook': return <Phonebook embedded />;
     case 'recipes': return <Placeholder icon="🍳" title="Recipes" description="Save and organize your favorite recipes. Coming soon." />;
     case 'bookshelf': return <Placeholder icon="📚" title="Bookshelf" description="Track books you're reading, want to read, and have finished. Coming soon." />;
   }
@@ -38,14 +44,14 @@ function renderTab(tab: LifeTab) {
 
 export default function Life() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = (searchParams.get('tab') as LifeTab) || 'goals';
+  const initialTab = (searchParams.get('tab') as LifeTab) || 'journal';
   const [activeTab, setActiveTab] = useState<LifeTab>(initialTab);
   const { settings } = useDisplaySettings();
   const sortedTabs = sortTabs(tabs, settings.tabOrder?.lifeTabs ?? [], t => t.key);
 
   const switchTab = (tab: LifeTab) => {
     setActiveTab(tab);
-    setSearchParams(tab === 'goals' ? {} : { tab });
+    setSearchParams(tab === 'journal' ? {} : { tab });
   };
 
   return (
@@ -70,7 +76,9 @@ export default function Life() {
       </div>
 
       {/* Content */}
-      {renderTab(activeTab)}
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+        {renderTab(activeTab)}
+      </div>
     </>
   );
 }

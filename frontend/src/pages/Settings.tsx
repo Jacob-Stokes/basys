@@ -1721,6 +1721,71 @@ curl -X POST "$API_URL/api/guestbook" \\
               </label>
             </section>
 
+            {/* Vivid P3 Colors */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">Vivid Colors (P3)</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Use Display P3 wide-gamut colors for badges, labels, and accents. Makes colors appear more vivid and saturated on P3-capable displays (MacBook, iMac, iPhone). No effect on standard sRGB displays.
+              </p>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={displaySettings.vividColors}
+                  onChange={(e) => updateDisplaySettings({ vividColors: e.target.checked })}
+                  className="w-5 h-5 rounded"
+                />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Enable vivid P3 colors
+                </span>
+              </label>
+              {displaySettings.vividColors && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600">bug</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-600">feature</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-600">task</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-600">story</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-600">label</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-600">warning</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-600">♥</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-600">health</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 self-center ml-1">← preview on P3 display</span>
+                </div>
+              )}
+            </section>
+
+            {/* Pomodoro Timer Position */}
+            <section>
+              <h3 className="text-lg font-semibold mb-2">Pomodoro Timer Position</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Choose where the pomodoro timer appears. Corner positions are desktop-only — mobile always shows the footer.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { id: 'footer', label: 'Footer bar', desc: 'Full-width sticky footer' },
+                  { id: 'corner-top', label: 'Top-left corner', desc: 'Compact icon bar in navbar area' },
+                  { id: 'corner-bottom-sm', label: 'Bottom-left small', desc: 'Compact bar at bottom corner' },
+                  { id: 'corner-bottom-lg', label: 'Bottom-left large', desc: 'Panel with notes & focus items' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => updateDisplaySettings({ pomodoroPosition: opt.id })}
+                    className={`text-left px-3 py-2.5 rounded-lg border-2 transition-colors ${
+                      displaySettings.pomodoroPosition === opt.id
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    <span className={`text-sm font-medium block ${
+                      displaySettings.pomodoroPosition === opt.id
+                        ? 'text-blue-700 dark:text-blue-300'
+                        : 'text-gray-700 dark:text-gray-300'
+                    }`}>{opt.label}</span>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
             {/* TODO Page Filters */}
             <section>
               <h3 className="text-lg font-semibold mb-2">TODO Page Filters</h3>

@@ -4,6 +4,7 @@ export type ViewMode = 'list' | 'compact' | 'full';
 export type CenterLayout = 'single' | 'radial';
 export type CenterBackdrop = 'page' | 'card';
 export type AppThemeName = 'default' | 'default-glass' | 'academia' | 'academia-2026' | 'academia-mono' | 'arc' | 'custom-theme';
+export type PomodoroPosition = 'footer' | 'corner-top' | 'corner-bottom-sm' | 'corner-bottom-lg';
 
 export interface PaletteDefinition {
   label: string;
@@ -77,13 +78,15 @@ export const DEFAULT_FALLBACK_COLOR = '#22c55e';
 export interface TabOrder {
   navbar: string[];
   lifeTabs: string[];
+  commandTabs: string[];
   adminTabs: string[];
   panelTabs: string[];
 }
 
 export const DEFAULT_TAB_ORDER: TabOrder = {
-  navbar: ['todo', 'sprints', 'life', 'journal', 'phonebook', 'admin'],
-  lifeTabs: ['goals', 'habits', 'recipes', 'bookshelf'],
+  navbar: ['todo', 'sprints', 'life', 'command', 'admin'],
+  lifeTabs: ['journal', 'goals', 'habits', 'recipes', 'bookshelf', 'phonebook'],
+  commandTabs: ['actions', 'monitoring', 'agents'],
   adminTabs: ['terminal', 'settings', 'wiki'],
   panelTabs: ['tab1', 'tab2', 'tab3'],
 };
@@ -108,6 +111,8 @@ export interface DisplaySettings {
   language: string;
   darkMode: boolean;
   showHeaderBranding: boolean;
+  vividColors: boolean;
+  pomodoroPosition: PomodoroPosition;
   customCSS: string;
   tabOrder: TabOrder;
 }
@@ -170,6 +175,8 @@ const defaultSettings: DisplaySettings = {
   language: 'en-US',
   darkMode: false,
   showHeaderBranding: false,
+  vividColors: false,
+  pomodoroPosition: 'footer',
   customCSS: '',
   tabOrder: DEFAULT_TAB_ORDER,
 };
@@ -213,6 +220,15 @@ export function DisplaySettingsProvider({ children }: { children: React.ReactNod
       document.documentElement.classList.remove('dark');
     }
   }, [settings.darkMode]);
+
+  // Apply vivid P3 color class to <html>
+  useEffect(() => {
+    if (settings.vividColors) {
+      document.documentElement.classList.add('vivid-colors');
+    } else {
+      document.documentElement.classList.remove('vivid-colors');
+    }
+  }, [settings.vividColors]);
 
   // Apply app theme CSS class to <html>
   useEffect(() => {
