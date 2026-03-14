@@ -205,12 +205,13 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
   // ═══ HABITS ═══
   {
     name: 'manage_habit',
-    description: 'List, create, update, or delete habits. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, update, or delete habits. List supports verbosity=summary|standard|full (default standard). Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     input_schema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: [...MANAGE_HABIT_ACTIONS] },
         habit_id: { type: 'string' },
+        verbosity: { type: 'string', enum: ['summary', 'standard', 'full'] },
         title: { type: 'string' },
         emoji: { type: 'string' },
         type: { type: 'string', enum: ['habit', 'quit'] },
@@ -243,12 +244,13 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
   // ═══ TASKS ═══
   {
     name: 'manage_task',
-    description: 'List, create, update, delete tasks, or toggle done/favorite. bulk_update also supports done and is_favorite fields. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, update, delete tasks, or toggle done/favorite. List supports verbosity=summary|standard|full, where full also includes comments. bulk_update also supports done and is_favorite fields. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     input_schema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: [...MANAGE_TASK_ACTIONS] },
         task_id: { type: 'string', description: 'Required for update/delete/toggle, or per item in bulk actions' },
+        verbosity: { type: 'string', enum: ['summary', 'standard', 'full'] },
         title: { type: 'string' },
         description: { type: 'string' },
         project_id: { type: 'string' },
@@ -310,18 +312,20 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
   // ═══ PROJECTS & LABELS ═══
   {
     name: 'manage_project',
-    description: 'List, create, update, delete, archive, or favorite projects. Supports bulk_create, bulk_update, and bulk_delete via an items array. DELETE cascades: deletes all tasks, sprints, and buckets. To keep orphaned tasks instead, the user must explicitly say "keep tasks" — then set keep_tasks=true.',
+    description: 'List, create, update, delete, archive, or favorite projects. List supports verbosity=summary|standard|full; full also includes tasks, and include_sprints nests summary sprint+column data. Supports bulk_create, bulk_update, and bulk_delete via an items array. DELETE cascades: deletes all tasks, sprints, and buckets. To keep orphaned tasks instead, the user must explicitly say "keep tasks" — then set keep_tasks=true.',
     input_schema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: [...MANAGE_PROJECT_ACTIONS] },
         project_id: { type: 'string' },
+        verbosity: { type: 'string', enum: ['summary', 'standard', 'full'] },
         title: { type: 'string' },
         description: { type: 'string' },
         hex_color: { type: 'string' },
         type: { type: 'string' },
         parent_project_id: { type: 'string' },
         include_tasks: { type: 'boolean' },
+        include_sprints: { type: 'boolean' },
         include_archived: { type: 'boolean' },
         filter_type: { type: 'string' },
         keep_tasks: { type: 'boolean', description: 'On delete: if true, unlink tasks to backlog instead of deleting them. Only set true if user explicitly asks to keep orphaned tasks.' },
@@ -415,18 +419,20 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
   // ═══ SPRINTS ═══
   {
     name: 'manage_sprint',
-    description: 'List, create, get, update, delete sprints, or transition sprint status. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, get, update, delete sprints, or transition sprint status. List supports verbosity=summary|standard|full; full also includes columns, and include_columns can request columns explicitly. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     input_schema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: [...MANAGE_SPRINT_ACTIONS] },
         sprint_id: { type: 'string', description: 'Required for get/update/delete/transition_status, or per item in bulk actions' },
         project_id: { type: 'string' },
+        verbosity: { type: 'string', enum: ['summary', 'standard', 'full'] },
         title: { type: 'string' },
         description: { type: 'string' },
         start_date: { type: 'string' },
         end_date: { type: 'string' },
         status: { type: 'string', enum: ['planned', 'active', 'completed'], description: 'Used on create or as the target status for transition_status.' },
+        include_columns: { type: 'boolean' },
         items: bulkItemsProperty,
       },
       required: ['action'],

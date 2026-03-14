@@ -7,6 +7,7 @@ import { deleteTasksCascade } from '../utils/taskCascade';
 type ToolArgs = Record<string, any>;
 type ToolHandler = (args: ToolArgs, userId: string) => any;
 type BulkAction = 'bulk_create' | 'bulk_update' | 'bulk_delete';
+type Verbosity = 'summary' | 'standard' | 'full';
 
 const DEFAULT_BULK_ACTION_MAP: Record<BulkAction, string> = {
   bulk_create: 'create',
@@ -54,14 +55,123 @@ function hydrateTaskRelations(task: any) {
   return task;
 }
 
-function getTaskWithRelations(taskId: string) {
+function hydrateTaskComments(task: any) {
+  if (!task) return task;
+  task.comments = db.prepare('SELECT * FROM task_comments WHERE task_id = ? ORDER BY created_at DESC').all(task.id);
+  return task;
+}
+
+function getVerbosity(value: unknown): Verbosity {
+  if (value === 'summary' || value === 'full') return value;
+  return 'standard';
+}
+
+function pickFields<T extends Record<string, any>>(obj: T, fields: string[]): Partial<T> {
+  const result: Partial<T> = {};
+  for (const field of fields) {
+    if (field in obj) result[field as keyof T] = obj[field];
+  }
+  return result;
+}
+
+const PROJECT_SUMMARY_FIELDS = ['id', 'title', 'type', 'hex_color', 'open_tasks', 'done_tasks', 'parent_project_id', 'archived'];
+const TASK_SUMMARY_FIELDS = ['id', 'title', 'done', 'priority', 'due_date', 'bucket_id', 'project_id', 'project_title'];
+const SPRINT_SUMMARY_FIELDS = ['id', 'title', 'sprint_number', 'status', 'open_tasks', 'done_tasks'];
+const HABIT_SUMMARY_FIELDS = ['id', 'title', 'emoji', 'type', 'total_logs', 'last_logged'];
+const SPRINT_COLUMN_SUMMARY_FIELDS = ['id', 'title', 'position', 'bucket_type'];
+
+function shapeTask(task: any, verbosity: Verbosity) {
+  if (!task) return task;
+  if (verbosity === 'summary') return pickFields(task, TASK_SUMMARY_FIELDS);
+
+  hydrateTaskRelations(task);
+  if (verbosity === 'full') {
+    hydrateTaskComments(task);
+  }
+  return task;
+}
+
+function shapeProject(project: any, verbosity: Verbosity) {
+  const shapedProject = verbosity === 'summary'
+    ? pickFields(project, PROJECT_SUMMARY_FIELDS)
+    : { ...project };
+
+  if (project.tasks !== undefined) {
+    (shapedProject as any).tasks = project.tasks;
+  }
+  if (project.sprints !== undefined) {
+    (shapedProject as any).sprints = project.sprints;
+  }
+  return shapedProject;
+}
+
+function shapeSprint(sprint: any, verbosity: Verbosity) {
+  const shapedSprint = verbosity === 'summary'
+    ? pickFields(sprint, SPRINT_SUMMARY_FIELDS)
+    : { ...sprint };
+
+  if (sprint.columns !== undefined) {
+    (shapedSprint as any).columns = sprint.columns;
+  }
+  return shapedSprint;
+}
+
+function loadSprintColumnsSummary(sprintId: string) {
+  const columns = db.prepare(`
+    SELECT id, title, position, bucket_type
+    FROM buckets
+    WHERE sprint_id = ?
+    ORDER BY position ASC
+  `).all(sprintId) as any[];
+
+  return columns.map(column => pickFields(column, SPRINT_COLUMN_SUMMARY_FIELDS));
+}
+
+function loadProjectTasks(projectId: string, userId: string, verbosity: Verbosity) {
+  const tasks = db.prepare(`
+    SELECT t.*, p.title as project_title, p.hex_color as project_color, p.type as project_type
+    FROM tasks t
+    LEFT JOIN projects p ON t.project_id = p.id
+    WHERE t.user_id = ? AND t.project_id = ?
+    ORDER BY t.done ASC, t.priority DESC, t.due_date ASC NULLS LAST, t.created_at DESC
+  `).all(userId, projectId) as any[];
+
+  return tasks.map(task => shapeTask(task, verbosity));
+}
+
+function loadProjectSprints(projectId: string) {
+  const sprints = db.prepare(`
+    SELECT s.*,
+      COUNT(CASE WHEN t.done = 0 THEN 1 END) as open_tasks,
+      COUNT(CASE WHEN t.done = 1 THEN 1 END) as done_tasks
+    FROM sprints s
+    LEFT JOIN tasks t ON t.sprint_id = s.id
+    WHERE s.project_id = ?
+    GROUP BY s.id
+    ORDER BY s.sprint_number DESC, s.created_at DESC
+  `).all(projectId) as any[];
+
+  return sprints.map(sprint => ({
+    ...pickFields(sprint, SPRINT_SUMMARY_FIELDS),
+    columns: loadSprintColumnsSummary(sprint.id),
+  }));
+}
+
+function shapeHabit(habit: any, verbosity: Verbosity) {
+  if (verbosity === 'summary') {
+    return pickFields(habit, HABIT_SUMMARY_FIELDS);
+  }
+  return habit;
+}
+
+function getTaskWithRelations(taskId: string, verbosity: Verbosity = 'standard') {
   const task = db.prepare(`
     SELECT t.*, p.title as project_title, p.hex_color as project_color, p.type as project_type
     FROM tasks t
     LEFT JOIN projects p ON t.project_id = p.id
     WHERE t.id = ?
   `).get(taskId) as any;
-  return hydrateTaskRelations(task);
+  return shapeTask(task, verbosity);
 }
 
 function createManagedActionHandler(
@@ -234,7 +344,7 @@ const listHabits: ToolHandler = (args, userId) => {
   const archiveFilter = args.include_archived ? '' : 'AND h.archived = 0';
   const params: any[] = [userId];
   if (args.type) params.push(args.type);
-  return db.prepare(`
+  const habits = db.prepare(`
     SELECT h.*, COUNT(hl.id) as total_logs,
       MAX(hl.log_date) as last_logged
     FROM habits h
@@ -242,7 +352,10 @@ const listHabits: ToolHandler = (args, userId) => {
     WHERE h.user_id = ? ${filter} ${archiveFilter}
     GROUP BY h.id
     ORDER BY h.position, h.created_at
-  `).all(...params);
+  `).all(...params) as any[];
+
+  const verbosity = getVerbosity(args.verbosity);
+  return habits.map(habit => shapeHabit(habit, verbosity));
 };
 
 const createHabit: ToolHandler = (args, userId) => {
@@ -286,6 +399,7 @@ export const handleManageHabit = createManagedActionHandler({
 });
 
 const listTasks: ToolHandler = (args, userId) => {
+  const verbosity = getVerbosity(args.verbosity);
   let sql = `SELECT t.*, p.title as project_title, p.hex_color as project_color, p.type as project_type
     FROM tasks t LEFT JOIN projects p ON t.project_id = p.id WHERE t.user_id = ?`;
   const params: any[] = [userId];
@@ -314,10 +428,7 @@ const listTasks: ToolHandler = (args, userId) => {
   sql += ' ORDER BY t.done ASC, t.priority DESC, t.due_date ASC NULLS LAST, t.created_at DESC';
 
   const tasks = db.prepare(sql).all(...params) as any[];
-  for (const task of tasks) {
-    hydrateTaskRelations(task);
-  }
-  return tasks;
+  return tasks.map(task => shapeTask(task, verbosity));
 };
 
 const createTask: ToolHandler = (args, userId) => {
@@ -481,6 +592,7 @@ export const handleManageTaskComment = createManagedActionHandler({
 });
 
 const listProjects: ToolHandler = (args, userId) => {
+  const verbosity = getVerbosity(args.verbosity);
   let sql = `SELECT p.*,
       (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND done = 0) as open_tasks,
       (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND done = 1) as done_tasks
@@ -490,15 +602,20 @@ const listProjects: ToolHandler = (args, userId) => {
   if (args.filter_type) { sql += ' AND p.type = ?'; params.push(args.filter_type); }
   sql += ' ORDER BY p.position, p.created_at';
   const projects = db.prepare(sql).all(...params) as any[];
+  const includeTasks = !!args.include_tasks || verbosity === 'full';
+  const includeSprints = !!args.include_sprints;
+  const nestedTaskVerbosity = verbosity === 'summary' ? 'summary' : 'standard';
 
-  if (args.include_tasks) {
-    const taskStmt = db.prepare('SELECT * FROM tasks WHERE project_id = ? ORDER BY done ASC, priority DESC, created_at DESC');
-    for (const project of projects) {
-      project.tasks = taskStmt.all(project.id);
+  for (const project of projects) {
+    if (includeTasks) {
+      project.tasks = loadProjectTasks(project.id, userId, nestedTaskVerbosity);
+    }
+    if (includeSprints) {
+      project.sprints = loadProjectSprints(project.id);
     }
   }
 
-  return projects;
+  return projects.map(project => shapeProject(project, verbosity));
 };
 
 const createProject: ToolHandler = (args, userId) => {
@@ -773,7 +890,9 @@ const listSprints: ToolHandler = (args, userId) => {
   if (!args.project_id) throw new Error('project_id is required for list');
   const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.project_id, userId);
   if (!project) throw new Error('Project not found or access denied');
-  return db.prepare(`
+  const verbosity = getVerbosity(args.verbosity);
+  const includeColumns = !!args.include_columns || verbosity === 'full';
+  const sprints = db.prepare(`
     SELECT s.*,
       COUNT(CASE WHEN t.done = 0 THEN 1 END) as open_tasks,
       COUNT(CASE WHEN t.done = 1 THEN 1 END) as done_tasks
@@ -781,7 +900,15 @@ const listSprints: ToolHandler = (args, userId) => {
     WHERE s.project_id = ?
     GROUP BY s.id
     ORDER BY s.sprint_number DESC, s.created_at DESC
-  `).all(args.project_id);
+  `).all(args.project_id) as any[];
+
+  for (const sprint of sprints) {
+    if (includeColumns) {
+      sprint.columns = loadSprintColumnsSummary(sprint.id);
+    }
+  }
+
+  return sprints.map(sprint => shapeSprint(sprint, verbosity));
 };
 
 const createSprint: ToolHandler = (args, userId) => {
@@ -804,14 +931,14 @@ const createSprint: ToolHandler = (args, userId) => {
     .run(id, args.project_id, args.title.trim(), args.description || null, sprintNumber, sprintStatus, args.start_date || null, args.end_date || null, now, now);
 
   const defaultColumns = [
-    { title: 'To Do', position: 0, is_done_column: 0 },
-    { title: 'In Progress', position: 1, is_done_column: 0 },
-    { title: 'Review', position: 2, is_done_column: 0 },
-    { title: 'Done', position: 3, is_done_column: 1 },
+    { title: 'To Do', position: 0, is_done_column: 0, bucket_type: null },
+    { title: 'In Progress', position: 1, is_done_column: 0, bucket_type: 'in_progress' },
+    { title: 'Review', position: 2, is_done_column: 0, bucket_type: 'review' },
+    { title: 'Done', position: 3, is_done_column: 1, bucket_type: 'done' },
   ];
-  const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column) VALUES (?, ?, ?, ?, ?, ?)');
+  const insertBucket = db.prepare('INSERT INTO buckets (id, project_id, sprint_id, title, position, is_done_column, bucket_type) VALUES (?, ?, ?, ?, ?, ?, ?)');
   for (const column of defaultColumns) {
-    insertBucket.run(uuidv4(), args.project_id, id, column.title, column.position, column.is_done_column);
+    insertBucket.run(uuidv4(), args.project_id, id, column.title, column.position, column.is_done_column, column.bucket_type);
   }
 
   const sprint = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id);

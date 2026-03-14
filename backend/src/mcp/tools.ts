@@ -543,10 +543,11 @@ export function createMcpServer(): McpServer {
   // ─── manage_habit ─────────────────────────────────────────
 
   server.registerTool('manage_habit', {
-    description: 'List, create, update, or delete habits and quit trackers. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, update, or delete habits and quit trackers. List supports verbosity=summary|standard|full (default standard). Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_HABIT_ACTIONS).describe('Operation to perform'),
       habit_id: z.string().optional().describe('Habit ID (required for update/delete)'),
+      verbosity: z.enum(['summary', 'standard', 'full']).optional().describe('List response detail level (default standard)'),
       title: z.string().optional().describe('Habit title (required for create)'),
       emoji: z.string().optional().describe('Emoji icon for the habit'),
       type: z.enum(['habit', 'quit']).optional().describe('Type: habit (build) or quit (stop). Defaults to habit.'),
@@ -642,10 +643,11 @@ export function createMcpServer(): McpServer {
   // ─── manage_task ──────────────────────────────────────────
 
   server.registerTool('manage_task', {
-    description: 'List, create, update, delete tasks, or toggle done/favorite. bulk_update also supports done and is_favorite fields. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, update, delete tasks, or toggle done/favorite. List supports verbosity=summary|standard|full, where full also includes comments. bulk_update also supports done and is_favorite fields. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_TASK_ACTIONS).describe('Operation to perform'),
       task_id: z.string().optional().describe('Task ID (required for update/delete/toggle)'),
+      verbosity: z.enum(['summary', 'standard', 'full']).optional().describe('List response detail level (default standard)'),
       title: z.string().optional().describe('Task title (required for create)'),
       description: z.string().optional(),
       project_id: z.string().optional().describe('Project ID to assign task to'),
@@ -706,16 +708,18 @@ export function createMcpServer(): McpServer {
   // ─── manage_project ───────────────────────────────────────
 
   server.registerTool('manage_project', {
-    description: 'List, create, update, delete, archive, or favorite projects. Supports bulk_create, bulk_update, and bulk_delete via an items array. DELETE cascades: deletes all tasks, sprints, and buckets. To keep orphaned tasks instead, the user must explicitly say "keep tasks" — then set keep_tasks=true.',
+    description: 'List, create, update, delete, archive, or favorite projects. List supports verbosity=summary|standard|full; full also includes tasks, and include_sprints nests summary sprint+column data. Supports bulk_create, bulk_update, and bulk_delete via an items array. DELETE cascades: deletes all tasks, sprints, and buckets. To keep orphaned tasks instead, the user must explicitly say "keep tasks" — then set keep_tasks=true.',
     inputSchema: {
       action: z.enum(MANAGE_PROJECT_ACTIONS).describe('Operation to perform'),
       project_id: z.string().optional().describe('Project ID (required for update/delete/toggle)'),
+      verbosity: z.enum(['summary', 'standard', 'full']).optional().describe('List response detail level (default standard)'),
       title: z.string().optional().describe('Project title (required for create)'),
       description: z.string().optional(),
       hex_color: z.string().optional().describe('Color hex code (e.g. #3b82f6)'),
       type: z.string().optional().describe('Project type (e.g. personal, dev, design, work, research, learning)'),
       parent_project_id: z.string().optional().describe('Parent project ID for nesting'),
       include_tasks: z.boolean().optional().describe('Include tasks in list/get response'),
+      include_sprints: z.boolean().optional().describe('Include summary sprints with nested summary columns in list responses'),
       include_archived: z.boolean().optional().describe('Include archived projects in list'),
       filter_type: z.string().optional().describe('Filter projects by type'),
       keep_tasks: z.boolean().optional().describe('On delete: if true, unlink tasks to backlog instead of deleting them. Only set true if user explicitly asks to keep orphaned tasks.'),
@@ -856,16 +860,18 @@ export function createMcpServer(): McpServer {
   // ═══════════════════════════════════════════════════════════════
 
   server.registerTool('manage_sprint', {
-    description: 'List, create, get, update, delete sprints, or transition sprint status. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, get, update, delete sprints, or transition sprint status. List supports verbosity=summary|standard|full; full also includes columns, and include_columns can request columns explicitly. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
     inputSchema: {
       action: z.enum(MANAGE_SPRINT_ACTIONS).describe('Operation to perform'),
       sprint_id: z.string().optional().describe('Sprint ID (required for get/update/delete/transition_status)'),
       project_id: z.string().optional().describe('Project ID (required for list/create)'),
+      verbosity: z.enum(['summary', 'standard', 'full']).optional().describe('List response detail level (default standard)'),
       title: z.string().optional().describe('Sprint title (required for create)'),
       description: z.string().optional().describe('Sprint description'),
       start_date: z.string().optional().describe('Start date (ISO format)'),
       end_date: z.string().optional().describe('End date (ISO format)'),
       status: z.enum(['planned', 'active', 'completed']).optional().describe('Sprint status. Used on create or as the target status for transition_status.'),
+      include_columns: z.boolean().optional().describe('Include summary columns in list responses'),
       items: bulkItemsSchema,
     },
   }, async (args, extra) => {
