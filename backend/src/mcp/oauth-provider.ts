@@ -20,7 +20,7 @@ import type {
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 
 // Token lifetimes
-const ACCESS_TOKEN_TTL = 60 * 60;          // 1 hour in seconds
+const ACCESS_TOKEN_TTL = 60 * 60 * 24 * 7;  // 7 days in seconds
 const REFRESH_TOKEN_TTL = 60 * 60 * 24 * 30; // 30 days in seconds
 const AUTH_CODE_TTL = 60 * 10;              // 10 minutes in seconds
 

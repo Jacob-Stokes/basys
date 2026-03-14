@@ -98,8 +98,11 @@ export function setupMcpRoutes(app: Express): void {
         // Existing session — forward the request
         const session = sessions.get(sessionId)!;
         await session.transport.handleRequest(req, res, req.body);
-      } else if (!sessionId) {
-        // New session — create transport and server
+      } else {
+        // New session (no sessionId) or stale session (sessionId not found in memory after restart)
+        if (sessionId) {
+          console.log(`[MCP] Stale session ${sessionId} — creating new session`);
+        }
         const server = createMcpServer();
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
@@ -110,8 +113,6 @@ export function setupMcpRoutes(app: Express): void {
 
         await server.connect(transport);
         await transport.handleRequest(req, res, req.body);
-      } else {
-        res.status(400).json({ error: 'Invalid or expired session' });
       }
     } catch (err) {
       console.error('[MCP POST] Error:', err);
@@ -125,7 +126,8 @@ export function setupMcpRoutes(app: Express): void {
       const session = sessions.get(sessionId)!;
       await session.transport.handleRequest(req, res);
     } else {
-      res.status(400).json({ error: 'Invalid or missing session' });
+      // Session not found — tell client to re-initialize
+      res.status(404).json({ error: 'Session not found — please re-initialize' });
     }
   });
 
