@@ -561,6 +561,42 @@ CREATE TABLE IF NOT EXISTS task_checklist_items (
 
 CREATE INDEX IF NOT EXISTS idx_task_checklist_task ON task_checklist_items(task_id);
 
+-- Agent Actions (Claude Code work items per task)
+CREATE TABLE IF NOT EXISTS agent_actions (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'staged', 'running', 'done', 'failed')),
+  position INTEGER DEFAULT 0,
+  result TEXT,
+  error TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  commit_hash TEXT,
+  files_changed TEXT,
+  agent_model TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_agent_actions_task ON agent_actions(task_id);
+CREATE INDEX IF NOT EXISTS idx_agent_actions_user_status ON agent_actions(user_id, status);
+
+-- Action Templates (reusable presets for agent actions)
+CREATE TABLE IF NOT EXISTS action_templates (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  default_config TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Personal CRM: Contacts
 CREATE TABLE IF NOT EXISTS contacts (
   id TEXT PRIMARY KEY,
@@ -941,6 +977,23 @@ export function initDatabase() {
     }
   } catch (err) {
     console.log('Migration check (buckets emoji backfill):', err);
+  }
+
+  // Migration: Add new columns to agent_actions (config, dependencies, cost tracking)
+  try {
+    const aaCols = db.prepare("PRAGMA table_info(agent_actions)").all() as any[];
+    if (!aaCols.some((col: any) => col.name === 'config')) {
+      db.exec(`ALTER TABLE agent_actions ADD COLUMN config TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE agent_actions ADD COLUMN depends_on TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE agent_actions ADD COLUMN tokens_in INTEGER DEFAULT NULL`);
+      db.exec(`ALTER TABLE agent_actions ADD COLUMN tokens_out INTEGER DEFAULT NULL`);
+      db.exec(`ALTER TABLE agent_actions ADD COLUMN cost_cents INTEGER DEFAULT NULL`);
+      db.exec(`ALTER TABLE agent_actions ADD COLUMN prompt_template TEXT DEFAULT NULL`);
+      db.exec(`ALTER TABLE agent_actions ADD COLUMN template_id TEXT DEFAULT NULL`);
+      console.log('Added config, depends_on, tokens, cost, prompt_template, template_id columns to agent_actions');
+    }
+  } catch (err) {
+    console.log('Migration check (agent_actions expansion):', err);
   }
 
   // ── Triggers: enforce bucket belongs to same project as task ──────────

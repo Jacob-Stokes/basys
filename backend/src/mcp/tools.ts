@@ -25,6 +25,7 @@ import {
   handleManageSprintColumn,
   handleManageNote,
   handleManageEvent,
+  handleManageAgentAction,
   MANAGE_HABIT_ACTIONS,
   MANAGE_TASK_ACTIONS,
   MANAGE_TASK_COMMENT_ACTIONS,
@@ -37,6 +38,7 @@ import {
   MANAGE_SPRINT_COLUMN_ACTIONS,
   MANAGE_NOTE_ACTIONS,
   MANAGE_EVENT_ACTIONS,
+  MANAGE_AGENT_ACTION_ACTIONS,
 } from '../tools/manageHandlers';
 
 function asTextContent(obj: unknown) {
@@ -704,7 +706,7 @@ export function createMcpServer(): McpServer {
   // ─── manage_project ───────────────────────────────────────
 
   server.registerTool('manage_project', {
-    description: 'List, create, update, delete, archive, or favorite projects. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, update, delete, archive, or favorite projects. Supports bulk_create, bulk_update, and bulk_delete via an items array. DELETE cascades: deletes all tasks, sprints, and buckets. To keep orphaned tasks instead, the user must explicitly say "keep tasks" — then set keep_tasks=true.',
     inputSchema: {
       action: z.enum(MANAGE_PROJECT_ACTIONS).describe('Operation to perform'),
       project_id: z.string().optional().describe('Project ID (required for update/delete/toggle)'),
@@ -716,6 +718,7 @@ export function createMcpServer(): McpServer {
       include_tasks: z.boolean().optional().describe('Include tasks in list/get response'),
       include_archived: z.boolean().optional().describe('Include archived projects in list'),
       filter_type: z.string().optional().describe('Filter projects by type'),
+      keep_tasks: z.boolean().optional().describe('On delete: if true, unlink tasks to backlog instead of deleting them. Only set true if user explicitly asks to keep orphaned tasks.'),
       items: bulkItemsSchema,
     },
   }, async (args, extra) => {
@@ -925,6 +928,30 @@ export function createMcpServer(): McpServer {
   }, async (args, extra) => {
     const userId = getUserId(extra);
     return asTextContent(handleManageEvent(args, userId));
+  });
+
+  // ─── manage_agent_action ──────────────────────────────────────
+
+  server.registerTool('manage_agent_action', {
+    description: 'List, create, update, delete agent actions on tasks, or update their execution status. Use list_staged to get all staged actions ready for execution. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    inputSchema: {
+      action: z.enum(MANAGE_AGENT_ACTION_ACTIONS).describe('Operation to perform'),
+      agent_action_id: z.string().optional().describe('Agent action ID (required for update/delete/update_status)'),
+      task_id: z.string().optional().describe('Task ID (required for list/create)'),
+      title: z.string().optional().describe('Action title (required for create)'),
+      description: z.string().optional().describe('Detailed instructions for the agent'),
+      status: z.string().optional().describe('Status: draft, staged, running, done, failed'),
+      position: z.number().optional().describe('Sort order position'),
+      result: z.string().optional().describe('Execution result summary (for update_status)'),
+      error: z.string().optional().describe('Error message if failed (for update_status)'),
+      commit_hash: z.string().optional().describe('Git commit SHA (for update_status)'),
+      files_changed: z.string().optional().describe('JSON array of changed file paths (for update_status)'),
+      agent_model: z.string().optional().describe('Model that executed the action (for update_status)'),
+      items: bulkItemsSchema,
+    },
+  }, async (args, extra) => {
+    const userId = getUserId(extra);
+    return asTextContent(handleManageAgentAction(args, userId));
   });
 
   return server;

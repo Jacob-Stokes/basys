@@ -315,6 +315,40 @@ export const api = {
   deleteChecklistItem: (taskId: string, itemId: string) =>
     apiRequest<any>(`/api/tasks/${taskId}/checklist/${itemId}`, { method: 'DELETE' }),
 
+  // Agent Actions
+  getAgentActions: (taskId: string) =>
+    apiRequest<any[]>(`/api/tasks/${taskId}/agent-actions`),
+  createAgentAction: (taskId: string, data: { title: string; description?: string }) =>
+    apiRequest<any>(`/api/tasks/${taskId}/agent-actions`, { method: 'POST', body: JSON.stringify(data) }),
+  updateAgentAction: (taskId: string, actionId: string, data: any) =>
+    apiRequest<any>(`/api/tasks/${taskId}/agent-actions/${actionId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateAgentActionStatus: (taskId: string, actionId: string, data: { status: string; result?: string; error?: string; tokens_in?: number; tokens_out?: number; cost_cents?: number; commit_hash?: string; files_changed?: string; agent_model?: string }) =>
+    apiRequest<any>(`/api/tasks/${taskId}/agent-actions/${actionId}/status`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteAgentAction: (taskId: string, actionId: string) =>
+    apiRequest<any>(`/api/tasks/${taskId}/agent-actions/${actionId}`, { method: 'DELETE' }),
+  reorderAgentActions: (taskId: string, items: { id: string; position: number }[]) =>
+    apiRequest<any>(`/api/tasks/${taskId}/agent-actions/reorder`, { method: 'PATCH', body: JSON.stringify({ items }) }),
+
+  // Action Templates
+  getActionTemplates: () =>
+    apiRequest<any[]>('/api/action-templates'),
+  createActionTemplate: (data: { title: string; description?: string; default_config?: any }) =>
+    apiRequest<any>('/api/action-templates', { method: 'POST', body: JSON.stringify(data) }),
+  updateActionTemplate: (id: string, data: any) =>
+    apiRequest<any>(`/api/action-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteActionTemplate: (id: string) =>
+    apiRequest<any>(`/api/action-templates/${id}`, { method: 'DELETE' }),
+
+  // Agent Dashboard
+  getAgentDashboard: (params?: { status?: string; project_id?: string; agent_model?: string; date_from?: string; date_to?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined) query.append(k, String(v)); });
+    }
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest<any>(`/api/agent-actions/dashboard${qs}`);
+  },
+
   // Pomodoros
   getPomodoros: (params?: { status?: string; limit?: string }) => {
     const query = new URLSearchParams();

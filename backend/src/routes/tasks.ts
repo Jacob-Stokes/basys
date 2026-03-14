@@ -224,6 +224,27 @@ function loadTaskRelations(taskIds: string[]): Record<string, any[]> {
   return map;
 }
 
+/// Helper: load agent action counts per task
+function loadAgentActionCounts(taskIds: string[]): Record<string, { total: number; draft: number; staged: number; running: number; done: number; failed: number }> {
+  const map: Record<string, { total: number; draft: number; staged: number; running: number; done: number; failed: number }> = {};
+  if (taskIds.length === 0) return map;
+  const ph = taskIds.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT task_id,
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) as draft,
+      SUM(CASE WHEN status = 'staged' THEN 1 ELSE 0 END) as staged,
+      SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running,
+      SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+    FROM agent_actions WHERE task_id IN (${ph}) GROUP BY task_id
+  `).all(...taskIds) as any[];
+  for (const row of rows) {
+    map[row.task_id] = { total: row.total, draft: row.draft, staged: row.staged, running: row.running, done: row.done, failed: row.failed };
+  }
+  return map;
+}
+
 // Helper: enrich task row with labels + links + project
 function loadChecklistCounts(taskIds: string[]): Record<string, { total: number; done: number }> {
   const map: Record<string, { total: number; done: number }> = {};
@@ -287,7 +308,7 @@ function loadProjectBuckets(projectIds: string[]): Record<string, any[]> {
   return map;
 }
 
-function enrichTask(t: any, labels: any[], links: any[], relations?: any[], checklistCount?: { total: number; done: number }, checklistItems?: any[], sprintBuckets?: any[], projectBuckets?: any[]) {
+function enrichTask(t: any, labels: any[], links: any[], relations?: any[], checklistCount?: { total: number; done: number }, checklistItems?: any[], sprintBuckets?: any[], projectBuckets?: any[], agentActionCount?: { total: number; draft: number; staged: number; running: number; done: number; failed: number }) {
   // Use sprint buckets if task is in a sprint, otherwise project-level buckets
   const buckets = sprintBuckets || projectBuckets || null;
 
@@ -319,6 +340,7 @@ function enrichTask(t: any, labels: any[], links: any[], relations?: any[], chec
     sprint: t.sprint_id ? {
       id: t.sprint_id, title: t.sprint_title,
     } : null,
+    agent_action_count: agentActionCount || null,
   };
 }
 
@@ -426,6 +448,7 @@ router.get('/', (req: Request, res: Response) => {
     const relationsMap = loadTaskRelations(ids);
     const checklistMap = loadChecklistCounts(ids);
     const checklistItemsMap = include_checklist ? loadChecklistItems(ids) : {};
+    const agentActionMap = loadAgentActionCounts(ids);
     const sprintIds = rows.filter(r => r.sprint_id).map(r => r.sprint_id);
     const sprintBucketsMap = loadSprintBuckets(sprintIds);
     // Load project-level buckets for tasks without a sprint but with a project
@@ -435,7 +458,8 @@ router.get('/', (req: Request, res: Response) => {
       t, labelsMap[t.id] || [], linksMap[t.id] || [], relationsMap[t.id] || [],
       checklistMap[t.id], include_checklist ? (checklistItemsMap[t.id] || []) : undefined,
       t.sprint_id ? sprintBucketsMap[t.sprint_id] || [] : undefined,
-      !t.sprint_id && t.project_id ? projectBucketsMap[t.project_id] || [] : undefined
+      !t.sprint_id && t.project_id ? projectBucketsMap[t.project_id] || [] : undefined,
+      agentActionMap[t.id]
     ));
 
     ok(res, tasks);
@@ -520,9 +544,10 @@ router.post('/', (req: Request, res: Response) => {
     const taskLinks = loadTaskLinks([id]);
     const taskRelations = loadTaskRelations([id]);
     const taskChecklist = loadChecklistCounts([id]);
+    const taskAgentActions = loadAgentActionCounts([id]);
     const newSprintBuckets = task.sprint_id ? loadSprintBuckets([task.sprint_id])[task.sprint_id] || [] : undefined;
     const newProjectBuckets = !task.sprint_id && task.project_id ? loadProjectBuckets([task.project_id])[task.project_id] || [] : undefined;
-    ok(res, enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, newSprintBuckets, newProjectBuckets), 201);
+    ok(res, enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, newSprintBuckets, newProjectBuckets, taskAgentActions[id]), 201);
   } catch (error) {
     serverError(res, error);
   }
@@ -541,11 +566,12 @@ router.get('/:id', (req: Request, res: Response) => {
     const taskLinks = loadTaskLinks([id]);
     const taskRelations = loadTaskRelations([id]);
     const taskChecklist = loadChecklistCounts([id]);
+    const taskAgentActions = loadAgentActionCounts([id]);
     const comments = db.prepare('SELECT * FROM task_comments WHERE task_id = ? ORDER BY created_at ASC').all(id);
     const sprintBuckets = task.sprint_id ? loadSprintBuckets([task.sprint_id])[task.sprint_id] || [] : undefined;
     const projBuckets = !task.sprint_id && task.project_id ? loadProjectBuckets([task.project_id])[task.project_id] || [] : undefined;
 
-    ok(res, { ...enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, sprintBuckets, projBuckets), comments });
+    ok(res, { ...enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, sprintBuckets, projBuckets, taskAgentActions[id]), comments });
   } catch (error) {
     serverError(res, error);
   }
@@ -678,9 +704,10 @@ router.put('/:id', (req: Request, res: Response) => {
     const taskLinks = loadTaskLinks([id]);
     const taskRelations = loadTaskRelations([id]);
     const taskChecklist = loadChecklistCounts([id]);
+    const taskAgentActions = loadAgentActionCounts([id]);
     const updatedSprintBuckets = task.sprint_id ? loadSprintBuckets([task.sprint_id])[task.sprint_id] || [] : undefined;
     const updatedProjectBuckets = !task.sprint_id && task.project_id ? loadProjectBuckets([task.project_id])[task.project_id] || [] : undefined;
-    ok(res, enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, updatedSprintBuckets, updatedProjectBuckets));
+    ok(res, enrichTask(task, taskLabels, taskLinks[id] || [], taskRelations[id] || [], taskChecklist[id], undefined, updatedSprintBuckets, updatedProjectBuckets, taskAgentActions[id]));
   } catch (error) {
     serverError(res, error);
   }
@@ -1071,6 +1098,178 @@ router.delete('/:id/checklist/:itemId', (req: Request, res: Response) => {
 
     db.prepare('DELETE FROM task_checklist_items WHERE id = ?').run(itemId);
     ok(res, { deleted: true });
+  } catch (error) {
+    serverError(res, error);
+  }
+});
+
+// ─── Agent Actions CRUD ─────────────────────────────────────────────
+
+// List agent actions for a task
+router.get('/:id/agent-actions', (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const taskId = req.params.id;
+    const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(taskId, userId);
+    if (!task) return fail(res, 404, 'Task not found');
+
+    const actions = db.prepare('SELECT * FROM agent_actions WHERE task_id = ? ORDER BY position ASC').all(taskId);
+    ok(res, actions);
+  } catch (error) {
+    serverError(res, error);
+  }
+});
+
+// Create agent action
+router.post('/:id/agent-actions', (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const taskId = req.params.id;
+    const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(taskId, userId);
+    if (!task) return fail(res, 404, 'Task not found');
+
+    const { title, description } = req.body;
+    if (!title?.trim()) return fail(res, 400, 'Title is required');
+
+    const id = uuidv4();
+    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 as next FROM agent_actions WHERE task_id = ?').get(taskId) as any;
+    const now = new Date().toISOString();
+
+    db.prepare(`INSERT INTO agent_actions (id, task_id, user_id, title, description, position, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, taskId, userId, title.trim(), description || null, maxPos.next, now, now);
+
+    const action = db.prepare('SELECT * FROM agent_actions WHERE id = ?').get(id);
+    ok(res, action, 201);
+  } catch (error) {
+    serverError(res, error);
+  }
+});
+
+// Update agent action
+router.put('/:id/agent-actions/:actionId', (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id: taskId, actionId } = req.params;
+    const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(taskId, userId);
+    if (!task) return fail(res, 404, 'Task not found');
+
+    const existing = db.prepare('SELECT * FROM agent_actions WHERE id = ? AND task_id = ?').get(actionId, taskId) as any;
+    if (!existing) return fail(res, 404, 'Agent action not found');
+
+    const { title, description, position, config, depends_on, prompt_template } = req.body;
+    const now = new Date().toISOString();
+    const updates: any = { updated_at: now };
+    if (title !== undefined) updates.title = title.trim() || existing.title;
+    if (description !== undefined) updates.description = description;
+    if (position !== undefined) updates.position = position;
+    if (config !== undefined) updates.config = typeof config === 'string' ? config : JSON.stringify(config);
+    if (depends_on !== undefined) updates.depends_on = depends_on;
+    if (prompt_template !== undefined) updates.prompt_template = prompt_template;
+
+    const setClauses = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+    db.prepare(`UPDATE agent_actions SET ${setClauses} WHERE id = ?`).run(...Object.values(updates), actionId);
+
+    const action = db.prepare('SELECT * FROM agent_actions WHERE id = ?').get(actionId);
+    ok(res, action);
+  } catch (error) {
+    serverError(res, error);
+  }
+});
+
+// Update agent action status
+router.patch('/:id/agent-actions/:actionId/status', (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id: taskId, actionId } = req.params;
+    const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(taskId, userId);
+    if (!task) return fail(res, 404, 'Task not found');
+
+    const existing = db.prepare('SELECT * FROM agent_actions WHERE id = ? AND task_id = ?').get(actionId, taskId) as any;
+    if (!existing) return fail(res, 404, 'Agent action not found');
+
+    const { status, result, error: errorMsg, commit_hash, files_changed, agent_model, tokens_in, tokens_out, cost_cents } = req.body;
+    if (!status) return fail(res, 400, 'Status is required');
+
+    // Validate transitions
+    const validTransitions: Record<string, string[]> = {
+      draft: ['staged'],
+      staged: ['draft', 'running'],
+      running: ['done', 'failed'],
+      done: ['draft'],
+      failed: ['draft', 'staged'],
+    };
+    if (!validTransitions[existing.status]?.includes(status)) {
+      return fail(res, 400, `Invalid transition: ${existing.status} → ${status}`);
+    }
+
+    // Check dependency when transitioning to running
+    if (status === 'running' && existing.depends_on) {
+      const dep = db.prepare('SELECT id, title, status FROM agent_actions WHERE id = ?').get(existing.depends_on) as any;
+      if (dep && dep.status !== 'done') {
+        return fail(res, 400, `Blocked by: ${dep.title} (status: ${dep.status})`);
+      }
+    }
+
+    const now = new Date().toISOString();
+    const updates: any = { status, updated_at: now };
+    if (status === 'running') updates.started_at = now;
+    if (status === 'done' || status === 'failed') updates.completed_at = now;
+    if (result !== undefined) updates.result = result;
+    if (errorMsg !== undefined) updates.error = errorMsg;
+    if (commit_hash !== undefined) updates.commit_hash = commit_hash;
+    if (files_changed !== undefined) updates.files_changed = typeof files_changed === 'string' ? files_changed : JSON.stringify(files_changed);
+    if (agent_model !== undefined) updates.agent_model = agent_model;
+    if (tokens_in !== undefined) updates.tokens_in = tokens_in;
+    if (tokens_out !== undefined) updates.tokens_out = tokens_out;
+    if (cost_cents !== undefined) updates.cost_cents = cost_cents;
+
+    const setClauses = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+    db.prepare(`UPDATE agent_actions SET ${setClauses} WHERE id = ?`).run(...Object.values(updates), actionId);
+
+    const action = db.prepare('SELECT * FROM agent_actions WHERE id = ?').get(actionId);
+    ok(res, action);
+  } catch (error) {
+    serverError(res, error);
+  }
+});
+
+// Delete agent action
+router.delete('/:id/agent-actions/:actionId', (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id: taskId, actionId } = req.params;
+    const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(taskId, userId);
+    if (!task) return fail(res, 404, 'Task not found');
+
+    const existing = db.prepare('SELECT * FROM agent_actions WHERE id = ? AND task_id = ?').get(actionId, taskId);
+    if (!existing) return fail(res, 404, 'Agent action not found');
+
+    db.prepare('DELETE FROM agent_actions WHERE id = ?').run(actionId);
+    ok(res, { deleted: true });
+  } catch (error) {
+    serverError(res, error);
+  }
+});
+
+// Reorder agent actions
+router.patch('/:id/agent-actions/reorder', (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const taskId = req.params.id;
+    const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(taskId, userId);
+    if (!task) return fail(res, 404, 'Task not found');
+
+    const { items } = req.body;
+    if (!Array.isArray(items)) return fail(res, 400, 'items array required');
+
+    const stmt = db.prepare('UPDATE agent_actions SET position = ?, updated_at = ? WHERE id = ? AND task_id = ?');
+    const now = new Date().toISOString();
+    for (const item of items) {
+      stmt.run(item.position, now, item.id, taskId);
+    }
+
+    const actions = db.prepare('SELECT * FROM agent_actions WHERE task_id = ? ORDER BY position ASC').all(taskId);
+    ok(res, actions);
   } catch (error) {
     serverError(res, error);
   }

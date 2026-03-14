@@ -7,6 +7,26 @@ import { deleteTasksCascade } from '../utils/taskCascade';
 
 const router = Router();
 
+function loadAgentActionCounts(taskIds: string[]): Record<string, { total: number; draft: number; staged: number; running: number; done: number; failed: number }> {
+  const map: Record<string, { total: number; draft: number; staged: number; running: number; done: number; failed: number }> = {};
+  if (taskIds.length === 0) return map;
+  const ph = taskIds.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT task_id,
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) as draft,
+      SUM(CASE WHEN status = 'staged' THEN 1 ELSE 0 END) as staged,
+      SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running,
+      SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+    FROM agent_actions WHERE task_id IN (${ph}) GROUP BY task_id
+  `).all(...taskIds) as any[];
+  for (const row of rows) {
+    map[row.task_id] = { total: row.total, draft: row.draft, staged: row.staged, running: row.running, done: row.done, failed: row.failed };
+  }
+  return map;
+}
+
 const DEFAULT_COLUMNS = [
   { title: 'To Do', position: 0, is_done_column: 0, emoji: '📋', show_inline: 1 },
   { title: 'In Progress', position: 1, is_done_column: 0, emoji: '🔨', show_inline: 1 },
@@ -152,7 +172,13 @@ router.get('/sprints/:id', (req: Request, res: Response) => {
       ORDER BY t.position ASC, t.created_at DESC
     `).all(sprint.project_id) as any[];
 
-    ok(res, { ...sprint, columns, tasks, backlog });
+    // Load agent action counts for all tasks
+    const allTaskIds = [...tasks, ...backlog].map(t => t.id);
+    const agentActionMap = loadAgentActionCounts(allTaskIds);
+    const enrichedTasks = tasks.map(t => ({ ...t, agent_action_count: agentActionMap[t.id] || null }));
+    const enrichedBacklog = backlog.map(t => ({ ...t, agent_action_count: agentActionMap[t.id] || null }));
+
+    ok(res, { ...sprint, columns, tasks: enrichedTasks, backlog: enrichedBacklog });
   } catch (error) {
     serverError(res, error);
   }

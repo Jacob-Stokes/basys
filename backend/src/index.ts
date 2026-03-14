@@ -28,6 +28,8 @@ import gmailRouter from './routes/gmail';
 import sprintsRouter from './routes/sprints';
 import notesRouter from './routes/notes';
 import contactsRouter from './routes/contacts';
+import actionTemplatesRouter from './routes/actionTemplates';
+import agentDashboardRouter from './routes/agentDashboard';
 import { setupMcpRoutes } from './mcp/server';
 
 const app = express();
@@ -167,6 +169,8 @@ app.use('/api/google-calendar', requireAuth, googleCalendarRouter);
 app.use('/api/gmail', requireAuth, gmailRouter);
 app.use('/api', requireAuth, sprintsRouter);
 app.use('/api', requireAuth, notesRouter);
+app.use('/api/action-templates', requireAuth, actionTemplatesRouter);
+app.use('/api/agent-actions', requireAuth, agentDashboardRouter);
 
 // Remote MCP endpoint with OAuth (must be before static files/SPA fallback)
 setupMcpRoutes(app);

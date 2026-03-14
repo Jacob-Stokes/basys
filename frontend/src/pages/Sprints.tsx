@@ -7,6 +7,7 @@ import StartPomoButton from '../components/StartPomoButton';
 import type { FocusItem } from '../context/TimerContext';
 import { SprintBoardContent } from './SprintBoard';
 import { buildObsidianUri } from '../utils/obsidian';
+import AgentActionModal from '../components/AgentActionModal';
 
 interface Project {
   id: string;
@@ -381,6 +382,7 @@ export default function Sprints() {
   const [loadingSprintTasks, setLoadingSprintTasks] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [collapsedSprintTasks, setCollapsedSprintTasks] = useState<Set<string>>(new Set());
+  const [agentActionTask, setAgentActionTask] = useState<{ id: string; title: string } | null>(null);
 
   // Derive unique project types for tabs
   const projectTypes = useMemo(() => {
@@ -888,6 +890,7 @@ export default function Sprints() {
     }
   };
 
+
   // Cmd+Enter submit for modals
   useModKeySubmit(!!sprintModalProjectId, handleSaveSprint, !!sprintForm.title.trim() && !savingSprint);
   useModKeySubmit(showProjectModal, handleSaveProject, !!projectForm.title.trim() && !savingProject);
@@ -1043,7 +1046,7 @@ export default function Sprints() {
                 const isTaskExpanded = hasChecklist && !collapsedSprintTasks.has(task.id);
                 return (
                   <React.Fragment key={task.id}>
-                    <div className="pl-8 pr-4 py-1.5 flex items-center gap-2 hover:bg-gray-100/50 dark:hover:bg-gray-700/20">
+                    <div className="group pl-8 pr-4 py-1.5 flex items-center gap-2 hover:bg-gray-100/50 dark:hover:bg-gray-700/20">
                       {/* Checklist expand chevron */}
                       {hasChecklist ? (
                         <button
@@ -1114,6 +1117,32 @@ export default function Sprints() {
                             task.priority >= 2 ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' :
                             'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
                           }`}>P{task.priority}</span>
+                        )}
+                        {task.agent_action_count && task.agent_action_count.total > 0 ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setAgentActionTask({ id: task.id, title: task.title }); }}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 cursor-pointer hover:opacity-80 transition-opacity ${
+                            task.agent_action_count.running > 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' :
+                            task.agent_action_count.staged > 0 ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' :
+                            task.agent_action_count.failed > 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' :
+                            'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                          }`} title={`Agent: ${task.agent_action_count.staged} staged, ${task.agent_action_count.draft} draft`}>
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                            </svg>
+                            {task.agent_action_count.staged > 0 && <span>{task.agent_action_count.staged}↑</span>}
+                            {task.agent_action_count.draft > 0 && <span className="text-gray-400">{task.agent_action_count.draft}</span>}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setAgentActionTask({ id: task.id, title: task.title }); }}
+                            className="opacity-0 group-hover:opacity-100 text-[10px] px-1 py-0.5 rounded text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-all"
+                            title="Add agent action"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                            </svg>
+                          </button>
                         )}
                       </div>
                       <StartPomoButton
@@ -2187,6 +2216,24 @@ export default function Sprints() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Agent Action Modal */}
+      {agentActionTask && (
+        <AgentActionModal
+          taskId={agentActionTask.id}
+          taskTitle={agentActionTask.title}
+          onClose={() => {
+            setAgentActionTask(null);
+            // Reload sprint tasks to reflect any changes to agent action counts
+            Object.keys(sprintTasks).forEach(async (sprintId) => {
+              try {
+                const tasks = await api.getTasks({ sprint_id: sprintId, include_checklist: '1' });
+                setSprintTasks(prev => ({ ...prev, [sprintId]: tasks }));
+              } catch { /* ignore */ }
+            });
+          }}
+        />
       )}
     </div>
   );

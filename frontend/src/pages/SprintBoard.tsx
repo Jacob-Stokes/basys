@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import TaskEditModal from '../components/TaskEditModal';
+import AgentActionModal from '../components/AgentActionModal';
 
 // ── Props for embedded usage ────────────────────────────────────────
 export interface SprintBoardContentProps {
@@ -32,6 +33,7 @@ interface Task {
   position: number;
   project_title: string | null;
   project_color: string | null;
+  agent_action_count: { total: number; draft: number; staged: number; running: number; done: number; failed: number } | null;
 }
 
 interface Sprint {
@@ -73,10 +75,11 @@ const priorityDots: Record<number, string> = {
 
 // ── TaskCard ───────────────────────────────────────────────────────
 
-function TaskCard({ task, onDragStart, onClick }: {
+function TaskCard({ task, onDragStart, onClick, onAgentAction }: {
   task: Task;
   onDragStart: (e: React.DragEvent, taskId: string) => void;
   onClick: () => void;
+  onAgentAction?: (task: Task) => void;
 }) {
   const assignee = task.assignee_username || task.assignee_name;
   return (
@@ -84,8 +87,20 @@ function TaskCard({ task, onDragStart, onClick }: {
       draggable
       onDragStart={e => onDragStart(e, task.id)}
       onClick={onClick}
-      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow"
+      className="group/card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow relative"
     >
+      {/* Quick agent action button — top-right on hover */}
+      {onAgentAction && (
+        <button
+          onClick={e => { e.stopPropagation(); onAgentAction(task); }}
+          className="absolute top-1.5 right-1.5 p-1 rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 opacity-0 group-hover/card:opacity-100 transition-opacity"
+          title="Agent actions"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+          </svg>
+        </button>
+      )}
       <div className="flex items-start gap-2">
         {task.priority > 0 && priorityDots[task.priority] && (
           <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${priorityDots[task.priority]}`} />
@@ -105,6 +120,20 @@ function TaskCard({ task, onDragStart, onClick }: {
                 {assignee}
               </span>
             )}
+            {task.agent_action_count && task.agent_action_count.total > 0 && (
+              <button onClick={e => { e.stopPropagation(); onAgentAction?.(task); }}
+                className={`text-[10px] px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5 cursor-pointer hover:opacity-80 ${
+                task.agent_action_count.running > 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' :
+                task.agent_action_count.staged > 0 ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' :
+                task.agent_action_count.failed > 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' :
+                'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              }`} title={`${task.agent_action_count.staged} staged, ${task.agent_action_count.draft} draft — click to manage`}>
+                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                </svg>
+                {task.agent_action_count.staged > 0 ? task.agent_action_count.staged : task.agent_action_count.total}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -114,12 +143,13 @@ function TaskCard({ task, onDragStart, onClick }: {
 
 // ── KanbanColumn ───────────────────────────────────────────────────
 
-function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTask, onRenameColumn, onDeleteColumn, onToggleDoneColumn, onUpdateColumn }: {
+function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTask, onRenameColumn, onDeleteColumn, onToggleDoneColumn, onUpdateColumn, onAgentAction }: {
   column: Column;
   tasks: Task[];
   onDragStart: (e: React.DragEvent, taskId: string) => void;
   onDrop: (columnId: string) => void;
   onTaskClick: (task: Task) => void;
+  onAgentAction?: (task: Task) => void;
   onAddTask: (columnId: string, title: string) => void;
   onRenameColumn?: (columnId: string, title: string) => void;
   onDeleteColumn?: (columnId: string) => void;
@@ -270,7 +300,7 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
       {/* Cards */}
       <div className="px-2 pb-2 flex-1 overflow-y-auto space-y-2 min-h-[100px]">
         {tasks.map(t => (
-          <TaskCard key={t.id} task={t} onDragStart={onDragStart} onClick={() => onTaskClick(t)} />
+          <TaskCard key={t.id} task={t} onDragStart={onDragStart} onClick={() => onTaskClick(t)} onAgentAction={onAgentAction} />
         ))}
         {addingTask && (
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2">
@@ -304,12 +334,13 @@ function KanbanColumn({ column, tasks, onDragStart, onDrop, onTaskClick, onAddTa
 
 // ── ListSection ────────────────────────────────────────────────────
 
-function ListSection({ column, tasks, onTaskClick, onToggleTask, onAddTask }: {
+function ListSection({ column, tasks, onTaskClick, onToggleTask, onAddTask, onAgentAction }: {
   column: Column;
   tasks: Task[];
   onTaskClick: (task: Task) => void;
   onToggleTask: (taskId: string) => void;
   onAddTask?: (columnId: string, title: string) => void;
+  onAgentAction?: (task: Task) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
@@ -356,8 +387,8 @@ function ListSection({ column, tasks, onTaskClick, onToggleTask, onAddTask }: {
           {tasks.map(t => {
             const assignee = t.assignee_username || t.assignee_name;
             return (
+              <React.Fragment key={t.id}>
               <div
-                key={t.id}
                 onClick={() => onTaskClick(t)}
                 className="px-4 py-2 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer border-t border-gray-100 dark:border-gray-800"
               >
@@ -388,12 +419,35 @@ function ListSection({ column, tasks, onTaskClick, onToggleTask, onAddTask }: {
                     </span>
                   )}
                 </div>
+                {t.agent_action_count && t.agent_action_count.total > 0 ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onAgentAction?.(t); }}
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 inline-flex items-center gap-0.5 cursor-pointer hover:opacity-80 transition-opacity ${
+                    t.agent_action_count.running > 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400' :
+                    t.agent_action_count.staged > 0 ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' :
+                    t.agent_action_count.failed > 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' :
+                    'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                  }`} title="Manage agent actions">
+                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                    </svg>
+                    {t.agent_action_count.staged > 0 ? `${t.agent_action_count.staged}↑` : t.agent_action_count.total}
+                  </button>
+                ) : onAgentAction && (
+                  <button onClick={(e) => { e.stopPropagation(); onAgentAction(t); }}
+                    className="text-gray-300 hover:text-blue-500 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5" title="Add agent action">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                    </svg>
+                  </button>
+                )}
                 {assignee && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 flex-shrink-0">
                     {assignee}
                   </span>
                 )}
               </div>
+              </React.Fragment>
             );
           })}
           {addingTask && (
@@ -442,6 +496,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [backlogCollapsed, setBacklogCollapsed] = useState(false);
+  const [agentActionTask, setAgentActionTask] = useState<Task | null>(null);
   const [headerAddingTask, setHeaderAddingTask] = useState(false);
   const [headerNewTitle, setHeaderNewTitle] = useState('');
   const headerInputRef = useRef<HTMLInputElement>(null);
@@ -786,6 +841,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
               onDeleteColumn={handleDeleteColumn}
               onToggleDoneColumn={handleToggleDoneColumn}
               onUpdateColumn={handleUpdateColumn}
+              onAgentAction={t => setAgentActionTask(t)}
             />
           ))}
 
@@ -814,7 +870,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
               </div>
               <div className="px-2 pb-2 space-y-2">
                 {unassignedTasks.map(t => (
-                  <TaskCard key={t.id} task={t} onDragStart={handleDragStart} onClick={() => setEditingTask(t)} />
+                  <TaskCard key={t.id} task={t} onDragStart={handleDragStart} onClick={() => setEditingTask(t)} onAgentAction={t => setAgentActionTask(t)} />
                 ))}
               </div>
             </div>
@@ -843,7 +899,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
             {!backlogCollapsed && (
               <div className="px-2 pb-2 space-y-2 overflow-y-auto max-h-[500px]">
                 {backlog.map(t => (
-                  <TaskCard key={t.id} task={t} onDragStart={handleDragStart} onClick={() => setEditingTask(t)} />
+                  <TaskCard key={t.id} task={t} onDragStart={handleDragStart} onClick={() => setEditingTask(t)} onAgentAction={t => setAgentActionTask(t)} />
                 ))}
                 {backlog.length === 0 && (
                   <p className="text-xs text-gray-400 text-center py-4">Drop tasks here to move to backlog</p>
@@ -864,6 +920,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
                 onTaskClick={t => setEditingTask(t)}
                 onToggleTask={handleToggleTask}
                 onAddTask={handleAddTask}
+                onAgentAction={t => setAgentActionTask(t)}
               />
             ))}
             {unassignedTasks.length > 0 && (
@@ -873,6 +930,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
                 onTaskClick={t => setEditingTask(t)}
                 onToggleTask={handleToggleTask}
                 onAddTask={handleAddTask}
+                onAgentAction={t => setAgentActionTask(t)}
               />
             )}
           </div>
@@ -885,6 +943,7 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
               onTaskClick={t => setEditingTask(t)}
               onToggleTask={handleToggleTask}
               onAddTask={handleAddTask}
+              onAgentAction={t => setAgentActionTask(t)}
             />
           </div>
         </div>
@@ -903,6 +962,15 @@ export function SprintBoardContent({ sprintId, onBack }: SprintBoardContentProps
           showRelations
           showDates
           showChecklist
+        />
+      )}
+
+      {/* Agent action modal */}
+      {agentActionTask && (
+        <AgentActionModal
+          taskId={agentActionTask.id}
+          taskTitle={agentActionTask.title}
+          onClose={() => { setAgentActionTask(null); loadSprint(); }}
         />
       )}
     </div>

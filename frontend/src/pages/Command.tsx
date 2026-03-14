@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDisplaySettings, sortTabs } from '../context/DisplaySettingsContext';
+import AgentsDashboard from '../components/AgentsDashboard';
 
 type CommandTab = 'actions' | 'monitoring' | 'agents';
 
@@ -29,7 +30,11 @@ function renderTab(tab: CommandTab) {
     case 'monitoring':
       return <Placeholder icon="📊" title="Monitoring" description="System health, metrics, and activity logs. Coming soon." />;
     case 'agents':
-      return <Placeholder icon="🤖" title="Agents" description="AI agent configuration and management. Coming soon." />;
+      return (
+        <div className="container mx-auto px-4 sm:px-16 py-6">
+          <AgentsDashboard />
+        </div>
+      );
   }
 }
 

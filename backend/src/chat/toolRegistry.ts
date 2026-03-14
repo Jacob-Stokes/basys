@@ -24,6 +24,7 @@ import {
   handleManageSprintColumn,
   handleManageNote,
   handleManageEvent,
+  handleManageAgentAction,
   MANAGE_HABIT_ACTIONS,
   MANAGE_TASK_ACTIONS,
   MANAGE_TASK_COMMENT_ACTIONS,
@@ -36,6 +37,7 @@ import {
   MANAGE_SPRINT_COLUMN_ACTIONS,
   MANAGE_NOTE_ACTIONS,
   MANAGE_EVENT_ACTIONS,
+  MANAGE_AGENT_ACTION_ACTIONS,
 } from '../tools/manageHandlers';
 
 // Claude API tool format
@@ -308,7 +310,7 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
   // ═══ PROJECTS & LABELS ═══
   {
     name: 'manage_project',
-    description: 'List, create, update, delete, archive, or favorite projects. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    description: 'List, create, update, delete, archive, or favorite projects. Supports bulk_create, bulk_update, and bulk_delete via an items array. DELETE cascades: deletes all tasks, sprints, and buckets. To keep orphaned tasks instead, the user must explicitly say "keep tasks" — then set keep_tasks=true.',
     input_schema: {
       type: 'object',
       properties: {
@@ -322,6 +324,7 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
         include_tasks: { type: 'boolean' },
         include_archived: { type: 'boolean' },
         filter_type: { type: 'string' },
+        keep_tasks: { type: 'boolean', description: 'On delete: if true, unlink tasks to backlog instead of deleting them. Only set true if user explicitly asks to keep orphaned tasks.' },
         items: bulkItemsProperty,
       },
       required: ['action'],
@@ -477,6 +480,29 @@ export const CLAUDE_TOOLS: ClaudeTool[] = [
         location: { type: 'string' },
         filter_start: { type: 'string' },
         filter_end: { type: 'string' },
+        items: bulkItemsProperty,
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'manage_agent_action',
+    description: 'List, create, update, delete agent actions on tasks, or update execution status. Use list_staged to get all staged actions ready for execution. Supports bulk_create, bulk_update, and bulk_delete via an items array.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: [...MANAGE_AGENT_ACTION_ACTIONS] },
+        agent_action_id: { type: 'string' },
+        task_id: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        status: { type: 'string', enum: ['draft', 'staged', 'running', 'done', 'failed'] },
+        position: { type: 'number' },
+        result: { type: 'string' },
+        error: { type: 'string' },
+        commit_hash: { type: 'string' },
+        files_changed: { type: 'string' },
+        agent_model: { type: 'string' },
         items: bulkItemsProperty,
       },
       required: ['action'],
@@ -776,6 +802,8 @@ registerTool('manage_sprint_column', handleManageSprintColumn);
 registerTool('manage_note', handleManageNote);
 
 registerTool('manage_event', handleManageEvent);
+
+registerTool('manage_agent_action', handleManageAgentAction);
 
 // ─── PUBLIC API ──────────────────────────────────────────────────
 

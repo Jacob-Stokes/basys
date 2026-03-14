@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/database';
 import { goalOwnerCheck } from '../middleware/ownership';
 import { seedDefaultEtiquette } from '../utils/etiquette';
+import { deleteTasksCascade } from '../utils/taskCascade';
 
 type ToolArgs = Record<string, any>;
 type ToolHandler = (args: ToolArgs, userId: string) => any;
@@ -528,8 +529,24 @@ const deleteProject: ToolHandler = (args, userId) => {
   if (!args.project_id) throw new Error('project_id is required for delete');
   const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(args.project_id, userId);
   if (!existing) throw new Error('Project not found or access denied');
-  db.prepare('DELETE FROM projects WHERE id = ?').run(args.project_id);
-  return { deleted: true, id: args.project_id };
+
+  const deleteAll = db.transaction(() => {
+    if (args.keep_tasks) {
+      // Unlink tasks but keep them as orphans in backlog
+      db.prepare('UPDATE tasks SET project_id = NULL, sprint_id = NULL, bucket_id = NULL WHERE project_id = ?').run(args.project_id);
+    } else {
+      // Cascade delete all tasks and their related data
+      const taskIds = (db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(args.project_id) as any[]).map(t => t.id);
+      deleteTasksCascade(taskIds);
+      if (taskIds.length > 0) db.prepare('DELETE FROM tasks WHERE project_id = ?').run(args.project_id);
+    }
+    db.prepare('DELETE FROM buckets WHERE project_id = ?').run(args.project_id);
+    db.prepare('DELETE FROM sprints WHERE project_id = ?').run(args.project_id);
+    db.prepare('DELETE FROM projects WHERE id = ?').run(args.project_id);
+  });
+  deleteAll();
+
+  return { deleted: true, id: args.project_id, tasks_kept: !!args.keep_tasks };
 };
 
 const toggleProjectArchive: ToolHandler = (args, userId) => {
@@ -1022,4 +1039,117 @@ export const handleManageEvent = createManagedActionHandler({
   create: createEvent,
   update: updateEvent,
   delete: deleteEvent,
+});
+
+// ─── Agent Actions ──────────────────────────────────────────────────
+
+export const MANAGE_AGENT_ACTION_ACTIONS = [
+  'list', 'list_staged', 'create', 'update', 'delete', 'update_status',
+  'bulk_create', 'bulk_update', 'bulk_delete',
+] as const;
+
+function listAgentActions(args: ToolArgs, userId: string) {
+  const { task_id } = args;
+  if (!task_id) throw new Error('task_id is required for list');
+  const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(task_id, userId);
+  if (!task) throw new Error('Task not found');
+  return db.prepare('SELECT * FROM agent_actions WHERE task_id = ? ORDER BY position ASC').all(task_id);
+}
+
+function listStagedAgentActions(_args: ToolArgs, userId: string) {
+  return db.prepare(`
+    SELECT aa.*, t.title as task_title, t.project_id, p.title as project_title
+    FROM agent_actions aa
+    JOIN tasks t ON aa.task_id = t.id
+    LEFT JOIN projects p ON t.project_id = p.id
+    WHERE aa.user_id = ? AND aa.status = 'staged'
+    ORDER BY aa.created_at ASC
+  `).all(userId);
+}
+
+function createAgentAction(args: ToolArgs, userId: string) {
+  const { task_id, title, description } = args;
+  if (!task_id) throw new Error('task_id is required');
+  if (!title?.trim()) throw new Error('title is required');
+  const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND user_id = ?').get(task_id, userId);
+  if (!task) throw new Error('Task not found');
+
+  const id = uuidv4();
+  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 as next FROM agent_actions WHERE task_id = ?').get(task_id) as any;
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO agent_actions (id, task_id, user_id, title, description, position, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, task_id, userId, title.trim(), description || null, maxPos.next, now, now);
+  return db.prepare('SELECT * FROM agent_actions WHERE id = ?').get(id);
+}
+
+function updateAgentAction(args: ToolArgs, userId: string) {
+  const { agent_action_id, title, description, position } = args;
+  if (!agent_action_id) throw new Error('agent_action_id is required');
+  const existing = db.prepare(`
+    SELECT aa.* FROM agent_actions aa JOIN tasks t ON aa.task_id = t.id WHERE aa.id = ? AND t.user_id = ?
+  `).get(agent_action_id, userId) as any;
+  if (!existing) throw new Error('Agent action not found');
+
+  const now = new Date().toISOString();
+  db.prepare(`UPDATE agent_actions SET title = ?, description = ?, position = ?, updated_at = ? WHERE id = ?`)
+    .run(title?.trim() || existing.title, description !== undefined ? description : existing.description, position ?? existing.position, now, agent_action_id);
+  return db.prepare('SELECT * FROM agent_actions WHERE id = ?').get(agent_action_id);
+}
+
+function deleteAgentAction(args: ToolArgs, userId: string) {
+  const { agent_action_id } = args;
+  if (!agent_action_id) throw new Error('agent_action_id is required');
+  const existing = db.prepare(`
+    SELECT aa.* FROM agent_actions aa JOIN tasks t ON aa.task_id = t.id WHERE aa.id = ? AND t.user_id = ?
+  `).get(agent_action_id, userId) as any;
+  if (!existing) throw new Error('Agent action not found');
+  db.prepare('DELETE FROM agent_actions WHERE id = ?').run(agent_action_id);
+  return { deleted: true, id: agent_action_id };
+}
+
+function updateStatusAgentAction(args: ToolArgs, userId: string) {
+  const { agent_action_id, status, result, error: errorMsg, commit_hash, files_changed, agent_model } = args;
+  if (!agent_action_id) throw new Error('agent_action_id is required');
+  if (!status) throw new Error('status is required');
+
+  const existing = db.prepare(`
+    SELECT aa.* FROM agent_actions aa JOIN tasks t ON aa.task_id = t.id WHERE aa.id = ? AND t.user_id = ?
+  `).get(agent_action_id, userId) as any;
+  if (!existing) throw new Error('Agent action not found');
+
+  const validTransitions: Record<string, string[]> = {
+    draft: ['staged'],
+    staged: ['draft', 'running'],
+    running: ['done', 'failed'],
+    done: ['draft'],
+    failed: ['draft', 'staged'],
+  };
+  if (!validTransitions[existing.status]?.includes(status)) {
+    throw new Error(`Invalid transition: ${existing.status} → ${status}`);
+  }
+
+  const now = new Date().toISOString();
+  const sets: string[] = ['status = ?', 'updated_at = ?'];
+  const vals: any[] = [status, now];
+
+  if (status === 'running') { sets.push('started_at = ?'); vals.push(now); }
+  if (status === 'done' || status === 'failed') { sets.push('completed_at = ?'); vals.push(now); }
+  if (result !== undefined) { sets.push('result = ?'); vals.push(result); }
+  if (errorMsg !== undefined) { sets.push('error = ?'); vals.push(errorMsg); }
+  if (commit_hash !== undefined) { sets.push('commit_hash = ?'); vals.push(commit_hash); }
+  if (files_changed !== undefined) { sets.push('files_changed = ?'); vals.push(typeof files_changed === 'string' ? files_changed : JSON.stringify(files_changed)); }
+  if (agent_model !== undefined) { sets.push('agent_model = ?'); vals.push(agent_model); }
+
+  vals.push(agent_action_id);
+  db.prepare(`UPDATE agent_actions SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  return db.prepare('SELECT * FROM agent_actions WHERE id = ?').get(agent_action_id);
+}
+
+export const handleManageAgentAction = createManagedActionHandler({
+  list: listAgentActions,
+  list_staged: listStagedAgentActions,
+  create: createAgentAction,
+  update: updateAgentAction,
+  delete: deleteAgentAction,
+  update_status: updateStatusAgentAction,
 });
