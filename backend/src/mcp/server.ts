@@ -128,20 +128,16 @@ export function setupMcpRoutes(app: Express): void {
         console.log('[MCP POST] Reusing existing session', { sessionId, rpcMethod });
         await session.transport.handleRequest(req, res, req.body);
         console.log('[MCP POST] handleRequest completed', { sessionId, rpcMethod, statusCode: res.statusCode });
-      } else if (sessionId) {
-        // Stale session — tell client to re-initialize
-        console.log('[MCP POST] Stale session — returning 404 to force re-init', {
-          requestedSessionId: sessionId,
-          rpcMethod,
-        });
-        res.status(404).json({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Session not found. Please re-initialize.' },
-          id: null,
-        });
       } else {
-        // No session — create new one (expects initialize as first message)
-        console.log('[MCP POST] No session supplied — creating new session', { rpcMethod });
+        // No session or stale session — create new one
+        if (sessionId) {
+          console.log('[MCP POST] Stale session — auto-creating new session', {
+            requestedSessionId: sessionId,
+            rpcMethod,
+          });
+        } else {
+          console.log('[MCP POST] No session supplied — creating new session', { rpcMethod });
+        }
         const server = createMcpServer();
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
@@ -173,8 +169,13 @@ export function setupMcpRoutes(app: Express): void {
       const session = sessions.get(sessionId)!;
       await session.transport.handleRequest(req, res);
     } else {
-      // Session not found — tell client to re-initialize
-      res.status(404).json({ error: 'Session not found — please re-initialize' });
+      // Stale or missing session — return 404 so client re-initializes via POST
+      console.log('[MCP GET] Session not found, returning 404 to trigger re-init', { sessionId });
+      res.status(404).json({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Session expired. Please re-initialize.' },
+        id: null,
+      });
     }
   });
 
