@@ -1419,25 +1419,39 @@ export default function Sprints() {
         {/* Child projects */}
         {(() => {
           const children = projects.filter(p => p.parent_project_id === project.id && !p.archived);
-          if (children.length === 0) return null;
           return (
             <div className="mb-4">
-              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Sub-projects</h3>
-              <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
-                {children.map(child => (
-                  <button
-                    key={child.id}
-                    onClick={() => { setSelectedProject(child.id); }}
-                    className="text-left bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
-                  >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      {child.hex_color && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: child.hex_color }} />}
-                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{child.title}</span>
-                    </div>
-                    <span className="text-[10px] text-gray-400">{child.open_tasks} open · {child.done_tasks} done</span>
-                  </button>
-                ))}
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Sub-projects</h3>
+                <button
+                  onClick={() => {
+                    setEditingProject(null);
+                    setProjectForm({ ...emptyProjectForm, parent_project_id: project.id });
+                    setShowProjectModal(true);
+                  }}
+                  className="text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium flex items-center gap-0.5"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                  Add
+                </button>
               </div>
+              {children.length > 0 && (
+                <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                  {children.map(child => (
+                    <button
+                      key={child.id}
+                      onClick={() => { setSelectedProject(child.id); }}
+                      className="text-left bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        {child.hex_color && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: child.hex_color }} />}
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{child.title}</span>
+                      </div>
+                      <span className="text-[10px] text-gray-400">{child.open_tasks} open · {child.done_tasks} done</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })()}

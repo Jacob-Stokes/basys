@@ -1196,6 +1196,7 @@ function ProjectEditModal({ project, onSave, onClose }: {
 // ── Main Component ─────────────────────────────────────────────────
 
 export default function Tasks({ initialTab = 'overview' }: { initialTab?: ActiveTab } = {}) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<ActiveTab>(initialTab);
   const [error, setError] = useState<string | null>(null);
 

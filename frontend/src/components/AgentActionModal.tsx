@@ -21,10 +21,14 @@ export default function AgentActionModal({ taskId, taskTitle, onClose }: Props) 
   const [descDraft, setDescDraft] = useState('');
   const [templates, setTemplates] = useState<any[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [sprintBuckets, setSprintBuckets] = useState<{ id: string; title: string }[]>([]);
 
   useEffect(() => {
     api.getAgentActions(taskId).then(a => { setActions(a); setLoading(false); }).catch(() => setLoading(false));
     api.getActionTemplates().then(setTemplates).catch(() => {});
+    api.getTask(taskId).then(task => {
+      if (task.sprint_buckets) setSprintBuckets(task.sprint_buckets.map((b: any) => ({ id: b.id, title: b.title })));
+    }).catch(() => {});
   }, [taskId]);
 
   const handleAdd = async () => {
@@ -214,6 +218,16 @@ export default function AgentActionModal({ taskId, taskTitle, onClose }: Props) 
                                   {MODEL_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                                 </select>
                               </div>
+                              {sprintBuckets.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-500">On complete, move task to:</span>
+                                  <select value={config.on_complete_bucket_id || ''} onChange={e => handleUpdateConfig(action, { ...config, on_complete_bucket_id: e.target.value || null })}
+                                    className="text-xs border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex-1">
+                                    <option value="">Don't move</option>
+                                    {sprintBuckets.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
+                                  </select>
+                                </div>
+                              )}
                             </div>
                             {actions.length > 1 && (
                               <div className="flex items-center gap-2">

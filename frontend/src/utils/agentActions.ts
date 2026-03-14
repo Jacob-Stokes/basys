@@ -31,6 +31,7 @@ export interface AgentActionConfig {
   include_tests?: boolean;
   dry_run?: boolean;
   model_override?: 'sonnet' | 'opus' | 'haiku' | null;
+  on_complete_bucket_id?: string | null;
 }
 
 export const STATUS_COLORS: Record<string, string> = {

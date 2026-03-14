@@ -175,7 +175,7 @@ export default function CalendarPage({ embedded }: { embedded?: boolean }) {
       const [localEvents, googleEvents, taskList] = await Promise.all([
         api.getEvents(),
         api.getGoogleCalendarEvents().catch(() => []),
-        api.getTasks({ include_done: '0' }),
+        api.getTasks({ done: '0' }),
       ]);
       const localWithSource = localEvents.map((e: any) => ({ ...e, source: 'local' as const, origin: 'thesys' as const }));
       const googleWithSource = googleEvents.map((e: any) => ({ ...e, source: 'google' as const, origin: 'google' as const }));
@@ -424,13 +424,10 @@ export default function CalendarPage({ embedded }: { embedded?: boolean }) {
         <TaskEditModal
           task={editingTask}
           onClose={() => setEditingTask(null)}
-          onSave={async (id, updates) => {
-            await api.updateTask(id, updates);
-            await loadData();
-            setEditingTask(null);
-          }}
-          onDelete={async (id) => {
-            await api.deleteTask(id);
+          onSave={async (data: any) => {
+            if (editingTask?.id) {
+              await api.updateTask(editingTask.id, data);
+            }
             await loadData();
             setEditingTask(null);
           }}

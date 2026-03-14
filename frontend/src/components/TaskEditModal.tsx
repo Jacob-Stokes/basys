@@ -922,6 +922,16 @@ export default function TaskEditModal({
                                     {MODEL_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                                   </select>
                                 </div>
+                                {columns.length > 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">On complete, move task to:</span>
+                                    <select value={config.on_complete_bucket_id || ''} onChange={e => handleUpdateConfig(action, { ...config, on_complete_bucket_id: e.target.value || null })}
+                                      className="text-xs border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex-1">
+                                      <option value="">Don't move</option>
+                                      {columns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                                    </select>
+                                  </div>
+                                )}
                               </div>
                             )}
 
