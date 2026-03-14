@@ -177,6 +177,7 @@ export function setupMcpRoutes(app: Express): void {
 
   app.get('/mcp', bearerAuth, async (req: Request, res: Response) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    console.log('[MCP GET] SSE stream request', { sessionId, matched: !!(sessionId && sessions.has(sessionId)), activeSessions: sessions.size });
     if (sessionId && sessions.has(sessionId)) {
       const session = sessions.get(sessionId)!;
       await session.transport.handleRequest(req, res);
