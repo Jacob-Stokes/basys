@@ -41,6 +41,18 @@ export function setupMcpRoutes(app: Express): void {
     resourceName: 'Thesys MCP',
   }));
 
+  // ─── RFC 9728: path-aware protected resource metadata ──
+  // Claude checks /.well-known/oauth-protected-resource/mcp (resource path appended)
+  app.get('/.well-known/oauth-protected-resource/mcp', (_req: Request, res: Response) => {
+    res.json({
+      resource: `${MCP_SERVER_URL}/`,
+      authorization_servers: [`${MCP_SERVER_URL}/`],
+      scopes_supported: ['harada'],
+      resource_name: 'Thesys MCP',
+      resource_documentation: 'https://github.com/Jacob-Stokes/thesys',
+    });
+  });
+
   // ─── OAuth login callback ──────────────────────────────
   // Receives the login form POST from the authorize page
   app.post('/oauth/callback', (req: Request, res: Response) => {
