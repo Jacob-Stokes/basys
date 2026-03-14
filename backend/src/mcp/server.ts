@@ -36,14 +36,19 @@ export function setupMcpRoutes(app: Express): void {
   // ─── OAuth login callback ──────────────────────────────
   // Receives the login form POST from the authorize page
   app.post('/oauth/callback', (req: Request, res: Response) => {
+    console.log('[OAuth callback] Body keys:', Object.keys(req.body || {}));
     const { username, password, client_id, redirect_uri, state, code_challenge, code_challenge_method, scopes, resource } = req.body;
 
+    console.log('[OAuth callback] client_id:', client_id, 'redirect_uri:', redirect_uri, 'has_code_challenge:', !!code_challenge);
+
     if (!username || !password) {
+      console.log('[OAuth callback] Missing username or password');
       res.status(400).send('Username and password are required');
       return;
     }
 
     const userId = provider.validateCredentials(username, password);
+    console.log('[OAuth callback] Auth result:', userId ? 'success' : 'failed');
     if (!userId) {
       // Re-render login page with error
       const { renderLoginPage } = require('./auth-page');
@@ -77,6 +82,7 @@ export function setupMcpRoutes(app: Express): void {
     const redirectUrl = new URL(redirect_uri);
     redirectUrl.searchParams.set('code', code);
     if (state) redirectUrl.searchParams.set('state', state);
+    console.log('[OAuth callback] Redirecting to:', redirectUrl.toString().substring(0, 100) + '...');
     res.redirect(redirectUrl.toString());
   });
 
